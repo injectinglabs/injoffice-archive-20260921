@@ -93,6 +93,66 @@ async function until(predicate) {
   throw new Error('Editor did not settle');
 }
 
+function mockWindow(getSelection = () => null) {
+  global.window = {
+    getSelection,
+    document: {
+      createTextNode: () => ({}),
+      createRange: () => ({}),
+      caretRangeFromPoint: () => null,
+      addEventListener() {},
+      removeEventListener() {},
+    },
+  };
+}
+
+function runPrefixSelection(prefix) {
+  const run = { closest(sel) { return sel === '[data-docx-run]' ? run : null; } };
+  const textNode = { parentElement: run };
+  return {
+    rangeCount: 1,
+    getRangeAt: () => ({
+      startContainer: textNode,
+      startOffset: prefix.length,
+      cloneRange() {
+        return {
+          selectNodeContents() {},
+          setEnd() {},
+          toString() { return prefix; },
+        };
+      },
+    }),
+  };
+}
+
+function nativeApplies(client) {
+  return client.applied.filter(item => item && item.payload);
+}
+
+async function mountEditor(client, props = {}) {
+  const OfficeEditor = await loadEditor(client);
+  const changes = [];
+  const busy = [];
+  let view;
+  await act(async () => {
+    view = create(React.createElement(OfficeEditor, {
+      name: 'Note.docx',
+      bytes: new Uint8Array([0x50, 0x4b]),
+      onChange: value => changes.push(value),
+      onBusyChange: value => busy.push(value),
+      ...props,
+    }));
+  });
+  await until(() => view.root.findAllByProps({ 'aria-label': 'Document content' }).length > 0);
+  return { view, changes, busy };
+}
+
+async function settleApply(changes, busy) {
+  for (let count = 0; count < 50 && (changes.length === 0 || busy.at(-1) !== false); count++) {
+    await act(async () => Promise.resolve());
+  }
+}
+
 test('OfficeEditor mounts with mocked wasm, reports busy, and applies a draft', async () => {
   assert.equal(fs.existsSync(path.resolve(__dirname, '../src/office-editor.css')), true);
   const bytes = new Uint8Array([0x50, 0x4b]);
@@ -185,5 +245,61 @@ test('OfficeEditor schedules a hidden native apply after debounce and skips whil
   await act(async () => { t.mock.timers.tick(80); });
   for (let count = 0; count < 10; count++) await act(async () => Promise.resolve());
   assert.equal(client.applied.length, 1);
+  await act(async () => view.unmount());
+});
+
+test('OfficeEditor compositionend schedules hidden apply after debounce', async t => {
+  const client = mockClient(tinyDocument(''));
+  mockWindow();
+  const { view, changes, busy } = await mountEditor(client);
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const textbox = view.root.findByProps({ role: 'textbox' });
+  await act(async () => textbox.props.onCompositionStart());
+  await act(async () => textbox.props.onInput({ currentTarget: { textContent: 'Hello' } }));
+  await act(async () => { t.mock.timers.tick(80); });
+  for (let count = 0; count < 10; count++) await act(async () => Promise.resolve());
+  assert.equal(nativeApplies(client).length, 0);
+  await act(async () => textbox.props.onCompositionEnd({ currentTarget: { textContent: 'Hello' } }));
+  assert.equal(nativeApplies(client).length, 0);
+  await act(async () => { t.mock.timers.tick(79); });
+  assert.equal(nativeApplies(client).length, 0);
+  await act(async () => { t.mock.timers.tick(1); });
+  await settleApply(changes, busy);
+  assert.equal(nativeApplies(client)[0].payload.mutations[0].text, 'Hello');
+  await act(async () => view.unmount());
+});
+
+test('OfficeEditor hidden apply restores a non-end caret from the run prefix range', async t => {
+  const client = mockClient(tinyDocument(''));
+  mockWindow(() => runPrefixSelection('He'));
+  const { view, changes, busy } = await mountEditor(client);
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const textbox = view.root.findByProps({ role: 'textbox' });
+  await act(async () => textbox.props.onInput({ currentTarget: { textContent: 'Hello' } }));
+  await act(async () => { t.mock.timers.tick(80); });
+  await settleApply(changes, busy);
+  assert.equal(nativeApplies(client)[0].payload.mutations[0].text, 'Hello');
+  assert.equal(documentPreview(view).props.caretOffset, 2);
+  await act(async () => view.unmount());
+});
+
+test('OfficeEditor commit applies a pending debounce once', async t => {
+  const client = mockClient(tinyDocument(''));
+  mockWindow();
+  let commit = async () => false;
+  const { view, changes, busy } = await mountEditor(client, {
+    registerCommit: fn => { commit = fn; },
+  });
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const textbox = view.root.findByProps({ role: 'textbox' });
+  await act(async () => textbox.props.onInput({ currentTarget: { textContent: 'Hello' } }));
+  assert.equal(nativeApplies(client).length, 0);
+  await act(async () => { await commit(); });
+  await settleApply(changes, busy);
+  assert.equal(nativeApplies(client).length, 1);
+  assert.equal(nativeApplies(client)[0].payload.mutations[0].text, 'Hello');
+  await act(async () => { t.mock.timers.tick(80); });
+  for (let count = 0; count < 10; count++) await act(async () => Promise.resolve());
+  assert.equal(nativeApplies(client).length, 1);
   await act(async () => view.unmount());
 });

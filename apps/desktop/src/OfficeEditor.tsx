@@ -61,7 +61,18 @@ function captureDraftCaret(text: string) {
   const fallback = paragraphTextOffset([text.length], 0, text.length) ?? 0
   const selection = typeof window === 'undefined' ? undefined : window.getSelection?.()
   if (!selection?.rangeCount) return fallback
-  return paragraphTextOffset([text.length], 0, selection.getRangeAt(0).startOffset) ?? fallback
+  const range = selection.getRangeAt(0)
+  const start = range.startContainer as { closest?: (selector: string) => Element | null; parentElement?: { closest?: (selector: string) => Element | null } | null }
+  const run = (typeof start.closest === 'function' ? start : start.parentElement)?.closest?.('[data-docx-run]')
+  if (!run || typeof range.cloneRange !== 'function') return fallback
+  try {
+    const prefix = range.cloneRange()
+    prefix.selectNodeContents(run)
+    prefix.setEnd(range.startContainer, range.startOffset)
+    return paragraphTextOffset([text.length], 0, prefix.toString().length) ?? fallback
+  } catch {
+    return fallback
+  }
 }
 
 function createEngine(extension: string): LocalEngine {
@@ -168,7 +179,6 @@ export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDr
   const [redo, setRedo] = useState<Snapshot[]>([])
   const [composing, setComposing] = useState(false)
   const composingRef = useRef(false)
-  composingRef.current = composing
   const applyHiddenRef = useRef<() => Promise<void>>(async () => {})
   const hiddenApplyRef = useRef<ReturnType<typeof createHiddenApplyScheduler> | undefined>(undefined)
   if (!hiddenApplyRef.current) hiddenApplyRef.current = createHiddenApplyScheduler({
@@ -428,8 +438,7 @@ export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDr
   commitLatest.current = async () => {
     if (busy || composingRef.current) return false
     if (!draftPending.current) return true
-    await hiddenApplyRef.current?.flush()
-    if (draftPending.current) await apply()
+    await apply()
     if (draftPending.current) return false
     callbacks.current.onDraftChange?.(false); callbacks.current.onBusyChange?.(false)
     return true
@@ -510,7 +519,7 @@ export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDr
       </div>
       <div className={`office-preview ${isDocument ? 'office-document-preview' : ''}`}>
         <div className="office-preview-scale" style={isDocument ? undefined : { zoom }}>
-        {snapshot.preview.kind === 'docx' && <DocumentPreview replaceImage={typeof window!=='undefined'&&window.injDesktop?.pickAsset?id=>void replaceImage(id):undefined} deleteImage={id=>void deleteImage(id)} images={snapshot.preview.images} imageNotice={snapshot.preview.imageNotice} document={snapshot.preview.document} choose={choose} selected={selected} draft={draft} textRange={textRange} onTextRangeChange={setTextRange} caretOffset={caretOffset} joinPrevious={() => void joinPrevious()} insertLines={(text, caret) => void insertLines(text, caret)} updateDraft={updateDraft} apply={() => void apply()} cancel={cancelDraft} busy={busy} hasDraft={hasDraft} onCompositionChange={value=>{composingRef.current=value;setComposing(value);callbacks.current.onBusyChange?.(busy||value)}} zoom={zoom} navigation={(viewOptions?.navigation ?? true) && !viewOptions?.focus} />}
+        {snapshot.preview.kind === 'docx' && <DocumentPreview replaceImage={typeof window!=='undefined'&&window.injDesktop?.pickAsset?id=>void replaceImage(id):undefined} deleteImage={id=>void deleteImage(id)} images={snapshot.preview.images} imageNotice={snapshot.preview.imageNotice} document={snapshot.preview.document} choose={choose} selected={selected} draft={draft} textRange={textRange} onTextRangeChange={setTextRange} caretOffset={caretOffset} joinPrevious={() => void joinPrevious()} insertLines={(text, caret) => void insertLines(text, caret)} updateDraft={updateDraft} apply={() => void apply()} cancel={cancelDraft} busy={busy} hasDraft={hasDraft} onCompositionChange={value=>{composingRef.current=value;setComposing(value);callbacks.current.onBusyChange?.(busy||value);if(!value&&draftPending.current)hiddenApplyRef.current?.schedule()}} zoom={zoom} navigation={(viewOptions?.navigation ?? true) && !viewOptions?.focus} />}
         </div>
       </div>
     </>}
