@@ -14,7 +14,8 @@ fail-closed on this device; the command palette searches workspace actions.
 editors are still mocked in tests. Formatting, hyperlink, table, paragraph,
 and page-layout chrome land here without WASM. Selection offsets for caret
 restore are in `document-range.ts`. Paragraph/run appearance follows the
-OOXML style cascade (bold/italic toggles, cycle-safe). The rest of the renderer,
+OOXML style cascade (bold/italic toggles, cycle-safe). PNG/JPEG insert sizes
+from file headers only. The rest of the renderer,
 the real Electron dependency, GitHub provider, and packaging workflows land
 in follow-up changes. Preview builds never load an updater.
 
