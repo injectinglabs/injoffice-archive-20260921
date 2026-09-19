@@ -12,21 +12,22 @@ are tested in the `core` CI shard. **Electron is a desktop host dependency**;
 renderer `/src/` stays offline (`check-office-architecture` allows the desktop
 host to list it; the lockfile may contain it only when pulled by
 `apps/desktop`. Renderer `/src/` still forbids `electron` imports).
-Office/sheet/slide/PDF editors, root `desktop:*` scripts, and packaging
-workflows land in follow-up changes.
+Root `desktop:build`, `desktop:start`, and `desktop:dist` scripts forward to
+`@injoffice/desktop`.
 
 This is not Microsoft Office parity. Do not advertise it as such.
 
 ## Run from source
 
-Once Electron is a workspace dependency and `desktop:*` scripts exist, from
-the repository root:
+From the repository root:
 
 ```bash
 npm ci
 npm run desktop:build
 npm run desktop:start
 ```
+
+`npm run desktop:dist` packages unsigned installers into `apps/desktop/release/`.
 
 Needs Node.js 22 or newer, the Go version declared in the native modules, and
 Bash (Git Bash on Windows). The desktop build compiles the bundled WASM
