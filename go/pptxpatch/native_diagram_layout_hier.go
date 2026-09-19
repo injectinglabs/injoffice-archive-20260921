@@ -125,6 +125,22 @@ func (node *nativeDiagramPresNode) layoutSubtree(parentW, parentH float64) error
 // the composite has left over, and a composite whose own extent is elastic
 // closes on the content it ends up holding.
 func (node *nativeDiagramPresNode) layoutComposite(width, height float64) error {
+	// The ar parameter (§21.4.7.4) gives the region the children are laid out
+	// in a fixed aspect ratio: the largest rectangle of that shape inside the
+	// composite, centred. The radial layouts rely on it to keep their ring
+	// circular in a frame that is not square.
+	regionW, regionH, insetX, insetY := width, height, 0.0, 0.0
+	if ratio, err := nativeDiagramAspectRatio(node); err != nil {
+		return err
+	} else if ratio > 0 && regionW > 0 && regionH > 0 {
+		if regionW/regionH > ratio {
+			regionW = regionH * ratio
+		} else {
+			regionH = regionW / ratio
+		}
+		insetX, insetY = (width-regionW)/2, (height-regionH)/2
+	}
+	width, height = regionW, regionH
 	node.rect = nativeDiagramRect{0, 0, width, height}
 	node.blockW, node.blockH, node.anchorX = width, height, width/2
 	node.rootLeft, node.rootRight = 0, width
@@ -163,15 +179,48 @@ func (node *nativeDiagramPresNode) layoutComposite(width, height float64) error 
 			return err
 		}
 	}
+	// A composite is the block it holds: an elastic extent closes on the
+	// content exactly, and a child algorithm that lays itself out larger than
+	// the composite asked for still has to reach the fit, or it is painted
+	// past the frame instead of scaled into it.
 	if node.isElastic("w") {
 		node.blockW = node.compositeContent("w")
-		node.rect.w, node.anchorX, node.rootRight = node.blockW, node.blockW/2, node.blockW
+	} else if content := node.compositeContent("w"); content > node.blockW {
+		node.blockW = content
 	}
+	node.rect.w, node.anchorX, node.rootRight = node.blockW, node.blockW/2, node.blockW
 	if node.isElastic("h") {
 		node.blockH = node.compositeContent("h")
-		node.rect.h = node.blockH
+	} else if content := node.compositeContent("h"); content > node.blockH {
+		node.blockH = content
+	}
+	node.rect.h = node.blockH
+	if insetX != 0 || insetY != 0 {
+		// The region is centred inside the extent the composite was given,
+		// and the composite still occupies that whole extent, so a parent
+		// packing it does not close the gap the inset just opened.
+		for _, child := range node.children {
+			child.translate(insetX, insetY)
+		}
+		node.rect.x, node.rect.y = insetX, insetY
+		node.blockW, node.blockH = node.blockW+2*insetX, node.blockH+2*insetY
+		node.anchorX, node.rootRight = node.blockW/2, node.blockW
 	}
 	return nil
+}
+
+// nativeDiagramAspectRatio reads the composite ar parameter. A value outside
+// the bounded range refuses rather than laying the region out at a guess.
+func nativeDiagramAspectRatio(node *nativeDiagramPresNode) (float64, error) {
+	raw := node.param("ar", "")
+	if raw == "" {
+		return 0, nil
+	}
+	ratio, err := nativeDiagramParseFloat(raw)
+	if err != nil || ratio <= 0 || ratio > 1000 {
+		return 0, nativeDiagramLayoutRefuse(nativeDiagramLayoutAlgorithmCode, "diagram composite aspect ratio "+raw+" is outside the modeled range")
+	}
+	return ratio, nil
 }
 
 // placeCompositeChildren lays out and positions every child from the current
@@ -183,9 +232,9 @@ func (node *nativeDiagramPresNode) placeCompositeChildren(width, height float64)
 			return nativeDiagramLayoutRefuse(nativeDiagramLayoutAlgorithmCode, "diagram connectors inside composite nodes are not modeled")
 		}
 		switch child.alg {
-		case "", "sp", "tx", "composite", "lin":
+		case "", "sp", "tx", "composite", "lin", "snake", "cycle":
 		default:
-			return nativeDiagramLayoutRefuse(nativeDiagramLayoutAlgorithmCode, "diagram composite children must use composite, lin, sp or tx algorithms")
+			return nativeDiagramLayoutRefuse(nativeDiagramLayoutAlgorithmCode, "diagram composite children must use composite, lin, snake, cycle, sp or tx algorithms")
 		}
 		if err := child.layoutSubtree(width, height); err != nil {
 			return err
@@ -1188,15 +1237,18 @@ func (node *nativeDiagramPresNode) layoutCycle(width, height float64) error {
 	default:
 		return nativeDiagramLayoutRefuse(nativeDiagramLayoutAlgorithmCode, "diagram cycle centre mapping "+node.param("ctrShpMap", "none")+" is not modeled")
 	}
-	if hub != nil {
-		hub.translate((width-hub.blockW)/2, (height-hub.blockH)/2)
-	}
 	if len(items) == 0 {
+		if hub != nil {
+			hub.translate((width-hub.blockW)/2, (height-hub.blockH)/2)
+		}
 		return nil
 	}
 	cellW, cellH := 0.0, 0.0
 	for _, item := range items {
 		cellW, cellH = math.Max(cellW, item.blockW), math.Max(cellH, item.blockH)
+	}
+	if hub != nil {
+		return node.layoutCycleAroundHub(hub, items, width, height, start, span, alongPath, cellW, cellH)
 	}
 	// A full turn puts the last shape back on the first, so the step divides
 	// the span by the count; a partial arc reaches its far end instead.
@@ -1248,6 +1300,49 @@ func (node *nativeDiagramPresNode) layoutCycle(width, height float64) error {
 			item.setPathRotation(degrees)
 		}
 	}
+	return nil
+}
+
+// layoutCycleAroundHub places the shapes of a ctrShpMap="fNode" cycle on a
+// ring around the hub at the centre (§21.4.7.22). The ring is not inscribed in
+// the node: the layout states the radius itself, as half the hub plus half a
+// shape plus the sp constraint the radial layouts declare for exactly this
+// (a negative sp overlaps the shapes onto the hub, which is what they draw).
+// The block is then the bounding box of the hub and the ring, so the fit
+// scales the whole assembly into the region instead of clipping it.
+func (node *nativeDiagramPresNode) layoutCycleAroundHub(hub *nativeDiagramPresNode, items []*nativeDiagramPresNode, width, height, start, span float64, alongPath bool, cellW, cellH float64) error {
+	spacing := node.value("sp", 0)
+	radiusX := (hub.blockW+cellW)/2 + spacing
+	radiusY := (hub.blockH+cellH)/2 + spacing
+	steps := float64(len(items))
+	if math.Abs(span) < 360 && len(items) > 1 {
+		steps = float64(len(items) - 1)
+	}
+	hub.translate((width-hub.blockW)/2, (height-hub.blockH)/2)
+	for index, item := range items {
+		degrees := start + span*float64(index)/steps
+		radians := degrees * math.Pi / 180
+		centerX := width/2 + radiusX*math.Sin(radians)
+		centerY := height/2 - radiusY*math.Cos(radians)
+		item.translate(centerX-item.blockW/2, centerY-item.blockH/2)
+		if alongPath {
+			item.setPathRotation(degrees)
+		}
+	}
+	placed := append([]*nativeDiagramPresNode{hub}, items...)
+	minX, minY := math.Inf(1), math.Inf(1)
+	maxX, maxY := math.Inf(-1), math.Inf(-1)
+	for _, item := range placed {
+		minX, minY = math.Min(minX, item.rect.x), math.Min(minY, item.rect.y)
+		maxX, maxY = math.Max(maxX, item.rect.x+item.blockW), math.Max(maxY, item.rect.y+item.blockH)
+	}
+	for _, item := range placed {
+		item.translate(-minX, -minY)
+	}
+	node.blockW, node.blockH = maxX-minX, maxY-minY
+	node.rect = nativeDiagramRect{0, 0, node.blockW, node.blockH}
+	node.anchorX = node.blockW / 2
+	node.rootLeft, node.rootRight = 0, node.blockW
 	return nil
 }
 

@@ -429,6 +429,21 @@ func (node *nativeDiagramPresNode) value(name string, fallback float64) float64 
 	return fallback
 }
 
+// inheritedExtent is the w or h the nearest ancestor that has one carries.
+// Only the two extents inherit; every other constraint type is undefined
+// until something assigns it.
+func (node *nativeDiagramPresNode) inheritedExtent(typ string) (float64, bool) {
+	if typ != "w" && typ != "h" {
+		return 0, false
+	}
+	for current := node.parent; current != nil; current = current.parent {
+		if value, ok := current.vals[typ]; ok {
+			return value, true
+		}
+	}
+	return 0, false
+}
+
 func (node *nativeDiagramPresNode) param(name, fallback string) string {
 	if value, ok := node.params[name]; ok && value != "" {
 		return value
@@ -1191,7 +1206,16 @@ func (evaluator *nativeDiagramLayoutEvaluator) applyConstraints(node *nativeDiag
 			}
 			referenced, ok := references[0].vals[constraint.refType]
 			if !ok {
-				return nativeDiagramLayoutRefuse(nativeDiagramLayoutConstraintCode, "diagram constraint on "+node.name+" reads "+constraint.refType+" of "+references[0].name+" before it is defined")
+				// An extent nothing has assigned is the one the node
+				// inherits from its parent, which is exactly what the
+				// layout will hand it (§21.4.7.1: an algorithm lays its
+				// children out inside its own extent). The radial layouts
+				// read their OWN w before any constraint defines it, so
+				// without this the frame refuses rather than laying out at
+				// the size it was going to use anyway.
+				if referenced, ok = references[0].inheritedExtent(constraint.refType); !ok {
+					return nativeDiagramLayoutRefuse(nativeDiagramLayoutConstraintCode, "diagram constraint on "+node.name+" reads "+constraint.refType+" of "+references[0].name+" before it is defined")
+				}
 			}
 			value = referenced * constraint.fact * nativeDiagramConstraintUnitScale(constraint.refType, constraint.typ)
 		}

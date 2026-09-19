@@ -1404,3 +1404,129 @@ func TestExtractNativePPTXDiagramLayoutLinearConnectorsJoinTheirNeighbours(t *te
 		t.Fatalf("the row with connectors does not fill the frame width: %d", *second.X+*second.Cx)
 	}
 }
+
+// nativeDiagramRadialLayoutXML is the radial shape: a composite region that
+// asks for a fixed aspect ratio, holding a cycle that maps the first child to
+// the centre and reads its OWN extent -- which nothing in the layout defines
+// -- to size the hub and the ring.
+func nativeDiagramRadialLayoutXML(diagramNS, aspect string) string {
+	region := ""
+	if aspect != "" {
+		region = `<dgm:param type="ar" val="` + aspect + `"/>`
+	}
+	spoke := func(name string) string {
+		return `<dgm:layoutNode name="` + name + `" styleLbl="node0"><dgm:alg type="tx"/><dgm:shape type="ellipse"><dgm:adjLst/></dgm:shape><dgm:presOf axis="self" ptType="node"/>` +
+			`<dgm:constrLst/><dgm:ruleLst><dgm:rule type="primFontSz" val="5" fact="NaN" max="NaN"/></dgm:ruleLst></dgm:layoutNode>`
+	}
+	return `<dgm:layoutDef xmlns:dgm="` + diagramNS + `" uniqueId="urn:test/radial"><dgm:title val=""/><dgm:desc val=""/><dgm:catLst><dgm:cat type="cycle" pri="9000"/></dgm:catLst>` +
+		`<dgm:layoutNode name="region"><dgm:alg type="composite">` + region + `</dgm:alg><dgm:shape><dgm:adjLst/></dgm:shape><dgm:presOf/><dgm:constrLst/><dgm:ruleLst/>` +
+		`<dgm:layoutNode name="radial"><dgm:alg type="cycle"><dgm:param type="ctrShpMap" val="fNode"/></dgm:alg><dgm:shape><dgm:adjLst/></dgm:shape><dgm:presOf/>` +
+		`<dgm:constrLst><dgm:constr type="w" for="ch" forName="hub" refType="w"/><dgm:constr type="h" for="ch" forName="hub" refType="h"/>` +
+		`<dgm:constr type="w" for="ch" forName="spoke" refType="w" fact="0.5"/><dgm:constr type="h" for="ch" forName="spoke" refType="h" fact="0.5"/>` +
+		`<dgm:constr type="sp" refType="w" refFor="ch" refForName="spoke" fact="-0.2"/>` +
+		`<dgm:constr type="primFontSz" for="ch" ptType="node" val="65"/></dgm:constrLst><dgm:ruleLst/>` +
+		`<dgm:forEach name="hubLoop" axis="ch" ptType="node" cnt="1">` + spoke("hub") + `</dgm:forEach>` +
+		`<dgm:forEach name="spokeLoop" axis="ch" ptType="node" st="2">` + spoke("spoke") + `</dgm:forEach>` +
+		`</dgm:layoutNode></dgm:layoutNode></dgm:layoutDef>`
+}
+
+func nativeDiagramRadialFixtureData(t *testing.T) string {
+	t.Helper()
+	return nativeDiagramLayoutDataXML(nativeDiagramURITransitional, nsDrawingTransitional, "",
+		nativeDiagramLayoutPointXML("{T3}", "", "Third")+nativeDiagramLayoutPointXML("{T4}", "", "Fourth"),
+		`<dgm:cxn modelId="{CT3}" srcId="{DOC}" destId="{T3}" srcOrd="2" destOrd="0"/><dgm:cxn modelId="{CT4}" srcId="{DOC}" destId="{T4}" srcOrd="3" destOrd="0"/>`)
+}
+
+// The radial layouts read their own w before any constraint defines it. An
+// extent nothing assigned is the one the node inherits from its parent, which
+// is the extent the layout was going to hand it anyway, so reading it is not
+// a reason to refuse the whole frame.
+func TestExtractNativePPTXDiagramLayoutInheritsAnUndefinedExtent(t *testing.T) {
+	t.Parallel()
+	deck, err := ExtractNativePPTX(nativeDiagramLayoutFixture(t, nativeDiagramLayoutFixtureOptions{
+		omitDrawingPart: true, dataXML: nativeDiagramRadialFixtureData(t),
+		layout: nativeDiagramRadialLayoutXML(nativeDiagramURITransitional, ""),
+	}), nativeDiagramLayoutApproximateOptions())
+	if err != nil {
+		t.Fatalf("extract radial diagram: %v", err)
+	}
+	group := nativeFixtureDiagramGroup(t, deck.Slides[0])
+	if len(group.Children) != 4 {
+		t.Fatalf("expected a hub and three spokes: %d children", len(group.Children))
+	}
+	hub := group.Children[0].Transform
+	// Without ar the region keeps the frame's 3:2 shape, and the hub, sized
+	// from the inherited w and h, is that shape too.
+	if *hub.Cx == *hub.Cy {
+		t.Fatalf("the hub did not inherit the frame's own aspect: %dx%d", *hub.Cx, *hub.Cy)
+	}
+	for index, spoke := range group.Children[1:] {
+		if half := *hub.Cx / 2; *spoke.Transform.Cx < half-2 || *spoke.Transform.Cx > half+2 {
+			t.Fatalf("spoke %d is not half the inherited extent: %d of %d", index, *spoke.Transform.Cx, *hub.Cx)
+		}
+	}
+}
+
+// ar (§21.4.7.4) lays the children out in the largest rectangle of that
+// aspect inside the composite, centred, so a radial diagram stays circular in
+// a frame that is not square.
+func TestExtractNativePPTXDiagramLayoutCompositeAspectRatioShapesTheRegion(t *testing.T) {
+	t.Parallel()
+	deck, err := ExtractNativePPTX(nativeDiagramLayoutFixture(t, nativeDiagramLayoutFixtureOptions{
+		omitDrawingPart: true, dataXML: nativeDiagramRadialFixtureData(t),
+		layout: nativeDiagramRadialLayoutXML(nativeDiagramURITransitional, "1"),
+	}), nativeDiagramLayoutApproximateOptions())
+	if err != nil {
+		t.Fatalf("extract square radial diagram: %v", err)
+	}
+	group := nativeFixtureDiagramGroup(t, deck.Slides[0])
+	hub := group.Children[0].Transform
+	if *hub.Cx != *hub.Cy {
+		t.Fatalf("ar=1 did not square the region the hub is sized from: %dx%d", *hub.Cx, *hub.Cy)
+	}
+	// The assembly is centred in the frame it was inset into.
+	minX, maxX := *hub.X, *hub.X+*hub.Cx
+	for _, child := range group.Children[1:] {
+		if *child.Transform.X < minX {
+			minX = *child.Transform.X
+		}
+		if right := *child.Transform.X + *child.Transform.Cx; right > maxX {
+			maxX = right
+		}
+	}
+	if centre, frame := minX+(maxX-minX)/2, *group.Transform.Cx/2; centre < frame-2 || centre > frame+2 {
+		t.Fatalf("the squared region was not centred in the frame: %d vs %d", centre, frame)
+	}
+}
+
+// ctrShpMap="fNode" does not inscribe the ring in the node: the layout states
+// the radius itself as half the hub plus half a shape plus sp, and the block
+// is the bounding box of the whole assembly so the fit scales it in.
+func TestExtractNativePPTXDiagramLayoutCycleRingSitsBesideItsHub(t *testing.T) {
+	t.Parallel()
+	deck, err := ExtractNativePPTX(nativeDiagramLayoutFixture(t, nativeDiagramLayoutFixtureOptions{
+		omitDrawingPart: true, dataXML: nativeDiagramRadialFixtureData(t),
+		layout: nativeDiagramRadialLayoutXML(nativeDiagramURITransitional, "1"),
+	}), nativeDiagramLayoutApproximateOptions())
+	if err != nil {
+		t.Fatalf("extract radial diagram: %v", err)
+	}
+	group := nativeFixtureDiagramGroup(t, deck.Slides[0])
+	hub := group.Children[0].Transform
+	hubX, hubY := *hub.X+*hub.Cx/2, *hub.Y+*hub.Cy/2
+	first := group.Children[1].Transform
+	// sp = -0.2 x the spoke width, and both ends of the radius scale with
+	// the fit, so the radius is scale free.
+	radius := float64(*hub.Cx+*first.Cx)/2 - 0.2*float64(*first.Cx)
+	if centreX := *first.X + *first.Cx/2; centreX < hubX-2 || centreX > hubX+2 {
+		t.Fatalf("the first shape is not at twelve o'clock above the hub: %d vs %d", centreX, hubX)
+	}
+	if centreY, want := *first.Y+*first.Cy/2, hubY-int64(radius); centreY < want-2 || centreY > want+2 {
+		t.Fatalf("the ring radius is %d, want %d from half the hub plus half a shape plus sp", hubY-centreY, int64(radius))
+	}
+	// A negative sp overlaps the shape onto the hub, which is what the
+	// radial layouts draw; the inscribed ring would have cleared it.
+	if *first.Y+*first.Cy <= *hub.Y {
+		t.Fatalf("the negative sp did not overlap the ring onto the hub: %d vs %d", *first.Y+*first.Cy, *hub.Y)
+	}
+}

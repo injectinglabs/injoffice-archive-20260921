@@ -27,7 +27,7 @@ const (
 	contentTypeDiagramStyle  = "application/vnd.openxmlformats-officedocument.drawingml.diagramStyle+xml"
 	contentTypeDiagramColors = "application/vnd.openxmlformats-officedocument.drawingml.diagramColors+xml"
 
-	nativeDiagramLayoutGroupMessage = "SmartArt laid out from the diagram parts (" + nativeDiagramLayoutPolicy + "): composite, lin, snake, cycle, hierRoot, hierChild, sp, tx and conn (ECMA-376 §21.4). FIT uniform scale to the frame, centred. PAINT dgm:bg behind every shape; dgm:adj and dgm:shape@rot apply; zero alpha paints nothing, partial opaque; effects, 3D and image fills omitted. LIN children packed along linDir, cross-aligned by nodeVertAlign/nodeHorzAlign (ctr default), spacers counting along that axis only; an overrunning line shrinks by re-solving each child's constrLst over a proportional share (§21.4.2.24), so only that axis follows. RULES an INF extent is elastic: leftover shared pro rata inside each lte ceiling; an elastic node closes on its content. SNAKE lines break where the packed grid best matches the node's aspect, a DEVIATION from ST_BreakpointType. CYCLE shapes round the inscribed ellipse from stAng across spanAng, shrunk until neighbours clear; ctrShpMap fNode hubs the first child; rotPath alongPath turns them. HIERROOT assistants above regular children, bCtrCh default, alignOff a fraction of root w, hierAlign tL/tR laid out as hanging blocks below the root (§21.4.7.36 deviation), trunk gap sibSp/2. HIERCHILD subtrees packed by painted contour, each pair clearing sibSp. CONN joins the pair it separates, right-angle bends to the nearest end site, midpoint bend without bendDist. TX average-advance fitting, 0.5 em/glyph, 1.2 lines. CONSTRAINTS font sizes and margins are points, converted to EMU for extents; a bare constraint declares the default without erasing a value; a reference to nothing is inert; an unmodeled relationship or type refuses; maxDepth is relative to the context point, depth from the first selected, pos/revPos count sibling nodes; siblings run [parTrans, node, sibTrans], the last without one. Budgets 256 points, 32 deep, 2048 nodes, 65536 selections, 4096 constraints. Cached presOf/presParOf skipped; authored presStyleLbl and presLayoutVars honored; the frame is read-only"
+	nativeDiagramLayoutGroupMessage = "SmartArt from the diagram parts (" + nativeDiagramLayoutPolicy + "): composite, lin, snake, cycle, hierRoot, hierChild, sp, tx, conn (ECMA-376 §21.4). FIT uniform scale of the whole block, centred in the frame. PAINT dgm:bg behind every shape; dgm:adj and dgm:shape@rot apply; zero alpha paints nothing, partial opaque; effects, 3D and image fills omitted. COMPOSITE ar insets a centred region of that aspect. LIN children packed along linDir, cross-aligned by nodeVertAlign/nodeHorzAlign (ctr default), spacers along that axis only; an overrun shrinks by re-solving each child's constrLst over a proportional share (§21.4.2.24), only that axis following. RULES an INF extent is elastic: leftover shared pro rata inside each lte ceiling; it then closes on its content. SNAKE lines break where the packed grid best fits the node aspect, a DEVIATION from ST_BreakpointType. CYCLE shapes round the inscribed ellipse from stAng over spanAng, shrunk till neighbours clear; ctrShpMap fNode hubs the first child, ring radius half hub plus half shape plus sp; rotPath alongPath turns them. HIERROOT assistants above children, bCtrCh default, alignOff a fraction of root w, tL/tR laid out as hanging blocks below the root (§21.4.7.36 deviation), trunk gap sibSp/2. HIERCHILD subtrees packed by painted contour, pairs clearing sibSp. CONN joins the pair it separates, right-angle bends to the nearest end site, midpoint bend without bendDist. TX average-advance fitting, 0.5 em/glyph, 1.2 lines. CONSTRAINTS font sizes and margins are points, extents EMU; a bare constr declares the default without erasing one; an undefined w or h is the parent's; a reference to nothing is inert; an unmodeled relationship refuses; maxDepth is relative to the context, depth from the first selected, pos/revPos count siblings; siblings run [parTrans, node, sibTrans], last without one. Bounded points, depth, nodes, selections, constrs. Cached presOf/presParOf skipped; presStyleLbl and presLayoutVars honored; frame read-only"
 	nativeDiagramLayoutChildMessage = "diagram element positioned by the approximate layout evaluation (" + nativeDiagramLayoutPolicy + "); target remains read-only"
 )
 
@@ -446,17 +446,33 @@ func (extractor *nativeExtractor) extractNativeDiagramLayoutGraphicFrame(node, g
 		return NativeElement{}, err
 	}
 	frameW, frameH := float64(*transform.Cx), float64(*transform.Cy)
-	presRoot.vals["w"], presRoot.vals["h"] = frameW, frameH
+	// A root composite with an ar parameter lays its children out in the
+	// largest rectangle of that aspect inside the frame, centred, so the
+	// extent its descendants read and the box the finished block is fitted
+	// into are both that region rather than the whole frame.
+	regionW, regionH := frameW, frameH
+	if ratio, ratioErr := nativeDiagramAspectRatio(presRoot); ratioErr != nil {
+		return NativeElement{}, ratioErr
+	} else if ratio > 0 && presRoot.alg == "composite" && regionW > 0 && regionH > 0 {
+		if regionW/regionH > ratio {
+			regionW = regionH * ratio
+		} else {
+			regionH = regionW / ratio
+		}
+	}
+	presRoot.vals["w"], presRoot.vals["h"] = regionW, regionH
 	if err := evaluator.evaluateConstraints(presRoot); err != nil {
 		return NativeElement{}, err
 	}
-	if err := presRoot.layoutSubtree(frameW, frameH); err != nil {
+	if err := presRoot.layoutSubtree(regionW, regionH); err != nil {
 		return NativeElement{}, err
 	}
-	fit, err := nativeDiagramFit(presRoot, frameW, frameH)
+	fit, err := nativeDiagramFit(presRoot, regionW, regionH)
 	if err != nil {
 		return NativeElement{}, err
 	}
+	fit.offsetX += (frameW - regionW) / 2
+	fit.offsetY += (frameH - regionH) / 2
 
 	quickStyles := nativeDiagramStyleLabels(parts.style, parts.diagramNS)
 	colorLabels := nativeDiagramStyleLabels(parts.colors, parts.diagramNS)
