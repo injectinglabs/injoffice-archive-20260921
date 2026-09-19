@@ -12162,6 +12162,11 @@
               "signature": "export declare const PPTX_TABLE_BUILTIN_STYLE_PREVIEW_CODE = \"pptx.table-builtin-style-preview\""
             },
             {
+              "name": "PPTX_TABLE_NONVISUAL_PRESERVED_CODE",
+              "kind": "const",
+              "signature": "export declare const PPTX_TABLE_NONVISUAL_PRESERVED_CODE = \"pptx.table-nonvisual-preserved\""
+            },
+            {
               "name": "provenanceValues",
               "kind": "const",
               "signature": "export declare const provenanceValues: readonly [\"authored\", \"parsed\"]"
