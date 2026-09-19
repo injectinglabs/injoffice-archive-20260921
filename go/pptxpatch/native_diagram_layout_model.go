@@ -364,6 +364,7 @@ type nativeDiagramRule struct {
 
 // nativeDiagramPresNode is one evaluated layout node instance.
 type nativeDiagramPresNode struct {
+	evaluator   *nativeDiagramLayoutEvaluator
 	name        string
 	point       *nativeDiagramPoint
 	parent      *nativeDiagramPresNode
@@ -736,7 +737,7 @@ func (evaluator *nativeDiagramLayoutEvaluator) evaluateLayoutNode(node *nativeXM
 		// the matching presentation point; nothing is derived otherwise.
 		styleLbl = evaluator.model.presLabels[context.id+"\x00"+name]
 	}
-	pres := &nativeDiagramPresNode{name: name, point: context, parent: parent, vars: map[string]string{}, params: map[string]string{}, styleLbl: styleLbl, vals: map[string]float64{}}
+	pres := &nativeDiagramPresNode{evaluator: evaluator, name: name, point: context, parent: parent, vars: map[string]string{}, params: map[string]string{}, styleLbl: styleLbl, vals: map[string]float64{}}
 	if parent != nil {
 		parent.children = append(parent.children, pres)
 	}

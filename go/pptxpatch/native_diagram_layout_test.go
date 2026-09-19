@@ -751,12 +751,12 @@ func nativeDiagramLinLayoutXML(diagramNS, linDir, align string) string {
 	}
 	return `<dgm:layoutDef xmlns:dgm="` + diagramNS + `" uniqueId="urn:test/lin"><dgm:title val=""/><dgm:desc val=""/><dgm:catLst><dgm:cat type="process" pri="9000"/></dgm:catLst>` +
 		`<dgm:layoutNode name="linRoot"><dgm:alg type="lin">` + params + `</dgm:alg><dgm:shape><dgm:adjLst/></dgm:shape><dgm:presOf/>` +
-		`<dgm:constrLst><dgm:constr type="w" for="ch" forName="linText" refType="w"/><dgm:constr type="h" for="ch" forName="linText" refType="w" fact="0.4"/>` +
+		`<dgm:constrLst><dgm:constr type="w" for="ch" forName="linText" refType="w"/>` +
 		`<dgm:constr type="w" for="ch" forName="linSpace" refType="w" refFor="ch" refForName="linText" fact="-0.1"/>` +
 		`<dgm:constr type="primFontSz" for="ch" forName="linText" val="65"/></dgm:constrLst><dgm:ruleLst/>` +
 		`<dgm:forEach name="linLoop" axis="ch" ptType="node">` +
 		`<dgm:layoutNode name="linText" styleLbl="node0"><dgm:alg type="tx"/><dgm:shape type="chevron"><dgm:adjLst/></dgm:shape><dgm:presOf axis="self" ptType="node"/>` +
-		`<dgm:constrLst><dgm:constr type="lMarg" refType="primFontSz" fact="0.05"/><dgm:constr type="rMarg" refType="primFontSz" fact="0.05"/><dgm:constr type="tMarg" refType="primFontSz" fact="0.05"/><dgm:constr type="bMarg" refType="primFontSz" fact="0.05"/></dgm:constrLst>` +
+		`<dgm:constrLst><dgm:constr type="h" refType="w" op="equ" fact="0.4"/><dgm:constr type="lMarg" refType="primFontSz" fact="0.05"/><dgm:constr type="rMarg" refType="primFontSz" fact="0.05"/><dgm:constr type="tMarg" refType="primFontSz" fact="0.05"/><dgm:constr type="bMarg" refType="primFontSz" fact="0.05"/></dgm:constrLst>` +
 		`<dgm:ruleLst><dgm:rule type="primFontSz" val="5" fact="NaN" max="NaN"/></dgm:ruleLst></dgm:layoutNode>` +
 		`<dgm:forEach name="linSpaceLoop" axis="followSib" ptType="sibTrans" cnt="1">` +
 		`<dgm:layoutNode name="linSpace"><dgm:alg type="sp"/><dgm:shape><dgm:adjLst/></dgm:shape><dgm:presOf/><dgm:constrLst/><dgm:ruleLst/></dgm:layoutNode>` +
@@ -831,5 +831,55 @@ func TestExtractNativePPTXDiagramLayoutLinRefusesOutsideTheSubset(t *testing.T) 
 				t.Fatalf("expected a refusal saying %q, got %v", testCase.want, slide.Compatibility.Diagnostics)
 			}
 		})
+	}
+}
+
+// nativeDiagramLinInCompositeLayoutXML mirrors the tableList shape: a
+// composite that stacks a full-width roof over a lin row of pillars, where the
+// pillar height is assigned by the COMPOSITE (0.63 of the frame) and the
+// pillar width by the pillars node. Shrinking the row to fit must narrow the
+// pillars without shortening them.
+func nativeDiagramLinInCompositeLayoutXML(diagramNS string) string {
+	return `<dgm:layoutDef xmlns:dgm="` + diagramNS + `" uniqueId="urn:test/lincomposite"><dgm:title val=""/><dgm:desc val=""/><dgm:catLst><dgm:cat type="list" pri="9000"/></dgm:catLst>` +
+		`<dgm:layoutNode name="frame"><dgm:alg type="composite"/><dgm:shape><dgm:adjLst/></dgm:shape><dgm:presOf/>` +
+		`<dgm:constrLst><dgm:constr type="w" for="ch" forName="roof" refType="w"/><dgm:constr type="h" for="ch" forName="roof" refType="h" fact="0.3"/>` +
+		`<dgm:constr type="w" for="ch" forName="pillars" refType="w"/><dgm:constr type="h" for="ch" forName="pillars" refType="h" fact="0.63"/><dgm:constr type="t" for="ch" forName="pillars" refType="h" fact="0.3"/>` +
+		`<dgm:constr type="w" for="des" forName="pillar" refType="w"/><dgm:constr type="h" for="des" forName="pillar" refType="h" refFor="ch" refForName="pillars"/>` +
+		`<dgm:constr type="primFontSz" for="des" forName="pillar" val="65"/></dgm:constrLst><dgm:ruleLst/>` +
+		`<dgm:layoutNode name="roof" styleLbl="node0"><dgm:alg type="tx"/><dgm:shape type="rect"><dgm:adjLst/></dgm:shape><dgm:presOf axis="ch" ptType="node" cnt="1"/><dgm:constrLst/><dgm:ruleLst><dgm:rule type="primFontSz" val="5" fact="NaN" max="NaN"/></dgm:ruleLst></dgm:layoutNode>` +
+		`<dgm:layoutNode name="pillars"><dgm:alg type="lin"><dgm:param type="linDir" val="fromL"/></dgm:alg><dgm:shape><dgm:adjLst/></dgm:shape><dgm:presOf/><dgm:constrLst/><dgm:ruleLst/>` +
+		`<dgm:forEach name="pillarLoop" axis="ch" ptType="node">` +
+		`<dgm:layoutNode name="pillar" styleLbl="node0"><dgm:alg type="tx"/><dgm:shape type="rect"><dgm:adjLst/></dgm:shape><dgm:presOf axis="self" ptType="node"/><dgm:constrLst/><dgm:ruleLst><dgm:rule type="primFontSz" val="5" fact="NaN" max="NaN"/></dgm:ruleLst></dgm:layoutNode>` +
+		`</dgm:forEach></dgm:layoutNode></dgm:layoutNode></dgm:layoutDef>`
+}
+
+func TestExtractNativePPTXDiagramLayoutLinKeepsAnAncestorAssignedCrossExtent(t *testing.T) {
+	t.Parallel()
+	deck, err := ExtractNativePPTX(nativeDiagramLayoutFixture(t, nativeDiagramLayoutFixtureOptions{
+		omitDrawingPart: true, layout: nativeDiagramLinInCompositeLayoutXML(nativeDiagramURITransitional),
+	}), nativeDiagramLayoutApproximateOptions())
+	if err != nil {
+		t.Fatalf("extract linear row inside a composite: %v", err)
+	}
+	group := nativeFixtureDiagramGroup(t, deck.Slides[0])
+	if len(group.Children) != 3 {
+		t.Fatalf("expected a roof over two pillars: %d children", len(group.Children))
+	}
+	frameW, frameH := *group.Transform.Cx, *group.Transform.Cy
+	roof := group.Children[0].Transform
+	if *roof.X != 0 || *roof.Y != 0 || *roof.Cx != frameW || *roof.Cy != int64(float64(frameH)*0.3) {
+		t.Fatalf("roof is not the full-width 0.3 band: %#v", roof)
+	}
+	// Two pillars each asked for the whole width, so each is halved. Their
+	// height came from the composite, not from their own width, so it must
+	// survive the shrink at 0.63 of the frame.
+	for index, child := range group.Children[1:] {
+		got := child.Transform
+		if *got.Cx != frameW/2 || *got.Y != int64(float64(frameH)*0.3) || *got.Cy != int64(float64(frameH)*0.63) {
+			t.Fatalf("pillar %d was rescaled instead of narrowed: %#v", index, got)
+		}
+		if *got.X != int64(index)*(frameW/2) {
+			t.Fatalf("pillar %d is not packed end to end: %#v", index, got)
+		}
 	}
 }

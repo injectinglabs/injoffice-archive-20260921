@@ -116,9 +116,9 @@ func (node *nativeDiagramPresNode) layoutComposite(width, height float64) error 
 			return nativeDiagramLayoutRefuse(nativeDiagramLayoutAlgorithmCode, "diagram connectors inside composite nodes are not modeled")
 		}
 		switch child.alg {
-		case "", "sp", "tx", "composite":
+		case "", "sp", "tx", "composite", "lin":
 		default:
-			return nativeDiagramLayoutRefuse(nativeDiagramLayoutAlgorithmCode, "diagram composite children must use composite, sp or tx algorithms")
+			return nativeDiagramLayoutRefuse(nativeDiagramLayoutAlgorithmCode, "diagram composite children must use composite, lin, sp or tx algorithms")
 		}
 		if err := child.layoutSubtree(width, height); err != nil {
 			return err
@@ -630,28 +630,6 @@ func nativeDiagramFitFontSize(paragraphs [][]string, maximum, minimum, width, he
 	return best
 }
 
-// scaleUniform multiplies a laid-out subtree by factor about the subtree
-// origin. lin uses it for shrink-to-fit: ECMA-376 §21.4.2.24 lets the
-// algorithm relax a child's w/h constraint down to its ruleLst minimum, which
-// re-solves every constraint derived from that extent. Every derived
-// constraint these layouts use is linear in it (a chevron's h = 0.4 x w, a
-// text box's l/t/w/h inside its composite), so scaling the finished subtree
-// reproduces the re-solve exactly, and is declared in the group diagnostic.
-func (node *nativeDiagramPresNode) scaleUniform(factor float64) {
-	node.rect.x *= factor
-	node.rect.y *= factor
-	node.rect.w *= factor
-	node.rect.h *= factor
-	node.blockW *= factor
-	node.blockH *= factor
-	node.anchorX *= factor
-	node.rootLeft *= factor
-	node.rootRight *= factor
-	for _, child := range node.children {
-		child.scaleUniform(factor)
-	}
-}
-
 // layoutLin packs children end to end along linDir, aligned across that axis
 // by nodeVertAlign/nodeHorzAlign (§21.4.7.1 lin, §21.4.7.42, §21.4.7.45,
 // §21.4.7.46). Spacer nodes contribute their extent along the packing axis
@@ -702,25 +680,46 @@ func (node *nativeDiagramPresNode) layoutLin(width, height float64) error {
 		}
 		return item.blockW
 	}
-	total, extent := 0.0, 0.0
+	total := 0.0
 	for _, item := range items {
 		total += along(item)
-		// A spacer's cross extent is the inherited parent size, not a
-		// measurement of anything it paints, so it never widens the row.
-		if item.alg != "sp" && cross(item) > extent {
-			extent = cross(item)
-		}
 	}
 	available := width
 	if !horizontal {
 		available = height
 	}
 	if total > available && available > 0 && total > 0 {
+		// Shrink to fit. ECMA-376 §21.4.2.24 lets the algorithm relax the
+		// extent a child asked for down to its ruleLst minimum; every
+		// constraint the child's own list derives FROM that extent then
+		// re-solves, while what an ancestor assigned it across the packing
+		// axis stays put. Re-running the child's own constraint list over
+		// the relaxed extent is exactly that: a chevron's h = 0.4 x w
+		// follows its narrowed width, a pillar's h = 0.63 x the frame does
+		// not. The share is proportional, so equally constrained children
+		// end up with equal shares.
 		factor := available / total
-		for _, item := range items {
-			item.scaleUniform(factor)
+		key := "w"
+		if !horizontal {
+			key = "h"
 		}
-		total, extent = total*factor, extent*factor
+		for _, item := range items {
+			if err := item.relaxAlong(key, along(item)*factor, width, height); err != nil {
+				return err
+			}
+		}
+		total = 0
+		for _, item := range items {
+			total += along(item)
+		}
+	}
+	extent := 0.0
+	for _, item := range items {
+		// A spacer's cross extent is the inherited parent size, not a
+		// measurement of anything it paints, so it never widens the row.
+		if item.alg != "sp" && cross(item) > extent {
+			extent = cross(item)
+		}
 	}
 	ordered := items
 	if linDir == "fromR" || linDir == "fromB" {
@@ -757,4 +756,29 @@ func (node *nativeDiagramPresNode) layoutLin(width, height float64) error {
 	node.anchorX = node.blockW / 2
 	node.rootLeft, node.rootRight = 0, node.blockW
 	return nil
+}
+
+// relaxAlong re-solves one child of a linear node against a relaxed extent:
+// the child's own constraint list is evaluated again so everything derived
+// from that extent follows it, the allocation is then restored (the
+// algorithm's share wins over the node's own preferred value), and the
+// subtree is laid out afresh. Equalization directives are cleared first so
+// the second pass does not record the same group twice.
+func (node *nativeDiagramPresNode) relaxAlong(key string, value, parentW, parentH float64) error {
+	node.clearEqualization()
+	node.vals[key] = value
+	if node.evaluator != nil {
+		if err := node.evaluator.evaluateConstraints(node); err != nil {
+			return err
+		}
+	}
+	node.vals[key] = value
+	return node.layoutSubtree(parentW, parentH)
+}
+
+func (node *nativeDiagramPresNode) clearEqualization() {
+	node.equalize = nil
+	for _, child := range node.children {
+		child.clearEqualization()
+	}
 }
