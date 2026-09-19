@@ -3,7 +3,7 @@
 
 export const PPTX_NATIVE_SCHEMA_ID = "https://injoffice.dev/schemas/pptx-native-v1.schema.json" as const
 export const PPTX_NATIVE_CONTRACT_VERSION = "pptx-native/v1" as const
-export const PPTX_NATIVE_SCHEMA_SHA256 = "1a4b79e95ee7f3107aa60451a0954948dbafbea7d7c71b18e490317741851b49" as const
+export const PPTX_NATIVE_SCHEMA_SHA256 = "9c16b6909d2c5636c61cdcdb0ab612178aba93ceb089091617215a03d679afb0" as const
 export const PPTX_NATIVE_RESOURCE_LIMITS = {
   "maxJsonBytes": 268435456,
   "maxNodes": 1000000,
@@ -823,6 +823,7 @@ export const PPTX_NATIVE_OBJECT_BINDINGS = {
     "properties": [
       "cap",
       "color",
+      "compound",
       "dash",
       "join",
       "miterLimit",
@@ -1199,6 +1200,17 @@ export const PPTX_NATIVE_SCHEMA = {
       "type": "string",
       "enum": [
         "solid"
+      ]
+    },
+    "strokeCompound": {
+      "x-binding-name": "StrokeCompound",
+      "type": "string",
+      "enum": [
+        "single",
+        "double",
+        "thickThin",
+        "thinThick",
+        "triple"
       ]
     },
     "textAlign": {
@@ -1729,6 +1741,9 @@ export const PPTX_NATIVE_SCHEMA = {
         },
         "dash": {
           "$ref": "#/$defs/strokeDash"
+        },
+        "compound": {
+          "$ref": "#/$defs/strokeCompound"
         },
         "miterLimit": {
           "type": "integer",
@@ -3890,6 +3905,9 @@ export type NativeStrokeJoin = typeof strokeJoinValues[number]
 
 export const strokeDashValues = ["solid"] as const
 export type NativeStrokeDash = typeof strokeDashValues[number]
+
+export const strokeCompoundValues = ["single","double","thickThin","thinThick","triple"] as const
+export type NativeStrokeCompound = typeof strokeCompoundValues[number]
 
 export const textAlignValues = ["left","center","right"] as const
 export type NativeTextAlign = typeof textAlignValues[number]

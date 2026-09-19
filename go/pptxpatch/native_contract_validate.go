@@ -1218,6 +1218,13 @@ func (v *nativeValidator) stroke(stroke NativeStroke, p string) {
 	if stroke.Dash != nil && *stroke.Dash != NativeStrokeDashSolid {
 		v.add(p+".dash", "schema.enum", "has an unsupported line dash")
 	}
+	if stroke.Compound != nil {
+		switch *stroke.Compound {
+		case NativeStrokeCompoundSingle, NativeStrokeCompoundDouble, NativeStrokeCompoundThickThin, NativeStrokeCompoundThinThick, NativeStrokeCompoundTriple:
+		default:
+			v.add(p+".compound", "schema.enum", "has an unsupported compound outline")
+		}
+	}
 	if stroke.Join != nil && *stroke.Join == NativeStrokeJoinMiter {
 		v.requiredBoundedNonnegative(stroke.MiterLimit, nativeMaxDrawingPercentage, p+".miterLimit")
 	} else if stroke.MiterLimit != nil {

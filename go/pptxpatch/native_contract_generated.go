@@ -5,7 +5,7 @@ package pptxpatch
 
 const NativePPTXContractVersion = "pptx-native/v1"
 const NativePPTXSchemaID = "https://injoffice.dev/schemas/pptx-native-v1.schema.json"
-const NativePPTXSchemaSHA256 = "1a4b79e95ee7f3107aa60451a0954948dbafbea7d7c71b18e490317741851b49"
+const NativePPTXSchemaSHA256 = "9c16b6909d2c5636c61cdcdb0ab612178aba93ceb089091617215a03d679afb0"
 const nativeMaxJsonBytes = 268435456
 const nativeMaxNodes = 1000000
 const nativeMaxDepth = 64
@@ -207,7 +207,7 @@ var nativePPTXBindingShapes = map[string]nativePPTXBindingShape{
 		Required:   []string{"fingerprintSha256", "objectId", "partName"},
 	},
 	"NativeStroke": {
-		Properties: []string{"cap", "color", "dash", "join", "miterLimit", "widthEmu"},
+		Properties: []string{"cap", "color", "compound", "dash", "join", "miterLimit", "widthEmu"},
 		Required:   []string{"color", "widthEmu"},
 	},
 	"NativeTable": {
@@ -319,6 +319,14 @@ const NativeStrokeJoinMiter NativeStrokeJoin = "miter"
 type NativeStrokeDash string
 
 const NativeStrokeDashSolid NativeStrokeDash = "solid"
+
+type NativeStrokeCompound string
+
+const NativeStrokeCompoundSingle NativeStrokeCompound = "single"
+const NativeStrokeCompoundDouble NativeStrokeCompound = "double"
+const NativeStrokeCompoundThickThin NativeStrokeCompound = "thickThin"
+const NativeStrokeCompoundThinThick NativeStrokeCompound = "thinThick"
+const NativeStrokeCompoundTriple NativeStrokeCompound = "triple"
 
 type NativeTextAlign string
 

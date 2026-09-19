@@ -90,6 +90,8 @@ export interface RenderStroke extends RenderPaint {
   readonly cap?: 'flat' | 'round' | 'square'
   readonly join?: 'round' | 'bevel' | 'miter'
   readonly dash?: 'solid'
+  /** DrawingML ST_CompoundLine; absent is the single line of the full width. */
+  readonly compound?: 'single' | 'double' | 'thickThin' | 'thinThick' | 'triple'
   readonly miterLimit?: number
 }
 
