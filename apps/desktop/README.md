@@ -39,7 +39,7 @@ document-authoring.ts is fail-closed native apply for split/join/replace/table/i
 Spreadsheet selection, clipboard copy/paste, virtualized visible-row windows, and versioned recovery drafts live in spreadsheetCommands.ts.
 PresentationPlayer is the fullscreen slide dialog; Escape exits and Home/arrows use presentationMode.
 PDF command apply/inspect, byte-snapshot history, and page-range parse live in pdf-commands.ts.
-OfficeEditor hosts that preview with the ribbon, find/replace, and Apply for pending run text.
+OfficeEditor hosts that preview with the ribbon, find/replace, and 80ms hidden native apply while typing (Apply/Cancel remain as fallback).
 Local spreadsheet calculation projects source values into a worker host and writes a revision-checked cache.
 PresentationEditor is the PPTX canvas, inspector, and Present control that launches PresentationPlayer.
 PdfEditor is the PDF page and annotation workspace; it applies through pdf-commands and does not import OfficeEditor.

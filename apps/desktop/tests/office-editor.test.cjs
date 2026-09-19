@@ -133,3 +133,57 @@ test('OfficeEditor mounts with mocked wasm, reports busy, and applies a draft', 
   assert.equal(client.applied[0].payload.mutations[0].text, 'Hello');
   await act(async () => view.unmount());
 });
+
+function documentPreview(view) {
+  return view.root.find(node => typeof node.props?.choose === 'function' && typeof node.props?.updateDraft === 'function');
+}
+
+test('OfficeEditor schedules a hidden native apply after debounce and skips while composing', async t => {
+  const bytes = new Uint8Array([0x50, 0x4b]);
+  const client = mockClient(tinyDocument(''));
+  const OfficeEditor = await loadEditor(client);
+  global.window = {
+    getSelection: () => null,
+    document: {
+      createTextNode: () => ({}),
+      createRange: () => ({}),
+      caretRangeFromPoint: () => null,
+      addEventListener() {},
+      removeEventListener() {},
+    },
+  };
+  const changes = [];
+  const busy = [];
+  let view;
+  await act(async () => {
+    view = create(React.createElement(OfficeEditor, {
+      name: 'Note.docx',
+      bytes,
+      onChange: value => changes.push(value),
+      onBusyChange: value => busy.push(value),
+    }));
+  });
+  await until(() => view.root.findAllByProps({ 'aria-label': 'Document content' }).length > 0);
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const textbox = view.root.findByProps({ role: 'textbox' });
+  await act(async () => textbox.props.onInput({ currentTarget: { textContent: 'Hello' } }));
+  assert.equal(client.applied.length, 0);
+  assert.equal(changes.length, 0);
+  await act(async () => { t.mock.timers.tick(79); });
+  assert.equal(client.applied.length, 0);
+  await act(async () => { t.mock.timers.tick(1); });
+  for (let count = 0; count < 50 && (changes.length === 0 || busy.at(-1) !== false); count++) {
+    await act(async () => Promise.resolve());
+  }
+  assert.equal(client.applied[0].payload.mutations[0].text, 'Hello');
+  assert.equal(changes.length, 1);
+  assert.equal(view.root.findAllByProps({ role: 'textbox' }).length, 1);
+  assert.equal(documentPreview(view).props.caretOffset, 5);
+  const live = view.root.findByProps({ role: 'textbox' });
+  await act(async () => live.props.onCompositionStart());
+  await act(async () => live.props.onInput({ currentTarget: { textContent: 'Hello!' } }));
+  await act(async () => { t.mock.timers.tick(80); });
+  for (let count = 0; count < 10; count++) await act(async () => Promise.resolve());
+  assert.equal(client.applied.length, 1);
+  await act(async () => view.unmount());
+});
