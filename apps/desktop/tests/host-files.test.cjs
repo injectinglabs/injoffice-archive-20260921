@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
-const { FileStore, atomicWrite, normalizeSaveDestination } = require('../electron/file-store.cjs');
+const { FileStore, atomicWrite, normalizeSaveDestination, validateFormat, validateOpenFormat } = require('../electron/file-store.cjs');
 
 async function fixture(t) {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'injoffice-host-'));
@@ -75,6 +75,14 @@ test('atomic replacement refuses symbolic links and preserves file permissions',
     await assert.rejects(atomicWrite(link, Buffer.from('bad')), /regular file/);
     assert.equal(await fs.readFile(filename, 'utf8'), 'saved');
   }
+});
+
+test('macro-enabled Word is openable and saveable as .docm but is not a blank-create format', () => {
+  assert.equal(validateOpenFormat('docm'), 'docm');
+  assert.equal(validateOpenFormat('DOCM'), 'docm');
+  assert.throws(() => validateOpenFormat('doc'), /Choose a DOCX/);
+  assert.throws(() => validateFormat('docm'), /Choose a DOCX/);
+  assert.equal(normalizeSaveDestination('/tmp/macro.docm', 'docm'), '/tmp/macro.docm');
 });
 
 test('new Office sessions have opaque ids and independent in-memory bytes without creating files', async (t) => {
