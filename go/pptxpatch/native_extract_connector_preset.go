@@ -213,7 +213,9 @@ func resolveNativeConnectorStyle(properties, style, themeRoot *nativeXMLNode, di
 	// The selected matrix entry must itself be exact before a local override
 	// can conceal malformed or duplicate theme markup.
 	matrixGaps := nativeShapeGapSet{}
-	if _, err := validateNativeAutoShapeLine(&nativeXMLNode{Children: []*nativeXMLNode{inherited}}, dialect, theme, false, &matrixGaps); err != nil {
+	// The wrapper always holds the matrix entry, so "absent" cannot occur here;
+	// true keeps the probe strict regardless.
+	if _, err := validateNativeAutoShapeLine(&nativeXMLNode{Children: []*nativeXMLNode{inherited}}, dialect, theme, false, true, &matrixGaps); err != nil {
 		return nil, err
 	}
 	if len(matrixGaps.values) != 0 {

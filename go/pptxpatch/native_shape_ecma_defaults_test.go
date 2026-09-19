@@ -165,3 +165,180 @@ func TestExtractNativePPTXCustomGeometryIgnoresUnpaintedHandleAndConnectionLists
 		})
 	}
 }
+
+// EG_LineJoinProperties is optional on a:ln (ECMA-376 Part 1 §20.1.2.2.24),
+// and 736 of the 1337 a:ln elements in the hard-v2 corpus state no join at
+// all, so refusing an unstated join threw away the majority case. PowerPoint
+// falls back to a miter: its raster of layout-clrmap-override.pptx paints a
+// pixel-sharp square at a 2pt rectangle corner, which neither a round nor a
+// bevel join can produce.
+func TestExtractNativePPTXAutoShapeDefaultsAnUnstatedOutlineJoinToMiter(t *testing.T) {
+	t.Parallel()
+	solid := `<a:solidFill><a:srgbClr val="A0A060"/></a:solidFill>`
+	rectangle := `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>`
+	extract := func(t *testing.T, line string) (NativeElement, NativePPTXDeck) {
+		t.Helper()
+		shape := nativeECMADefaultShapeXML(3, "", rectangle, line)
+		deck, err := ExtractNativePPTX(nativeAutoShapeFixture(t, false, shape), nativeTestExtractOptions())
+		if err != nil {
+			t.Fatalf("extract AutoShape: %v", err)
+		}
+		shapes := nativeFixtureAutoShapes(deck.Slides[0])
+		if len(shapes) != 1 {
+			t.Fatalf("expected one AutoShape, got %#v", shapes)
+		}
+		return shapes[0], deck
+	}
+	warned := func(element NativeElement) bool {
+		for _, diagnostic := range element.Compatibility.Diagnostics {
+			if diagnostic.Code == nativeOutlineDefaultJoinCode {
+				return diagnostic.Severity == NativeDiagnosticSeverityWarning
+			}
+		}
+		return false
+	}
+
+	// No join at all: the outline paints, as a disclosed read-only miter.
+	element, deck := extract(t, `<a:ln w="19080">`+solid+`</a:ln>`)
+	if element.Compatibility.Status != NativeCompatibilityStatusRefused && element.Stroke == nil {
+		t.Fatalf("an unstated join lost the outline: %#v", element)
+	}
+	if element.Compatibility.Status != NativeCompatibilityStatusPreserveOnly {
+		t.Fatalf("a defaulted join must stay read-only, got %q: %#v", element.Compatibility.Status, element.Compatibility.Diagnostics)
+	}
+	if element.Stroke == nil || element.Stroke.Join == nil || *element.Stroke.Join != NativeStrokeJoinMiter {
+		t.Fatalf("an unstated join did not default to a miter: %#v", element.Stroke)
+	}
+	if element.Stroke.MiterLimit == nil || *element.Stroke.MiterLimit != nativeDefaultOutlineMiterLimit {
+		t.Fatalf("the defaulted miter carried no limit: %#v", element.Stroke)
+	}
+	// Nothing else about the outline moves.
+	if element.Stroke.Color != "A0A060" || element.Stroke.WidthEMU == nil || *element.Stroke.WidthEMU != 19080 ||
+		element.Stroke.Cap == nil || *element.Stroke.Cap != NativeStrokeCapFlat ||
+		element.Stroke.Dash == nil || *element.Stroke.Dash != NativeStrokeDashSolid {
+		t.Fatalf("defaulting the join changed the rest of the outline: %#v", element.Stroke)
+	}
+	if !warned(element) {
+		t.Fatalf("the defaulted join was not disclosed as a warning: %#v", element.Compatibility.Diagnostics)
+	}
+	if issues := ValidateNativePPTX(deck); len(issues) != 0 {
+		t.Fatalf("invalid extracted deck: %#v", issues)
+	}
+
+	// An authored join is untouched and carries no disclosure.
+	for _, authored := range []struct {
+		markup string
+		want   NativeStrokeJoin
+	}{
+		{`<a:round/>`, NativeStrokeJoinRound},
+		{`<a:bevel/>`, NativeStrokeJoinBevel},
+		{`<a:miter lim="800000"/>`, NativeStrokeJoinMiter},
+	} {
+		stated, _ := extract(t, `<a:ln w="19080">`+solid+authored.markup+`</a:ln>`)
+		if stated.Stroke == nil || stated.Stroke.Join == nil || *stated.Stroke.Join != authored.want {
+			t.Fatalf("authored join %s was not honored: %#v", authored.markup, stated.Stroke)
+		}
+		if warned(stated) {
+			t.Fatalf("authored join %s was reported as defaulted: %#v", authored.markup, stated.Compatibility.Diagnostics)
+		}
+		if stated.Compatibility.Status != NativeCompatibilityStatusEditable {
+			t.Fatalf("authored join %s stopped being editable: %#v", authored.markup, stated.Compatibility)
+		}
+	}
+
+	// The tolerance is exactly "no join". More than one join, and a miter that
+	// states no limit, both still preserve the outline instead of guessing.
+	for name, line := range map[string]string{
+		"two joins":       `<a:ln w="19080">` + solid + `<a:round/><a:miter lim="800000"/></a:ln>`,
+		"limitless miter": `<a:ln w="19080">` + solid + `<a:miter/></a:ln>`,
+	} {
+		refused, _ := extract(t, line)
+		if refused.Compatibility.Status != NativeCompatibilityStatusRefused {
+			t.Fatalf("%s was tolerated: status=%q %#v", name, refused.Compatibility.Status, refused.Compatibility.Diagnostics)
+		}
+		if !nativeECMADefaultRefusalCodes(refused)["pptx.autoshape-line-unavailable"] {
+			t.Fatalf("%s did not refuse as an outline gap: %#v", name, refused.Compatibility.Diagnostics)
+		}
+	}
+}
+
+// a:ln is optional on a:spPr. By the time the outline is read the
+// p:style/a:lnRef matrix reference has been merged in and a placeholder's
+// inherited frame has been taken, so an absent a:ln means no source states an
+// outline -- and PowerPoint paints none. Its raster of
+// layout-clrmap-override.pptx runs the slide background straight into the
+// accent1 fill with no band between them.
+func TestExtractNativePPTXAutoShapeWithNoOutlinePaintsNone(t *testing.T) {
+	t.Parallel()
+	rectangle := `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>`
+	shape := nativeECMADefaultShapeXML(3, "", rectangle, "")
+	deck, err := ExtractNativePPTX(nativeAutoShapeFixture(t, false, shape), nativeTestExtractOptions())
+	if err != nil {
+		t.Fatalf("extract AutoShape: %v", err)
+	}
+	shapes := nativeFixtureAutoShapes(deck.Slides[0])
+	if len(shapes) != 1 {
+		t.Fatalf("expected one AutoShape, got %#v", shapes)
+	}
+	element := shapes[0]
+	if element.Compatibility.Status != NativeCompatibilityStatusEditable {
+		t.Fatalf("a shape with no outline was not exact: status=%q %#v", element.Compatibility.Status, element.Compatibility.Diagnostics)
+	}
+	if element.Stroke != nil {
+		t.Fatalf("a shape with no outline invented one: %#v", element.Stroke)
+	}
+	if element.Fill == nil || *element.Fill != "FFFF7F" {
+		t.Fatalf("the fill was lost with the outline: %#v", element)
+	}
+	if issues := ValidateNativePPTX(deck); len(issues) != 0 {
+		t.Fatalf("invalid extracted deck: %#v", issues)
+	}
+}
+
+// The one outline source this tier does not resolve is a theme shape default,
+// a:objectDefaults/a:spDef/a:spPr/a:ln, which 4 of the 80 hard-v2 decks
+// declare. There an absent a:ln does not mean "no outline", so it keeps
+// refusing rather than painting a shape PowerPoint would outline.
+func TestExtractNativePPTXAutoShapeKeepsRefusingUnderAThemeShapeDefaultOutline(t *testing.T) {
+	t.Parallel()
+	rectangle := `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>`
+	shape := nativeECMADefaultShapeXML(3, "", rectangle, "")
+	withDefaults := func(t *testing.T, objectDefaults string) NativeElement {
+		t.Helper()
+		payload := nativeExtractFixture(t, nativeExtractFixtureOptions{mutate: func(parts map[string]string) {
+			parts["relocated/slides/slide-a.xml"] = strings.Replace(parts["relocated/slides/slide-a.xml"], `</p:spTree>`, shape+`</p:spTree>`, 1)
+			parts["relocated/themes/theme.xml"] = strings.Replace(parts["relocated/themes/theme.xml"], `</a:theme>`, objectDefaults+`</a:theme>`, 1)
+		}})
+		deck, err := ExtractNativePPTX(payload, nativeTestExtractOptions())
+		if err != nil {
+			t.Fatalf("extract AutoShape: %v", err)
+		}
+		shapes := nativeFixtureAutoShapes(deck.Slides[0])
+		if len(shapes) != 1 {
+			t.Fatalf("expected one AutoShape, got %#v", shapes)
+		}
+		return shapes[0]
+	}
+	outlined := withDefaults(t, `<a:objectDefaults><a:spDef><a:spPr><a:ln w="12700"><a:solidFill><a:srgbClr val="112233"/></a:solidFill></a:ln></a:spPr></a:spDef></a:objectDefaults>`)
+	if outlined.Compatibility.Status != NativeCompatibilityStatusRefused {
+		t.Fatalf("a theme shape-default outline was painted over: status=%q %#v", outlined.Compatibility.Status, outlined.Compatibility.Diagnostics)
+	}
+	if !nativeECMADefaultRefusalCodes(outlined)["pptx.autoshape-line-unavailable"] {
+		t.Fatalf("the theme default was not disclosed as an outline gap: %#v", outlined.Compatibility.Diagnostics)
+	}
+	// A shape default that states no outline is not an outline source.
+	for name, defaults := range map[string]string{
+		"empty object defaults":        `<a:objectDefaults/>`,
+		"shape default without spPr":   `<a:objectDefaults><a:spDef><a:bodyPr/></a:spDef></a:objectDefaults>`,
+		"shape default without a line": `<a:objectDefaults><a:spDef><a:spPr><a:solidFill><a:srgbClr val="112233"/></a:solidFill></a:spPr></a:spDef></a:objectDefaults>`,
+		"line default only":            `<a:objectDefaults><a:lnDef><a:spPr><a:ln w="12700"><a:noFill/></a:ln></a:spPr></a:lnDef></a:objectDefaults>`,
+	} {
+		element := withDefaults(t, defaults)
+		if element.Stroke != nil {
+			t.Fatalf("%s invented an outline: %#v", name, element.Stroke)
+		}
+		if nativeECMADefaultRefusalCodes(element)["pptx.autoshape-line-unavailable"] {
+			t.Fatalf("%s refused the outline: %#v", name, element.Compatibility.Diagnostics)
+		}
+	}
+}
