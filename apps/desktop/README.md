@@ -36,6 +36,7 @@ checkbox UI for that selection. DocumentPreview is the flowing HTML paper
 with per-run contenteditable; Apply is Ctrl/⌘+Enter, Cancel is Escape.
 formatting.ts maps native run/paragraph appearance onto toolbar values.
 document-authoring.ts is fail-closed native apply for split/join/replace/table/image.
+Spreadsheet selection, clipboard copy/paste, virtualized visible-row windows, and versioned recovery drafts live in spreadsheetCommands.ts.
 The rest of the renderer,
 the real Electron dependency, GitHub provider, and packaging workflows land
 in follow-up changes. Preview builds never load an updater.
