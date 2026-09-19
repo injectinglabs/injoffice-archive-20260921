@@ -371,6 +371,9 @@ type nativeDiagramRule struct {
 	typ                     string
 	forRel, forName, ptType string
 	val                     float64
+	// unbounded marks an extent rule written val="INF": the constraint it
+	// names is elastic and the algorithm may set that extent freely.
+	unbounded bool
 }
 
 // nativeDiagramPresNode is one evaluated layout node instance.
@@ -397,7 +400,16 @@ type nativeDiagramPresNode struct {
 	// the same pass that evaluates constraints.
 	appliedRules []nativeDiagramRule
 	vals         map[string]float64
-	equalize     [][]*nativeDiagramPresNode
+	// upper holds the tightest op="lte" bound seen for a constraint type.
+	// The clamp itself happens when the constraint is applied; the bound is
+	// kept because an extent the layout later grows must not pass it.
+	upper map[string]float64
+	// elasticBase remembers what an extent was before the layout grew it, so
+	// re-solving the same node grows from the constraint, not from the
+	// previous growth; grown holds the value the growth settled on.
+	elasticBase map[string]float64
+	grown       map[string]float64
+	equalize    [][]*nativeDiagramPresNode
 
 	// Layout results (unscaled units; see native_diagram_layout_hier.go).
 	rect      nativeDiagramRect
@@ -415,6 +427,21 @@ func (node *nativeDiagramPresNode) value(name string, fallback float64) float64 
 		return value
 	}
 	return fallback
+}
+
+// inheritedExtent is the w or h the nearest ancestor that has one carries.
+// Only the two extents inherit; every other constraint type is undefined
+// until something assigns it.
+func (node *nativeDiagramPresNode) inheritedExtent(typ string) (float64, bool) {
+	if typ != "w" && typ != "h" {
+		return 0, false
+	}
+	for current := node.parent; current != nil; current = current.parent {
+		if value, ok := current.vals[typ]; ok {
+			return value, true
+		}
+	}
+	return 0, false
 }
 
 func (node *nativeDiagramPresNode) param(name, fallback string) string {
@@ -1020,7 +1047,7 @@ func parseNativeDiagramConstraint(node *nativeXMLNode, diagramNS string) (native
 // refuse so a layout relying on them is never laid out differently.
 func nativeDiagramConstraintTypeModeled(typ string) bool {
 	switch typ {
-	case "w", "h", "l", "t", "r", "b", "ctrX", "ctrY", "sp", "sibSp", "secSibSp", "alignOff", "bendDist", "begPad", "endPad", "primFontSz", "lMarg", "rMarg", "tMarg", "bMarg":
+	case "w", "h", "l", "t", "r", "b", "ctrX", "ctrY", "sp", "sibSp", "secSibSp", "alignOff", "bendDist", "connDist", "begPad", "endPad", "primFontSz", "lMarg", "rMarg", "tMarg", "bMarg":
 		return true
 	case "secFontSz":
 		// The secondary font size is not read by any algorithm here. It is
@@ -1067,6 +1094,7 @@ func parseNativeDiagramRule(node *nativeXMLNode, diagramNS string) (nativeDiagra
 				if attr.Value != "0" && attr.Value != "INF" {
 					return rule, nativeDiagramLayoutRefuse(nativeDiagramLayoutConstraintCode, "diagram rule bounds "+rule.typ+" at "+attr.Value+"; only unbounded relaxation is modeled")
 				}
+				rule.unbounded = attr.Value == "INF"
 				continue
 			}
 			value, err := nativeDiagramParseFloat(attr.Value)
@@ -1131,6 +1159,22 @@ func (node *nativeDiagramPresNode) selectPres(relationship, name, ptType string)
 // equalization directive; references read the current value of the referenced
 // node and refuse when it was never set, so nothing is guessed.
 func (evaluator *nativeDiagramLayoutEvaluator) evaluateConstraints(node *nativeDiagramPresNode) error {
+	if err := evaluator.applyConstraints(node, true); err != nil {
+		return err
+	}
+	for _, child := range node.children {
+		if err := evaluator.evaluateConstraints(child); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// applyConstraints evaluates one node's own constrLst, and its ruleLst when
+// the rules have not been aimed yet. A layout that re-solves a node after the
+// algorithm changed an extent re-runs this alone: the rules were already
+// delivered and the descendants' own lists must not overwrite the new extent.
+func (evaluator *nativeDiagramLayoutEvaluator) applyConstraints(node *nativeDiagramPresNode, aimRules bool) error {
 	for _, constraint := range node.constraints {
 		targets := node.selectPres(constraint.forRel, constraint.forName, constraint.ptType)
 		if targets == nil {
@@ -1162,7 +1206,16 @@ func (evaluator *nativeDiagramLayoutEvaluator) evaluateConstraints(node *nativeD
 			}
 			referenced, ok := references[0].vals[constraint.refType]
 			if !ok {
-				return nativeDiagramLayoutRefuse(nativeDiagramLayoutConstraintCode, "diagram constraint on "+node.name+" reads "+constraint.refType+" of "+references[0].name+" before it is defined")
+				// An extent nothing has assigned is the one the node
+				// inherits from its parent, which is exactly what the
+				// layout will hand it (§21.4.7.1: an algorithm lays its
+				// children out inside its own extent). The radial layouts
+				// read their OWN w before any constraint defines it, so
+				// without this the frame refuses rather than laying out at
+				// the size it was going to use anyway.
+				if referenced, ok = references[0].inheritedExtent(constraint.refType); !ok {
+					return nativeDiagramLayoutRefuse(nativeDiagramLayoutConstraintCode, "diagram constraint on "+node.name+" reads "+constraint.refType+" of "+references[0].name+" before it is defined")
+				}
 			}
 			value = referenced * constraint.fact * nativeDiagramConstraintUnitScale(constraint.refType, constraint.typ)
 		}
@@ -1177,6 +1230,14 @@ func (evaluator *nativeDiagramLayoutEvaluator) evaluateConstraints(node *nativeD
 			// to no height.
 			if exists && !constraint.hasVal && constraint.refType == "" {
 				continue
+			}
+			if constraint.op == "lte" {
+				if target.upper == nil {
+					target.upper = map[string]float64{}
+				}
+				if bound, seen := target.upper[constraint.typ]; !seen || value < bound {
+					target.upper[constraint.typ] = value
+				}
 			}
 			switch constraint.op {
 			case "gte":
@@ -1194,6 +1255,9 @@ func (evaluator *nativeDiagramLayoutEvaluator) evaluateConstraints(node *nativeD
 	// Rules are aimed like constraints (§21.4.2.24 carries the same
 	// for/forName/ptType attributes), so a root that bounds the primary font
 	// size of every descendant parTx reaches those nodes here.
+	if !aimRules {
+		return nil
+	}
 	for _, rule := range node.rules {
 		targets := node.selectPres(rule.forRel, rule.forName, rule.ptType)
 		if targets == nil {
@@ -1205,11 +1269,6 @@ func (evaluator *nativeDiagramLayoutEvaluator) evaluateConstraints(node *nativeD
 		}
 		for _, target := range targets {
 			target.appliedRules = append(target.appliedRules, rule)
-		}
-	}
-	for _, child := range node.children {
-		if err := evaluator.evaluateConstraints(child); err != nil {
-			return err
 		}
 	}
 	return nil
@@ -1298,7 +1357,7 @@ func nativeDiagramConstraintIsPointTyped(typ string) bool {
 
 func nativeDiagramConstraintIsLengthTyped(typ string) bool {
 	switch typ {
-	case "w", "h", "l", "t", "r", "b", "ctrX", "ctrY", "sp", "sibSp", "secSibSp", "bendDist", "begPad", "endPad":
+	case "w", "h", "l", "t", "r", "b", "ctrX", "ctrY", "sp", "sibSp", "secSibSp", "bendDist", "connDist", "begPad", "endPad":
 		return true
 	}
 	return false

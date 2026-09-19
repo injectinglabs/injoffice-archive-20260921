@@ -1217,3 +1217,316 @@ func TestExtractNativePPTXDiagramLayoutCycleSpacesShapesAroundTheRing(t *testing
 		t.Fatalf("ctrShpMap did not centre the first child: %#v", hub)
 	}
 }
+
+// nativeDiagramElasticCompositeLayoutXML mirrors the hList1/process3 shape
+// the list layouts use: a linear root over a composite holding a title band
+// above a body band. The bands ask the ROOT for a fraction of the frame, both
+// declare their height unbounded (<rule type="h" val="INF"/>), and only the
+// title carries an op="lte" ceiling of its own.
+func nativeDiagramElasticCompositeLayoutXML(diagramNS, compositeHeight, bodyRules string) string {
+	if bodyRules == "" {
+		bodyRules = `<dgm:rule type="h" val="INF" fact="NaN" max="NaN"/>`
+	}
+	return `<dgm:layoutDef xmlns:dgm="` + diagramNS + `" uniqueId="urn:test/elastic"><dgm:title val=""/><dgm:desc val=""/><dgm:catLst><dgm:cat type="list" pri="9000"/></dgm:catLst>` +
+		`<dgm:layoutNode name="frame"><dgm:alg type="lin"/><dgm:shape><dgm:adjLst/></dgm:shape><dgm:presOf/>` +
+		`<dgm:constrLst><dgm:constr type="w" for="ch" forName="composite" refType="w"/>` + compositeHeight +
+		`<dgm:constr type="h" for="des" forName="title" refType="h" fact="0.2"/>` +
+		`<dgm:constr type="h" for="des" forName="body" refType="h" fact="0.2"/>` +
+		`<dgm:constr type="primFontSz" for="des" ptType="node" val="65"/></dgm:constrLst><dgm:ruleLst/>` +
+		`<dgm:layoutNode name="composite"><dgm:alg type="composite"/><dgm:shape><dgm:adjLst/></dgm:shape><dgm:presOf/>` +
+		`<dgm:constrLst><dgm:constr type="l" for="ch" forName="title"/><dgm:constr type="w" for="ch" forName="title" refType="w"/><dgm:constr type="t" for="ch" forName="title"/>` +
+		`<dgm:constr type="l" for="ch" forName="body"/><dgm:constr type="w" for="ch" forName="body" refType="w"/>` +
+		`<dgm:constr type="t" for="ch" forName="body" refType="h" refFor="ch" refForName="title"/></dgm:constrLst>` +
+		`<dgm:ruleLst><dgm:rule type="h" val="INF" fact="NaN" max="NaN"/></dgm:ruleLst>` +
+		`<dgm:layoutNode name="title" styleLbl="node0"><dgm:alg type="tx"/><dgm:shape type="rect"><dgm:adjLst/></dgm:shape><dgm:presOf axis="ch" ptType="node" cnt="1"/>` +
+		`<dgm:constrLst><dgm:constr type="h" refType="w" op="lte" fact="0.3"/><dgm:constr type="h"/></dgm:constrLst>` +
+		`<dgm:ruleLst><dgm:rule type="h" val="INF" fact="NaN" max="NaN"/></dgm:ruleLst></dgm:layoutNode>` +
+		`<dgm:layoutNode name="body" styleLbl="node1"><dgm:alg type="tx"/><dgm:shape type="rect"><dgm:adjLst/></dgm:shape><dgm:presOf/>` +
+		`<dgm:constrLst><dgm:constr type="h"/></dgm:constrLst><dgm:ruleLst>` + bodyRules + `</dgm:ruleLst></dgm:layoutNode>` +
+		`</dgm:layoutNode></dgm:layoutNode></dgm:layoutDef>`
+}
+
+// <rule type="h" val="INF"/> makes a band's height elastic: the leftover
+// height of the composite is shared among the elastic bands in proportion to
+// the height each asked for, no band passes an op="lte" ceiling of its own,
+// and the band below follows the one that grew. Both bands of the list
+// layouts carry the rule and both have their h pinned from the root, so
+// "grow the one with the rule" is not the rule.
+func TestExtractNativePPTXDiagramLayoutSharesLeftoverHeightWithElasticBands(t *testing.T) {
+	t.Parallel()
+	deck, err := ExtractNativePPTX(nativeDiagramLayoutFixture(t, nativeDiagramLayoutFixtureOptions{
+		omitDrawingPart: true, layout: nativeDiagramElasticCompositeLayoutXML(nativeDiagramURITransitional, `<dgm:constr type="h" for="ch" forName="composite" refType="h"/>`, ""),
+	}), nativeDiagramLayoutApproximateOptions())
+	if err != nil {
+		t.Fatalf("extract elastic composite: %v", err)
+	}
+	group := nativeFixtureDiagramGroup(t, deck.Slides[0])
+	if len(group.Children) != 2 {
+		t.Fatalf("expected a title band over a body band: %d children", len(group.Children))
+	}
+	frameW, frameH := *group.Transform.Cx, *group.Transform.Cy
+	// Each band asked for 0.2 of the frame, so each is offered 2.5x what it
+	// asked for. The title stops at its own ceiling of 0.3 x w; the body has
+	// no ceiling and keeps its whole share.
+	ceiling := int64(float64(frameW) * 0.3)
+	share := int64(float64(frameH) * 0.5)
+	title, body := group.Children[0].Transform, group.Children[1].Transform
+	if *title.Cy != ceiling {
+		t.Fatalf("title band did not stop at its lte ceiling %d: y=%d h=%d", ceiling, *title.Y, *title.Cy)
+	}
+	if *body.Cy != share {
+		t.Fatalf("body band did not take its share %d of the leftover: h=%d", share, *body.Cy)
+	}
+	if *body.Y != *title.Y+ceiling {
+		t.Fatalf("body band did not follow the band that grew above it: y=%d", *body.Y)
+	}
+}
+
+// Without the rule the same bands keep exactly the height their constraints
+// asked for, so the elasticity comes from the ruleLst and nothing else.
+func TestExtractNativePPTXDiagramLayoutPinnedBandsDoNotGrow(t *testing.T) {
+	t.Parallel()
+	layout := strings.ReplaceAll(nativeDiagramElasticCompositeLayoutXML(nativeDiagramURITransitional, `<dgm:constr type="h" for="ch" forName="composite" refType="h"/>`, ""),
+		`<dgm:ruleLst><dgm:rule type="h" val="INF" fact="NaN" max="NaN"/></dgm:ruleLst>`, `<dgm:ruleLst/>`)
+	deck, err := ExtractNativePPTX(nativeDiagramLayoutFixture(t, nativeDiagramLayoutFixtureOptions{
+		omitDrawingPart: true, layout: layout,
+	}), nativeDiagramLayoutApproximateOptions())
+	if err != nil {
+		t.Fatalf("extract pinned composite: %v", err)
+	}
+	group := nativeFixtureDiagramGroup(t, deck.Slides[0])
+	frameH := *group.Transform.Cy
+	for index, child := range group.Children {
+		if *child.Transform.Cy != int64(float64(frameH)*0.2) {
+			t.Fatalf("band %d grew without an extent rule: h=%d", index, *child.Transform.Cy)
+		}
+	}
+}
+
+// A composite whose OWN height is elastic is not a block a thousand frames
+// tall: process3 writes h = 1000 x w on the composite it means to be content
+// sized and leaves the INF rule to settle it. The height is clamped to what
+// the parent has to give, and the composite then closes on the content it
+// ends up holding, which is what centres the diagram in its frame.
+func TestExtractNativePPTXDiagramLayoutElasticCompositeClosesOnItsContent(t *testing.T) {
+	t.Parallel()
+	layout := nativeDiagramElasticCompositeLayoutXML(nativeDiagramURITransitional, "", `<dgm:rule type="primFontSz" val="5" fact="NaN" max="NaN"/>`)
+	layout = strings.Replace(layout, `<dgm:alg type="composite"/>`, `<dgm:alg type="composite"/><!--elastic-->`, 1)
+	layout = strings.Replace(layout, `<dgm:constrLst><dgm:constr type="l" for="ch" forName="title"/>`,
+		`<dgm:constrLst><dgm:constr type="h" refType="w" fact="1000"/><dgm:constr type="l" for="ch" forName="title"/>`, 1)
+	deck, err := ExtractNativePPTX(nativeDiagramLayoutFixture(t, nativeDiagramLayoutFixtureOptions{
+		omitDrawingPart: true, layout: layout,
+	}), nativeDiagramLayoutApproximateOptions())
+	if err != nil {
+		t.Fatalf("extract self-elastic composite: %v", err)
+	}
+	group := nativeFixtureDiagramGroup(t, deck.Slides[0])
+	frameW, frameH := *group.Transform.Cx, *group.Transform.Cy
+	title, body := group.Children[0].Transform, group.Children[1].Transform
+	if *title.Cy != int64(float64(frameW)*0.3) {
+		t.Fatalf("title band did not stop at its ceiling inside the clamped composite: y=%d h=%d", *title.Y, *title.Cy)
+	}
+	content := *body.Y + *body.Cy - *title.Y
+	if content >= frameH {
+		t.Fatalf("elastic composite did not close on its content: %d of %d", content, frameH)
+	}
+	if *title.Y != (frameH-content)/2 {
+		t.Fatalf("the closed composite was not centred in the frame: y=%d content=%d of %d", *title.Y, content, frameH)
+	}
+}
+
+// nativeDiagramLinConnLayoutXML is the process3 shape: a linear row whose
+// sibling transitions are conn nodes instead of spacers. The row gives each
+// transition a width of its own, so the gap the connector is drawn in is part
+// of the packed row.
+func nativeDiagramLinConnLayoutXML(diagramNS string) string {
+	return `<dgm:layoutDef xmlns:dgm="` + diagramNS + `" uniqueId="urn:test/linconn"><dgm:title val=""/><dgm:desc val=""/><dgm:catLst><dgm:cat type="process" pri="9000"/></dgm:catLst>` +
+		`<dgm:layoutNode name="linRoot"><dgm:alg type="lin"/><dgm:shape><dgm:adjLst/></dgm:shape><dgm:presOf/>` +
+		`<dgm:constrLst><dgm:constr type="w" for="ch" forName="linText" refType="w"/>` +
+		`<dgm:constr type="w" for="ch" ptType="sibTrans" refType="w" refFor="ch" refForName="linText" fact="0.3"/>` +
+		`<dgm:constr type="primFontSz" for="ch" forName="linText" val="65"/></dgm:constrLst><dgm:ruleLst/>` +
+		`<dgm:forEach name="linLoop" axis="ch" ptType="node">` +
+		`<dgm:layoutNode name="linText" styleLbl="node0"><dgm:alg type="tx"/><dgm:shape type="rect"><dgm:adjLst/></dgm:shape><dgm:presOf axis="self" ptType="node"/>` +
+		`<dgm:constrLst><dgm:constr type="h" refType="w" op="equ" fact="0.4"/></dgm:constrLst>` +
+		`<dgm:ruleLst><dgm:rule type="primFontSz" val="5" fact="NaN" max="NaN"/></dgm:ruleLst></dgm:layoutNode>` +
+		`<dgm:forEach name="linConnLoop" axis="followSib" ptType="sibTrans" cnt="1">` +
+		`<dgm:layoutNode name="linConn" styleLbl="parChTrans1D2"><dgm:alg type="conn">` +
+		`<dgm:param type="begPts" val="midR"/><dgm:param type="endPts" val="midL"/>` +
+		`<dgm:param type="srcNode" val="linText"/><dgm:param type="dstNode" val="linText"/></dgm:alg>` +
+		`<dgm:shape type="conn"><dgm:adjLst/></dgm:shape><dgm:presOf axis="self"/>` +
+		`<dgm:constrLst><dgm:constr type="h" refType="w" fact="0.5"/><dgm:constr type="connDist"/>` +
+		`<dgm:constr type="begPad" refType="connDist" fact="0.25"/><dgm:constr type="endPad" refType="connDist" fact="0.22"/></dgm:constrLst><dgm:ruleLst/>` +
+		`</dgm:layoutNode></dgm:forEach></dgm:forEach></dgm:layoutNode></dgm:layoutDef>`
+}
+
+// A conn node inside a linear node joins the sibling before it to the sibling
+// after it, and the width the row gives that sibTrans is the gap it is drawn
+// in. nativeDiagramConnectorEnds used to model hierRoot/hierChild only, so a
+// process layout whose transitions are connectors refused outright.
+func TestExtractNativePPTXDiagramLayoutLinearConnectorsJoinTheirNeighbours(t *testing.T) {
+	t.Parallel()
+	deck, err := ExtractNativePPTX(nativeDiagramLayoutFixture(t, nativeDiagramLayoutFixtureOptions{
+		omitDrawingPart: true, layout: nativeDiagramLinConnLayoutXML(nativeDiagramURITransitional),
+	}), nativeDiagramLayoutApproximateOptions())
+	if err != nil {
+		t.Fatalf("extract linear diagram with connectors: %v", err)
+	}
+	group := nativeFixtureDiagramGroup(t, deck.Slides[0])
+	if len(group.Children) != 3 {
+		t.Fatalf("expected two boxes and the connector between them: %d children", len(group.Children))
+	}
+	var boxes []NativeElement
+	var connector *NativeElement
+	for index, child := range group.Children {
+		if child.Kind == NativeElementKindConnector {
+			connector = &group.Children[index]
+			continue
+		}
+		boxes = append(boxes, child)
+	}
+	if connector == nil || len(boxes) != 2 {
+		t.Fatalf("the linear connector was not emitted: %d boxes", len(boxes))
+	}
+	first, second := boxes[0].Transform, boxes[1].Transform
+	// The transition asked for 0.3 of a box, so the row is 2.3 boxes wide and
+	// the gap between the two boxes is 0.3 of the shrunk box width.
+	gap := *second.X - (*first.X + *first.Cx)
+	if want := int64(float64(*first.Cx) * 0.3); gap < want-2 || gap > want+2 {
+		t.Fatalf("the connector gap is %d, want %d", gap, want)
+	}
+	// It is routed from the right edge of the box before it to the left edge
+	// of the box after it, so it lives inside that gap.
+	line := connector.Transform
+	if *line.X < *first.X+*first.Cx-2 || *line.X+*line.Cx > *second.X+2 {
+		t.Fatalf("connector at %d..%d is not inside the gap %d..%d", *line.X, *line.X+*line.Cx, *first.X+*first.Cx, *second.X)
+	}
+	if *second.X+*second.Cx != *group.Transform.Cx {
+		t.Fatalf("the row with connectors does not fill the frame width: %d", *second.X+*second.Cx)
+	}
+}
+
+// nativeDiagramRadialLayoutXML is the radial shape: a composite region that
+// asks for a fixed aspect ratio, holding a cycle that maps the first child to
+// the centre and reads its OWN extent -- which nothing in the layout defines
+// -- to size the hub and the ring.
+func nativeDiagramRadialLayoutXML(diagramNS, aspect string) string {
+	region := ""
+	if aspect != "" {
+		region = `<dgm:param type="ar" val="` + aspect + `"/>`
+	}
+	spoke := func(name string) string {
+		return `<dgm:layoutNode name="` + name + `" styleLbl="node0"><dgm:alg type="tx"/><dgm:shape type="ellipse"><dgm:adjLst/></dgm:shape><dgm:presOf axis="self" ptType="node"/>` +
+			`<dgm:constrLst/><dgm:ruleLst><dgm:rule type="primFontSz" val="5" fact="NaN" max="NaN"/></dgm:ruleLst></dgm:layoutNode>`
+	}
+	return `<dgm:layoutDef xmlns:dgm="` + diagramNS + `" uniqueId="urn:test/radial"><dgm:title val=""/><dgm:desc val=""/><dgm:catLst><dgm:cat type="cycle" pri="9000"/></dgm:catLst>` +
+		`<dgm:layoutNode name="region"><dgm:alg type="composite">` + region + `</dgm:alg><dgm:shape><dgm:adjLst/></dgm:shape><dgm:presOf/><dgm:constrLst/><dgm:ruleLst/>` +
+		`<dgm:layoutNode name="radial"><dgm:alg type="cycle"><dgm:param type="ctrShpMap" val="fNode"/></dgm:alg><dgm:shape><dgm:adjLst/></dgm:shape><dgm:presOf/>` +
+		`<dgm:constrLst><dgm:constr type="w" for="ch" forName="hub" refType="w"/><dgm:constr type="h" for="ch" forName="hub" refType="h"/>` +
+		`<dgm:constr type="w" for="ch" forName="spoke" refType="w" fact="0.5"/><dgm:constr type="h" for="ch" forName="spoke" refType="h" fact="0.5"/>` +
+		`<dgm:constr type="sp" refType="w" refFor="ch" refForName="spoke" fact="-0.2"/>` +
+		`<dgm:constr type="primFontSz" for="ch" ptType="node" val="65"/></dgm:constrLst><dgm:ruleLst/>` +
+		`<dgm:forEach name="hubLoop" axis="ch" ptType="node" cnt="1">` + spoke("hub") + `</dgm:forEach>` +
+		`<dgm:forEach name="spokeLoop" axis="ch" ptType="node" st="2">` + spoke("spoke") + `</dgm:forEach>` +
+		`</dgm:layoutNode></dgm:layoutNode></dgm:layoutDef>`
+}
+
+func nativeDiagramRadialFixtureData(t *testing.T) string {
+	t.Helper()
+	return nativeDiagramLayoutDataXML(nativeDiagramURITransitional, nsDrawingTransitional, "",
+		nativeDiagramLayoutPointXML("{T3}", "", "Third")+nativeDiagramLayoutPointXML("{T4}", "", "Fourth"),
+		`<dgm:cxn modelId="{CT3}" srcId="{DOC}" destId="{T3}" srcOrd="2" destOrd="0"/><dgm:cxn modelId="{CT4}" srcId="{DOC}" destId="{T4}" srcOrd="3" destOrd="0"/>`)
+}
+
+// The radial layouts read their own w before any constraint defines it. An
+// extent nothing assigned is the one the node inherits from its parent, which
+// is the extent the layout was going to hand it anyway, so reading it is not
+// a reason to refuse the whole frame.
+func TestExtractNativePPTXDiagramLayoutInheritsAnUndefinedExtent(t *testing.T) {
+	t.Parallel()
+	deck, err := ExtractNativePPTX(nativeDiagramLayoutFixture(t, nativeDiagramLayoutFixtureOptions{
+		omitDrawingPart: true, dataXML: nativeDiagramRadialFixtureData(t),
+		layout: nativeDiagramRadialLayoutXML(nativeDiagramURITransitional, ""),
+	}), nativeDiagramLayoutApproximateOptions())
+	if err != nil {
+		t.Fatalf("extract radial diagram: %v", err)
+	}
+	group := nativeFixtureDiagramGroup(t, deck.Slides[0])
+	if len(group.Children) != 4 {
+		t.Fatalf("expected a hub and three spokes: %d children", len(group.Children))
+	}
+	hub := group.Children[0].Transform
+	// Without ar the region keeps the frame's 3:2 shape, and the hub, sized
+	// from the inherited w and h, is that shape too.
+	if *hub.Cx == *hub.Cy {
+		t.Fatalf("the hub did not inherit the frame's own aspect: %dx%d", *hub.Cx, *hub.Cy)
+	}
+	for index, spoke := range group.Children[1:] {
+		if half := *hub.Cx / 2; *spoke.Transform.Cx < half-2 || *spoke.Transform.Cx > half+2 {
+			t.Fatalf("spoke %d is not half the inherited extent: %d of %d", index, *spoke.Transform.Cx, *hub.Cx)
+		}
+	}
+}
+
+// ar (§21.4.7.4) lays the children out in the largest rectangle of that
+// aspect inside the composite, centred, so a radial diagram stays circular in
+// a frame that is not square.
+func TestExtractNativePPTXDiagramLayoutCompositeAspectRatioShapesTheRegion(t *testing.T) {
+	t.Parallel()
+	deck, err := ExtractNativePPTX(nativeDiagramLayoutFixture(t, nativeDiagramLayoutFixtureOptions{
+		omitDrawingPart: true, dataXML: nativeDiagramRadialFixtureData(t),
+		layout: nativeDiagramRadialLayoutXML(nativeDiagramURITransitional, "1"),
+	}), nativeDiagramLayoutApproximateOptions())
+	if err != nil {
+		t.Fatalf("extract square radial diagram: %v", err)
+	}
+	group := nativeFixtureDiagramGroup(t, deck.Slides[0])
+	hub := group.Children[0].Transform
+	if *hub.Cx != *hub.Cy {
+		t.Fatalf("ar=1 did not square the region the hub is sized from: %dx%d", *hub.Cx, *hub.Cy)
+	}
+	// The assembly is centred in the frame it was inset into.
+	minX, maxX := *hub.X, *hub.X+*hub.Cx
+	for _, child := range group.Children[1:] {
+		if *child.Transform.X < minX {
+			minX = *child.Transform.X
+		}
+		if right := *child.Transform.X + *child.Transform.Cx; right > maxX {
+			maxX = right
+		}
+	}
+	if centre, frame := minX+(maxX-minX)/2, *group.Transform.Cx/2; centre < frame-2 || centre > frame+2 {
+		t.Fatalf("the squared region was not centred in the frame: %d vs %d", centre, frame)
+	}
+}
+
+// ctrShpMap="fNode" does not inscribe the ring in the node: the layout states
+// the radius itself as half the hub plus half a shape plus sp, and the block
+// is the bounding box of the whole assembly so the fit scales it in.
+func TestExtractNativePPTXDiagramLayoutCycleRingSitsBesideItsHub(t *testing.T) {
+	t.Parallel()
+	deck, err := ExtractNativePPTX(nativeDiagramLayoutFixture(t, nativeDiagramLayoutFixtureOptions{
+		omitDrawingPart: true, dataXML: nativeDiagramRadialFixtureData(t),
+		layout: nativeDiagramRadialLayoutXML(nativeDiagramURITransitional, "1"),
+	}), nativeDiagramLayoutApproximateOptions())
+	if err != nil {
+		t.Fatalf("extract radial diagram: %v", err)
+	}
+	group := nativeFixtureDiagramGroup(t, deck.Slides[0])
+	hub := group.Children[0].Transform
+	hubX, hubY := *hub.X+*hub.Cx/2, *hub.Y+*hub.Cy/2
+	first := group.Children[1].Transform
+	// sp = -0.2 x the spoke width, and both ends of the radius scale with
+	// the fit, so the radius is scale free.
+	radius := float64(*hub.Cx+*first.Cx)/2 - 0.2*float64(*first.Cx)
+	if centreX := *first.X + *first.Cx/2; centreX < hubX-2 || centreX > hubX+2 {
+		t.Fatalf("the first shape is not at twelve o'clock above the hub: %d vs %d", centreX, hubX)
+	}
+	if centreY, want := *first.Y+*first.Cy/2, hubY-int64(radius); centreY < want-2 || centreY > want+2 {
+		t.Fatalf("the ring radius is %d, want %d from half the hub plus half a shape plus sp", hubY-centreY, int64(radius))
+	}
+	// A negative sp overlaps the shape onto the hub, which is what the
+	// radial layouts draw; the inscribed ring would have cleared it.
+	if *first.Y+*first.Cy <= *hub.Y {
+		t.Fatalf("the negative sp did not overlap the ring onto the hub: %d vs %d", *first.Y+*first.Cy, *hub.Y)
+	}
+}
