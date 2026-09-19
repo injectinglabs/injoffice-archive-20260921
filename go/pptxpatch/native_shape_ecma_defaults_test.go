@@ -261,3 +261,84 @@ func TestExtractNativePPTXAutoShapeDefaultsAnUnstatedOutlineJoinToMiter(t *testi
 		}
 	}
 }
+
+// a:ln is optional on a:spPr. By the time the outline is read the
+// p:style/a:lnRef matrix reference has been merged in and a placeholder's
+// inherited frame has been taken, so an absent a:ln means no source states an
+// outline -- and PowerPoint paints none. Its raster of
+// layout-clrmap-override.pptx runs the slide background straight into the
+// accent1 fill with no band between them.
+func TestExtractNativePPTXAutoShapeWithNoOutlinePaintsNone(t *testing.T) {
+	t.Parallel()
+	rectangle := `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>`
+	shape := nativeECMADefaultShapeXML(3, "", rectangle, "")
+	deck, err := ExtractNativePPTX(nativeAutoShapeFixture(t, false, shape), nativeTestExtractOptions())
+	if err != nil {
+		t.Fatalf("extract AutoShape: %v", err)
+	}
+	shapes := nativeFixtureAutoShapes(deck.Slides[0])
+	if len(shapes) != 1 {
+		t.Fatalf("expected one AutoShape, got %#v", shapes)
+	}
+	element := shapes[0]
+	if element.Compatibility.Status != NativeCompatibilityStatusEditable {
+		t.Fatalf("a shape with no outline was not exact: status=%q %#v", element.Compatibility.Status, element.Compatibility.Diagnostics)
+	}
+	if element.Stroke != nil {
+		t.Fatalf("a shape with no outline invented one: %#v", element.Stroke)
+	}
+	if element.Fill == nil || *element.Fill != "FFFF7F" {
+		t.Fatalf("the fill was lost with the outline: %#v", element)
+	}
+	if issues := ValidateNativePPTX(deck); len(issues) != 0 {
+		t.Fatalf("invalid extracted deck: %#v", issues)
+	}
+}
+
+// The one outline source this tier does not resolve is a theme shape default,
+// a:objectDefaults/a:spDef/a:spPr/a:ln, which 4 of the 80 hard-v2 decks
+// declare. There an absent a:ln does not mean "no outline", so it keeps
+// refusing rather than painting a shape PowerPoint would outline.
+func TestExtractNativePPTXAutoShapeKeepsRefusingUnderAThemeShapeDefaultOutline(t *testing.T) {
+	t.Parallel()
+	rectangle := `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>`
+	shape := nativeECMADefaultShapeXML(3, "", rectangle, "")
+	withDefaults := func(t *testing.T, objectDefaults string) NativeElement {
+		t.Helper()
+		payload := nativeExtractFixture(t, nativeExtractFixtureOptions{mutate: func(parts map[string]string) {
+			parts["relocated/slides/slide-a.xml"] = strings.Replace(parts["relocated/slides/slide-a.xml"], `</p:spTree>`, shape+`</p:spTree>`, 1)
+			parts["relocated/themes/theme.xml"] = strings.Replace(parts["relocated/themes/theme.xml"], `</a:theme>`, objectDefaults+`</a:theme>`, 1)
+		}})
+		deck, err := ExtractNativePPTX(payload, nativeTestExtractOptions())
+		if err != nil {
+			t.Fatalf("extract AutoShape: %v", err)
+		}
+		shapes := nativeFixtureAutoShapes(deck.Slides[0])
+		if len(shapes) != 1 {
+			t.Fatalf("expected one AutoShape, got %#v", shapes)
+		}
+		return shapes[0]
+	}
+	outlined := withDefaults(t, `<a:objectDefaults><a:spDef><a:spPr><a:ln w="12700"><a:solidFill><a:srgbClr val="112233"/></a:solidFill></a:ln></a:spPr></a:spDef></a:objectDefaults>`)
+	if outlined.Compatibility.Status != NativeCompatibilityStatusRefused {
+		t.Fatalf("a theme shape-default outline was painted over: status=%q %#v", outlined.Compatibility.Status, outlined.Compatibility.Diagnostics)
+	}
+	if !nativeECMADefaultRefusalCodes(outlined)["pptx.autoshape-line-unavailable"] {
+		t.Fatalf("the theme default was not disclosed as an outline gap: %#v", outlined.Compatibility.Diagnostics)
+	}
+	// A shape default that states no outline is not an outline source.
+	for name, defaults := range map[string]string{
+		"empty object defaults":        `<a:objectDefaults/>`,
+		"shape default without spPr":   `<a:objectDefaults><a:spDef><a:bodyPr/></a:spDef></a:objectDefaults>`,
+		"shape default without a line": `<a:objectDefaults><a:spDef><a:spPr><a:solidFill><a:srgbClr val="112233"/></a:solidFill></a:spPr></a:spDef></a:objectDefaults>`,
+		"line default only":            `<a:objectDefaults><a:lnDef><a:spPr><a:ln w="12700"><a:noFill/></a:ln></a:spPr></a:lnDef></a:objectDefaults>`,
+	} {
+		element := withDefaults(t, defaults)
+		if element.Stroke != nil {
+			t.Fatalf("%s invented an outline: %#v", name, element.Stroke)
+		}
+		if nativeECMADefaultRefusalCodes(element)["pptx.autoshape-line-unavailable"] {
+			t.Fatalf("%s refused the outline: %#v", name, element.Compatibility.Diagnostics)
+		}
+	}
+}

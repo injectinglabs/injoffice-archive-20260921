@@ -266,7 +266,9 @@ func validateNativeConnectorProperties(node *nativeXMLNode, dialect nativeExtrac
 		geometry = evaluateNativeConnectorPreset(presetGeometry, dialect, *transform.Cx, *transform.Cy, gaps)
 	}
 	lineGaps := nativeShapeGapSet{}
-	stroke, err := validateNativeAutoShapeLine(node, dialect, theme, true, &lineGaps)
+	// A connector IS its outline, so an absent a:ln keeps refusing here whatever
+	// the theme declares; only the AutoShape path treats it as "no outline".
+	stroke, err := validateNativeAutoShapeLine(node, dialect, theme, true, true, &lineGaps)
 	if err != nil {
 		return NativeTransform{}, false, nil, nil, false, false, err
 	}

@@ -110,7 +110,7 @@ func resolveNativeShapeStyle(properties, style, themeRoot *nativeXMLNode, dialec
 		if item.ref == "fillRef" {
 			validateNativeAutoShapeFill(wrapper, dialect, theme, &paintGaps)
 		} else {
-			if _, err := validateNativeAutoShapeLine(wrapper, dialect, theme, false, &paintGaps); err != nil {
+			if _, err := validateNativeAutoShapeLine(wrapper, dialect, theme, false, true, &paintGaps); err != nil {
 				return nil, err
 			}
 		}

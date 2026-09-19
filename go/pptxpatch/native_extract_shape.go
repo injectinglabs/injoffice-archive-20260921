@@ -124,7 +124,8 @@ func (extractor *nativeExtractor) extractAutoShape(node *nativeXMLNode, slidePar
 			paintProperties = resolved
 		}
 	}
-	transform, preset, geometry, fill, stroke, err := validateNativeAutoShapeProperties(paintProperties, dialect, extractor.theme, inherited, &gaps)
+	themeDefaultsOutline := nativeThemeDeclaresShapeDefaultOutline(extractor.slideDependencies.themeRoot, dialect)
+	transform, preset, geometry, fill, stroke, err := validateNativeAutoShapeProperties(paintProperties, dialect, extractor.theme, inherited, themeDefaultsOutline, &gaps)
 	if err != nil {
 		return NativeElement{}, err
 	}
@@ -404,7 +405,7 @@ func validateNativeAutoShapeNonVisual(node *nativeXMLNode, dialect nativeExtract
 	return "cNvPr-" + nativeID, name, nil
 }
 
-func validateNativeAutoShapeProperties(node *nativeXMLNode, dialect nativeExtractDialect, theme nativeResolvedTheme, inherited *nativeInheritedShapeFrame, gaps *nativeShapeGapSet) (NativeTransform, *NativeShapePreset, *NativeEvaluatedGeometry, *string, *NativeStroke, error) {
+func validateNativeAutoShapeProperties(node *nativeXMLNode, dialect nativeExtractDialect, theme nativeResolvedTheme, inherited *nativeInheritedShapeFrame, themeDefaultsOutline bool, gaps *nativeShapeGapSet) (NativeTransform, *NativeShapePreset, *NativeEvaluatedGeometry, *string, *NativeStroke, error) {
 	// p:spPr/@bwMode (ECMA-376 Part 1 §19.3.1.44, ST_BlackWhiteMode) selects how
 	// the shape is rendered when the application is displaying black and white.
 	// "auto" and "clr" both keep the shape's own colors, which is what PowerPoint
@@ -497,7 +498,7 @@ func validateNativeAutoShapeProperties(node *nativeXMLNode, dialect nativeExtrac
 		stroke = inherited.stroke
 		gaps.add(nativeInheritedShapeFrameCode, nativeInheritedShapeFrameMessage, false)
 	} else {
-		stroke, err = validateNativeAutoShapeLine(node, dialect, theme, false, gaps)
+		stroke, err = validateNativeAutoShapeLine(node, dialect, theme, false, themeDefaultsOutline, gaps)
 		if err != nil {
 			return NativeTransform{}, nil, nil, nil, nil, err
 		}
@@ -681,13 +682,27 @@ func exactNativeAutoShapeColor(node *nativeXMLNode, dialect nativeExtractDialect
 	return exactNativeSolidColor(node, dialect, nativeResolvedTheme{})
 }
 
-func validateNativeAutoShapeLine(node *nativeXMLNode, dialect nativeExtractDialect, theme nativeResolvedTheme, allowLineEnds bool, gaps *nativeShapeGapSet) (*NativeStroke, error) {
+func validateNativeAutoShapeLine(node *nativeXMLNode, dialect nativeExtractDialect, theme nativeResolvedTheme, allowLineEnds bool, themeDefaultsOutline bool, gaps *nativeShapeGapSet) (*NativeStroke, error) {
 	line, err := nativeSingleton(node, dialect.drawing, "ln", false)
 	if err != nil {
 		return nil, err
 	}
 	if line == nil {
-		gaps.add("pptx.autoshape-line-unavailable", "missing or inherited outline is preserved but not approximated", true)
+		// a:ln is optional on a:spPr (ECMA-376 Part 1 §20.1.2.2.24). By the
+		// time the outline is read the p:style/a:lnRef matrix reference has
+		// already been merged in, and a placeholder's inherited frame is taken
+		// on the branch above, so an absent a:ln here means no source states an
+		// outline at all -- and PowerPoint paints none. Its raster of
+		// layout-clrmap-override.pptx runs the slide background straight into
+		// the accent1 fill with no band between them.
+		//
+		// The one source this tier does not resolve is a theme shape default:
+		// a:objectDefaults/a:spDef/a:spPr/a:ln, which 4 of the 80 hard-v2 decks
+		// declare. A deck that has one keeps refusing, because there the absent
+		// a:ln does not mean "no outline".
+		if themeDefaultsOutline {
+			gaps.add("pptx.autoshape-line-unavailable", "outline is inherited from a theme shape default this tier does not resolve", true)
+		}
 		return nil, nil
 	}
 	if err := requireOnlyNativeAttrs(line,
@@ -884,6 +899,28 @@ const nativeDefaultOutlineMiterLimit = int64(800000)
 
 const nativeOutlineDefaultJoinCode = "pptx.autoshape-line-join-preview"
 const nativeOutlineDefaultJoinMessage = "outline states no join; the read-only preview paints PowerPoint's default miter at 800% and the unstated source join is preserved"
+
+// nativeThemeDeclaresShapeDefaultOutline reports whether the theme states a
+// default shape outline through a:objectDefaults/a:spDef/a:spPr/a:ln. That is
+// the one outline source an absent a:ln can still inherit from that this tier
+// does not resolve, so a shape in such a deck keeps its refusal instead of
+// painting no outline. The probe is deliberately structural: it asks only
+// whether the element exists, never what it paints.
+func nativeThemeDeclaresShapeDefaultOutline(themeRoot *nativeXMLNode, dialect nativeExtractDialect) bool {
+	if themeRoot == nil {
+		return false
+	}
+	defaults := nativeChild(themeRoot, dialect.drawing, "objectDefaults")
+	if defaults == nil {
+		return false
+	}
+	shapeDefault := nativeChild(defaults, dialect.drawing, "spDef")
+	if shapeDefault == nil {
+		return false
+	}
+	properties := nativeChild(shapeDefault, dialect.drawing, "spPr")
+	return properties != nil && nativeChild(properties, dialect.drawing, "ln") != nil
+}
 
 func nativeStrokeCompoundPointer(value NativeStrokeCompound) *NativeStrokeCompound {
 	return &value
