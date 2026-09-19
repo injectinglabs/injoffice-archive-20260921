@@ -19,9 +19,13 @@ test('index.html, main.tsx, and Vite outDir match the Electron renderer host', (
   const host = fs.readFileSync(path.join(root, 'electron/main.cjs'), 'utf8');
   assert.match(host, /path\.resolve\(__dirname, '\.\.\/renderer'\)/);
   const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+  assert.equal(pkg.main, 'electron/main.cjs');
   assert.equal(pkg.scripts.build, 'vite build');
+  assert.equal(pkg.scripts.start, 'electron .');
   assert.equal(pkg.devDependencies.vite, '8.2.2');
   assert.equal(pkg.devDependencies['@vitejs/plugin-react'], '6.1.0');
+  const policy = fs.readFileSync(path.join(root, 'src/spreadsheetSheetPolicy.ts'), 'utf8');
+  assert.doesNotMatch(policy, /import \{[^}]*editableDefinedName/);
 });
 
 test('main.tsx mounts App on #root', async () => {

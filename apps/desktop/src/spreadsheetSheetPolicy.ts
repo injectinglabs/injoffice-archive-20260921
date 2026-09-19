@@ -1,4 +1,9 @@
-import { editableDefinedName, type NativeWorkbookV2 } from '@injoffice/sheets/browser';
+import type { NativeWorkbookV2 } from '@injoffice/sheets/browser';
+
+/** Built-in Excel names are prefixed with `_`; they are not user-editable. */
+function editableDefinedName(name: string): boolean {
+  return !String(name).startsWith('_');
+}
 /** Predictable native refusals, shown before presenting a destructive action. */
 export function sheetLifecycleReason(workbook: NativeWorkbookV2 | undefined, sheetId: string, action: 'add' | 'delete'): string | undefined {
   const target = workbook?.sheets.find(sheet => sheet.id === sheetId);
