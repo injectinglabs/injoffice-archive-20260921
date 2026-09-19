@@ -85,5 +85,7 @@ export type { NativeWorkbookObjectsV1, NativeTablePreviewV1, NativeTableNumberFo
 export { compactNativeGeneralNumberPreviewV1, type NativeCompactGeneralPreviewV1 } from './nativeCompactGeneralPreviewV1.js'
 
 export { decodeNativeConditionalFillPreviewsV1, selectNativeConditionalFillPreviewV1, type NativeConditionalFillPreviewV1, type NativeConditionalFillRuleV1, type NativeConditionalFillCellV1, type NativeConditionalOperatorV1 } from './nativeConditionalFillPreviewV1.js'
+export { decodeNativeConditionalScaleFillPreviewsV1, nativeConditionalScaleFillPreview, type NativeConditionalScaleFillPreviewV1, type NativeConditionalScaleFillCellV1, type NativeConditionalScaleFillRangeV1 } from './nativeConditionalScaleFillPreviewV1.js'
+export { decodeNativeConditionalBarFillPreviewsV1, nativeConditionalBarFillPreview, type NativeConditionalBarFillPreviewV1, type NativeConditionalBarFillCellV1, type NativeConditionalBarFillRangeV1 } from './nativeConditionalBarFillPreviewV1.js'
 
 export { decodeNativeRichTextPreviewV1, selectNativeRichTextPreviewV1, nativeRichTextRunDisclosureV1, type NativeRichTextPreviewV1, type NativeRichTextCellV1, type NativeRichTextRunV1 } from './nativeRichTextPreviewV1.js'
