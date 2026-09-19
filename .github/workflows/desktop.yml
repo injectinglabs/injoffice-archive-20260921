@@ -1,0 +1,65 @@
+name: Desktop builds
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: mac-arm64
+            args: --mac --arm64
+          - os: macos-latest
+            platform: mac-x64
+            args: --mac --x64
+          - os: windows-latest
+            platform: windows-x64
+            args: --win --x64
+          - os: ubuntu-latest
+            platform: linux-x64
+            args: --linux --x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go/xlsxpatch/go.mod
+          cache: false
+      - name: Install Linux packaging tools
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y rpm
+      - run: npm ci
+      - run: npm run desktop:build
+      - run: npm run test -w @injoffice/desktop
+      - run: npm run test:native -w @injoffice/desktop
+      - run: npm run typecheck -w @injoffice/desktop
+      - run: npm run test:packaged -w @injoffice/desktop
+      - name: Package unsigned installers
+        working-directory: apps/desktop
+        run: npx electron-builder ${{ matrix.args }} --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Verify packaged updater dependencies
+        run: node apps/desktop/scripts/check-packaged-updater.cjs apps/desktop/release
+      - name: Record artifact checksums and source revision
+        run: npm run manifest -w @injoffice/desktop
+      - uses: actions/upload-artifact@v4
+        with:
+          name: injoffice-${{ matrix.platform }}
+          path: |
+            apps/desktop/release/*.dmg
+            apps/desktop/release/*.zip
+            apps/desktop/release/*.exe
+            apps/desktop/release/*.AppImage
+            apps/desktop/release/*.deb
+            apps/desktop/release/*.rpm
+            apps/desktop/release/manifest.json
+            apps/desktop/release/SHA256SUMS
+          if-no-files-found: error
