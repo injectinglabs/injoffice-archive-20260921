@@ -167,9 +167,10 @@ by `pptx.autofit-authored-scale-approximate`), and carries `numCol`/`spcCol` as
 `textBody.columnCount` / `textBody.columnSpacingEmu` so the approximate renderer
 flows the body through equal-width columns (disclosed by
 `pptx.text-columns-approximate`); modeled `a:prstTxWarp` `textArchUp` /
-`textArchDown` / `textDeflate` travel as `textBody.presetTextWarp` /
+`textArchDown` / `textDeflate` / `textInflateTop` travel as
+`textBody.presetTextWarp` /
 `textBody.presetTextWarpAdj` so the approximate renderer can warp glyph
-baselines along an InjOffice arch envelope (disclosed by
+baselines along an InjOffice warp envelope (disclosed by
 `pptx.text-warp-approximate`; unmodeled presets stay omitted and flattened
 under `pptx.text-warp-flattened-approximate`; neither is PowerPoint-equivalent);
 `AllowInheritedTextPreview` admits the declared

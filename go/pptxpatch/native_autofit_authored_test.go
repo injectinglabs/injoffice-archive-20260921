@@ -868,6 +868,29 @@ func TestNativeAuthoredPresetTextWarpTravelsOnlyInTheApproximateTier(t *testing.
 	}
 }
 
+func TestNativeAuthoredInflateTopWarpTravelsWithItsAdjustment(t *testing.T) {
+	options := nativeMutationExtractOptions()
+	options.AllowSourceFrameAutoFitPreview = true
+	body := `<a:bodyPr><a:prstTxWarp prst="textInflateTop"><a:avLst><a:gd name="adj" fmla="val 50000"/></a:avLst></a:prstTxWarp></a:bodyPr>`
+	deck, err := ExtractNativePPTX(nativeSourceFrameFixture(t, false, body), options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	element := deck.Slides[0].Elements[0]
+	if element.TextBody == nil || element.TextBody.PresetTextWarp == nil || *element.TextBody.PresetTextWarp != "textInflateTop" {
+		t.Fatalf("textInflateTop did not travel on the contract: %+v", element.TextBody)
+	}
+	if element.TextBody.PresetTextWarpAdj == nil || *element.TextBody.PresetTextWarpAdj != 50000 {
+		t.Fatalf("textInflateTop lost its authored adjustment: %+v", element.TextBody)
+	}
+	if codes := nativeDiagnosticCodes(element); codes[nativeTextWarpApproximateCode] != 1 || codes[nativeTextWarpFlattenedCode] != 0 {
+		t.Fatalf("textInflateTop was not disclosed as a modeled warp: %+v", element.Compatibility.Diagnostics)
+	}
+	if issues := ValidateNativePPTX(deck); len(issues) > 0 {
+		t.Fatalf("the modeled inflate-top projection was rejected: %+v", issues)
+	}
+}
+
 func TestNativeAuthoredPresetTextWarpContractRules(t *testing.T) {
 	options := nativeMutationExtractOptions()
 	options.AllowSourceFrameAutoFitPreview = true
@@ -879,7 +902,7 @@ func TestNativeAuthoredPresetTextWarpContractRules(t *testing.T) {
 		}
 		return deck
 	}
-	for _, preset := range []string{"textArchUp", "textArchDown", "textDeflate"} {
+	for _, preset := range []string{"textArchUp", "textArchDown", "textDeflate", "textInflateTop"} {
 		deck := extract(t)
 		deck.Slides[0].Elements[0].TextBody.PresetTextWarp = stringPointer(preset)
 		if issues := ValidateNativePPTX(deck); len(issues) > 0 {

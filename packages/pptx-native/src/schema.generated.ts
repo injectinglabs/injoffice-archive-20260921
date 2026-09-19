@@ -3,7 +3,7 @@
 
 export const PPTX_NATIVE_SCHEMA_ID = "https://injoffice.dev/schemas/pptx-native-v1.schema.json" as const
 export const PPTX_NATIVE_CONTRACT_VERSION = "pptx-native/v1" as const
-export const PPTX_NATIVE_SCHEMA_SHA256 = "7a75aef29ea0c95d6e9483892803b18268b4304af1aba0bed87400f7b2503409" as const
+export const PPTX_NATIVE_SCHEMA_SHA256 = "1a4b79e95ee7f3107aa60451a0954948dbafbea7d7c71b18e490317741851b49" as const
 export const PPTX_NATIVE_RESOURCE_LIMITS = {
   "maxJsonBytes": 268435456,
   "maxNodes": 1000000,
@@ -1673,7 +1673,8 @@ export const PPTX_NATIVE_SCHEMA = {
           "enum": [
             "textArchUp",
             "textArchDown",
-            "textDeflate"
+            "textDeflate",
+            "textInflateTop"
           ]
         },
         "presetTextWarpAdj": {

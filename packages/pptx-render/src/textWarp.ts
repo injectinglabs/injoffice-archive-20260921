@@ -1,14 +1,16 @@
 import type { RenderRect, RenderTextBodyNode, RenderTextRunNode, RenderTransform } from './types.js'
 
-export const MODELED_PRESET_TEXT_WARPS = ['textArchUp', 'textArchDown', 'textDeflate'] as const
+export const MODELED_PRESET_TEXT_WARPS = ['textArchUp', 'textArchDown', 'textDeflate', 'textInflateTop'] as const
 export type ModeledPresetTextWarp = (typeof MODELED_PRESET_TEXT_WARPS)[number]
 
 const PPM = 1_000_000
 const DEFLATE_DEFAULT_ADJ = 18_750
 const DEFLATE_MAX_ADJ = 50_000
+const INFLATE_TOP_DEFAULT_ADJ = 32_500
+const INFLATE_TOP_MAX_ADJ = 100_000
 
 export function isModeledPresetTextWarp(preset: string | undefined): preset is ModeledPresetTextWarp {
-  return preset === 'textArchUp' || preset === 'textArchDown' || preset === 'textDeflate'
+  return preset === 'textArchUp' || preset === 'textArchDown' || preset === 'textDeflate' || preset === 'textInflateTop'
 }
 
 export interface PresetTextWarpSpec {
@@ -39,7 +41,21 @@ export function warpPoint(spec: PresetTextWarpSpec, x: number, y: number): { rea
   const height = BigInt(spec.bounds.cy)
   const relX = BigInt(x) - BigInt(spec.bounds.x)
   const relY = BigInt(y) - BigInt(spec.bounds.y)
-  const adj = spec.adj ?? (spec.preset === 'textDeflate' ? DEFLATE_DEFAULT_ADJ : 0)
+  const adj = spec.adj ?? (spec.preset === 'textDeflate' ? DEFLATE_DEFAULT_ADJ : spec.preset === 'textInflateTop' ? INFLATE_TOP_DEFAULT_ADJ : 0)
+  if (spec.preset === 'textInflateTop') {
+    // ECMA envelope: the top edge is the quadratic Bezier (l,y1) -> control
+    // (hc,t) -> (r,y1); the bottom edge is the straight line at b. A quadratic
+    // Bezier only reaches HALF of its control offset, so the parabola is taken
+    // at y1/2 and the curve meets y1/2 at the centre, never t. The body is then
+    // interpolated between that curve and the straight bottom, as textDeflate
+    // interpolates between its two curves.
+    const y1 = (BigInt(Math.min(INFLATE_TOP_MAX_ADJ, Math.max(0, adj))) * height) / 100000n
+    const top = y1 - warpParabolaDip(relX, width, y1 / 2n)
+    const outY = height === 0n ? relY : top + (relY * (height - top)) / height
+    const slope = height === 0n ? 0n : (-2n * y1 * (width - 2n * relX) * (height - relY)) / height
+    const angle = Math.atan2(Number(slope), Number(width * width))
+    return { x, y: spec.bounds.y + Number(outY), theta: Number.isFinite(angle) ? angle : 0 }
+  }
   const bulge = spec.preset === 'textDeflate'
     ? (BigInt(Math.min(DEFLATE_MAX_ADJ, Math.max(0, adj))) * height) / 100000n
     : adj === 0 ? height / 2n : (BigInt(Math.min(DEFLATE_MAX_ADJ, Math.max(0, adj))) * height) / 100000n

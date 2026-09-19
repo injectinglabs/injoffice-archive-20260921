@@ -219,8 +219,8 @@ export interface RenderTextBodyNode {
   readonly autoFit?: 'none' | 'shape-source-frame'
   readonly horizontalOverflow?: 'overflow' | 'clip'
   readonly verticalOverflow?: 'overflow'
-  /** Modeled a:prstTxWarp; paint warps glyphs along an InjOffice arch envelope. */
-  readonly presetTextWarp?: 'textArchUp' | 'textArchDown' | 'textDeflate'
+  /** Modeled a:prstTxWarp; paint warps glyphs along an InjOffice warp envelope. */
+  readonly presetTextWarp?: 'textArchUp' | 'textArchDown' | 'textDeflate' | 'textInflateTop'
   readonly presetTextWarpAdj?: number
   readonly status: 'laidOut' | 'refused'
   readonly paragraphs: readonly RenderParagraphNode[]
