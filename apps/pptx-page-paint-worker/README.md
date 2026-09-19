@@ -40,7 +40,7 @@ The operator is responsible for supplying appropriately licensed fonts and exact
 family/style mappings. Each file is digest-checked and measured by the pinned
 HarfBuzz implementation. No aliases, platform-font discovery, or silent fallback
 are used. Missing family/weight/style combinations refuse visibly. Limits are
-32 faces, 16 MiB per font, 64 MiB total font bytes, and 16 MiB framed JSON.
+64 faces, 16 MiB per font, 64 MiB total font bytes, and 16 MiB framed JSON.
 
 Before full extraction, the HTTP helper checks ZIP metadata: at most 8 MiB
 uploaded, 2,048 entries, 8 MiB expanded per entry and 32 MiB expanded in total.

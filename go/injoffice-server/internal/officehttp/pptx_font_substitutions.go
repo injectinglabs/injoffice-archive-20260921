@@ -14,6 +14,12 @@ import (
 
 var fontPreviewDigest = regexp.MustCompile(`^sha256:[a-f0-9]{64}$`)
 
+// maxPPTXOperatorFontFaces mirrors MAX_OPERATOR_FONT_FACES in
+// apps/pptx-page-paint-worker/src/compile.ts. The worker admits the manifest and
+// this helper re-validates the same file, so a manifest the worker accepts must
+// not be refused here.
+const maxPPTXOperatorFontFaces = 64
+
 func validatePPTXFontSubstitutions(data json.RawMessage, elements []pptxpatch.NativeElement, allowed bool, manifestPath string) error {
 	var envelope struct {
 		Entries []struct {
@@ -67,7 +73,7 @@ func validatePPTXFontSubstitutions(data json.RawMessage, elements []pptxpatch.Na
 		return fail()
 	}
 	configured, err := os.ReadFile(manifestPath)
-	if err != nil || len(configured) > 65536 || json.Unmarshal(configured, &config) != nil || config.Version != 1 || config.Policy.Version != 1 || len(config.Policy.Mappings) > 32 || len(config.Faces) > 32 {
+	if err != nil || len(configured) > 65536 || json.Unmarshal(configured, &config) != nil || config.Version != 1 || config.Policy.Version != 1 || len(config.Policy.Mappings) > 32 || len(config.Faces) > maxPPTXOperatorFontFaces {
 		return fail()
 	}
 	var canonical bytes.Buffer
