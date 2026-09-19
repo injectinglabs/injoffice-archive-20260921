@@ -6,7 +6,8 @@ This directory currently holds the Node host adapters: opaque file ids, atomic
 save, recent-file history, recovery journal, renderer URL policy, blank
 DOCX/XLSX/PPTX/PDF seeds, the in-app update state machine, and the DOCX PDF
 export host and PDF text-replace host (worker-backed; painters land later). They do not import
-Electron. Electron is a desktop host dependency; renderer /src stays offline.
+Electron. Electron is a desktop host dependency; electron-builder is the
+packaging devDependency. Renderer /src stays offline.
 Vite builds `src/main.tsx` into `apps/desktop/renderer` for the Electron host.
 `electron/main.cjs` is tested with a mock Electron. The start page
 is a React view with recents and create actions. The updates dialog talks to
@@ -49,8 +50,9 @@ SpreadsheetCharts is the worksheet chart sidebar; empty selections disable inser
 SpreadsheetEditor is the worksheet grid, formula bar, and native XLSX apply path; it does not import OfficeEditor.
 Vite builds the renderer from index.html and src/main.tsx into renderer/.
 Packaging icons live in `build/icons/` as nearest-neighbor conversions of
-repository-root `logo.png`. The rest of the electron-builder config lands
-in follow-up changes. Preview builds never load an updater.
+repository-root `logo.png`. `npm run dist` runs Vite then electron-builder
+into `release/` (unsigned locally; signed desktop-v* drafts use
+electron-builder.release.cjs). Preview builds never load an updater.
 
 Support, unsigned vs signed builds, and engine lockstep: [docs/DESKTOP.md](../../docs/DESKTOP.md).
 
