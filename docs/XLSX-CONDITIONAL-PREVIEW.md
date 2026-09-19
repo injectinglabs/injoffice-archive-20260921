@@ -63,3 +63,26 @@ A rule outside the profile costs only itself: the other colour scales on the she
 Colour interpolation is channel-wise in sRGB between the two bounds that surround the value, clamped outside the end bounds; a three-stop scale interpolates each half separately. Percentile bounds use `PERCENTILE.INC` over the range's own numeric values.
 
 This tier changes no source style, recalculates no formula, authorizes no mutation and does not remove the worksheet's `CONDITIONAL_FORMATTING` preservation entry. `dataBar` and `iconSet` rules remain unpainted.
+
+## Data bars
+
+A third tier projects `dataBar` rules, applied the same way a colour scale is: over the cell's own fill and under its text, which is the order Excel paints them.
+
+### Qualified source profile
+
+- The downlevel `dataBar` element supplies the positive fill colour; everything that decides the geometry is read from the `x14` twin the rule names through its `{B025F937-C7B1-47D3-B67F-A62EFF666E3E}` extension. A rule with no twin is not painted, because its axis, negative colour and gradient flag are then unknown.
+- `gradient="0"`, `minLength="0"` and `maxLength="100"` — the flat, unclipped bar. A gradient bar's colour varies along its own length, and a clipped length moves every bar's start and end, so both are left to a later tier rather than approximated.
+- `axisPosition` absent, `automatic` or `none`. A `middle` axis is not painted.
+- Bound types `autoMin`, `autoMax`, `min`, `max`, `num`, `percent` and `percentile`, resolved exactly as a colour scale resolves them; `autoMin` and `autoMax` are Excel's automatic bounds, `min(0, lowest)` and `max(0, highest)`. A `formula` bound leaves the rule unpainted.
+- Colours are an opaque `FFRRGGBB` or a theme slot with an optional tint, for the bar, the negative fill, the border, the negative border and the axis. A rule that declares `border="1"` without a border colour is not painted.
+- The same neighbour, merge and budget rules as the colour-scale tier apply. A rule owns its range twice here — once downlevel and once in the extension — so a range is only painted when exactly those two claims cover it.
+
+### Geometry
+
+The whole bound span maps onto the cell's width. The axis is wherever zero falls inside that span, each bar runs from the axis to its own value, and a value below the axis is drawn to the left of it in the negative colour. The projection reports the span and the axis as thousandths of the cell's width, so the renderer needs no source units. Excel's own few-pixel inset inside the cell is not reproduced: the bar spans the cell.
+
+### Public API
+
+`InspectNativeWorkbookObjectsV1` adds optional `conditional_bar_fills` to the `injoffice.xlsx.preview-objects` version 1 supplement. `decodeNativeConditionalBarFillPreviewsV1` validates closed entry shapes, ordered coordinates, in-cell spans and colours, and refuses an axis position without its colour or a colour without its position. `nativeConditionalBarFillPreview(objects, revision, sheetPart, row, column)` returns the bar for one zero-based coordinate.
+
+`iconSet` rules remain unpainted.

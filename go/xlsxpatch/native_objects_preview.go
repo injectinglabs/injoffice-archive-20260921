@@ -19,6 +19,7 @@ type NativeWorkbookObjectsV1 struct {
 	RichText              *NativeRichTextPreviewV1              `json:"rich_text,omitempty"`
 	ConditionalFills      []NativeConditionalFillPreviewV1      `json:"conditional_fills,omitempty"`
 	ConditionalScaleFills []NativeConditionalScaleFillPreviewV1 `json:"conditional_scale_fills,omitempty"`
+	ConditionalBarFills   []NativeConditionalBarFillPreviewV1   `json:"conditional_bar_fills,omitempty"`
 	Protocol              string                                `json:"protocol"`
 	Version               int                                   `json:"version"`
 	PackageSHA256         string                                `json:"package_sha256"`
@@ -238,6 +239,7 @@ func InspectNativeWorkbookObjectsV1(data []byte) (*NativeWorkbookObjectsV1, erro
 	result.PrintTitles = previewNativePrintTitles(pkg.files[workbookPart.part], workbook.Sheets)
 	result.ConditionalFills = previewNativeConditionalFills(pkg, workbook.Sheets)
 	result.ConditionalScaleFills = previewNativeConditionalScaleFills(pkg, workbook.Sheets)
+	result.ConditionalBarFills = previewNativeConditionalBarFills(pkg, workbook.Sheets)
 	owners := map[string]string{}
 	for _, sheet := range workbook.Sheets {
 		if len(result.RowGeometry) < 64 {

@@ -19,12 +19,14 @@ const npmCache = mkdtempSync(join(tmpdir(), 'injoffice-npm-cache-'))
 const mebibyte = 1024 * 1024
 const kibibyte = 1024
 // XLSX ships a separate, lazily loaded read-only rich-source WASM module.
-// The unpacked budget carries 128 KiB above 12 MiB: the worksheet form-control
-// reader costs 40,054 bytes of xlsxnative.wasm, which left 12 MiB exceeded by
-// 15,352 bytes. The headroom is stated here rather than rounded away so the
-// next module that grows the package has to say so too.
+// The unpacked budget carries 192 KiB above 12 MiB. The worksheet form-control
+// reader cost 40,054 bytes of xlsxnative.wasm, which left 12 MiB exceeded by
+// 15,352 bytes and set the first 128 KiB. The conditional data-bar reader then
+// cost 49,217 more, which left that exceeded by 24,131 bytes. The headroom is
+// stated here rather than rounded away so the next module that grows the
+// package has to say so too.
 const packageBudgets = {
-  "@injoffice/xlsx-wasm": { packed: 3.5 * mebibyte, unpacked: 12 * mebibyte + 128 * kibibyte },
+  "@injoffice/xlsx-wasm": { packed: 3.5 * mebibyte, unpacked: 12 * mebibyte + 192 * kibibyte },
 }
 const maxTotalPackedBytes = 15 * mebibyte
 let totalPackedBytes = 0

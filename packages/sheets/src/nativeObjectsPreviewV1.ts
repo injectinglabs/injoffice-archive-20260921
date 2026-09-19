@@ -1,6 +1,7 @@
 import { decodeNativeRichTextPreviewV1, type NativeRichTextPreviewV1 } from "./nativeRichTextPreviewV1.js";
 import {decodeNativeConditionalFillPreviewsV1,type NativeConditionalFillPreviewV1} from './nativeConditionalFillPreviewV1.js';
 import {decodeNativeConditionalScaleFillPreviewsV1,type NativeConditionalScaleFillPreviewV1} from './nativeConditionalScaleFillPreviewV1.js';
+import {decodeNativeConditionalBarFillPreviewsV1,type NativeConditionalBarFillPreviewV1} from './nativeConditionalBarFillPreviewV1.js';
 import { decodeNativeStoredRowGeometryV1, type NativeStoredRowGeometryV1 } from "./nativeStoredRowsPreviewV1.js";
 import { decodeNativeSheetDimensionNeutralityV1, type NativeSheetDimensionNeutralityV1 } from "./nativeSheetDimensionNeutralityV1.js";
 import { snapshotNativePlainData } from "./nativePlainData.js";
@@ -28,6 +29,7 @@ export interface NativeWorkbookObjectsV1 {
   rich_text?: NativeRichTextPreviewV1;
   conditional_fills?: NativeConditionalFillPreviewV1[];
   conditional_scale_fills?: NativeConditionalScaleFillPreviewV1[];
+  conditional_bar_fills?: NativeConditionalBarFillPreviewV1[];
 }
 export interface NativeTablePreviewV1 {
   part: string;
@@ -130,6 +132,7 @@ export function decodeNativeWorkbookObjectsV1(
   const hasRichText = !!input && typeof input === "object" && Object.hasOwn(input, "rich_text");
   const hasConditionalFills = !!input && typeof input === "object" && Object.hasOwn(input, "conditional_fills");
   const hasConditionalScaleFills = !!input && typeof input === "object" && Object.hasOwn(input, "conditional_scale_fills");
+  const hasConditionalBarFills = !!input && typeof input === "object" && Object.hasOwn(input, "conditional_bar_fills");
   const hasDrawings = !!input && typeof input === "object" && Object.hasOwn(input, "drawing_objects");
   const hasFormControls = !!input && typeof input === "object" && Object.hasOwn(input, "form_controls");
   const value = obj(input, [
@@ -148,6 +151,7 @@ export function decodeNativeWorkbookObjectsV1(
     ...(hasFormControls ? ["form_controls"] : []),
     ...(hasConditionalFills ? ["conditional_fills"] : []),
     ...(hasConditionalScaleFills ? ["conditional_scale_fills"] : []),
+    ...(hasConditionalBarFills ? ["conditional_bar_fills"] : []),
     ...(hasRichText ? ["rich_text"] : []),
   ]);
   if (
@@ -364,6 +368,7 @@ export function decodeNativeWorkbookObjectsV1(
     ...(hasRichText ? { rich_text: decodeNativeRichTextPreviewV1(value.rich_text) } : {}),
     ...(hasConditionalFills ? { conditional_fills: decodeNativeConditionalFillPreviewsV1(value.conditional_fills) } : {}),
     ...(hasConditionalScaleFills ? { conditional_scale_fills: decodeNativeConditionalScaleFillPreviewsV1(value.conditional_scale_fills) } : {}),
+    ...(hasConditionalBarFills ? { conditional_bar_fills: decodeNativeConditionalBarFillPreviewsV1(value.conditional_bar_fills) } : {}),
     ...(hasDrawings ? { drawing_objects: decodeNativeDrawingObjectsV1(value.drawing_objects) } : {}),
     ...(hasFormControls ? { form_controls: decodeNativeFormControlsV1(value.form_controls) } : {}),
   };
