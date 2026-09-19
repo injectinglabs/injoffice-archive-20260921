@@ -18,7 +18,8 @@ OOXML style cascade (bold/italic toggles, cycle-safe). PNG/JPEG insert sizes
 from file headers only. Inline PNG/JPEG preview is cached and bounded.
 `OpenError` explains unsupported, encrypted, and extract failures and
 replaces the start page when open/create fails closed. `.docm` is openable
-zip OOXML (VBA is not executed); blank create stays `.docx`.
+zip OOXML (VBA is not executed); blank create stays `.docx`. Hidden apply
+is an 80ms debounce that skips IME composition; OfficeEditor wiring follows.
 The rest of the renderer,
 the real Electron dependency, GitHub provider, and packaging workflows land
 in follow-up changes. Preview builds never load an updater.
