@@ -5,7 +5,7 @@ import {
   compileNativeSheetGeometryV2, compileNativeStoredRowSheetGeometryV1, compileNativeSheetPagePreviewV1,
   layoutNativeDrawingObjectsV1, layoutNativeCachedChartV1, layoutNativeFormControlsV1,
   selectNativeSheetPrintAreaSetV1, compileNativeSheetPrintAreaSetPreviewV1, selectNativeSheetPrintTitleViewportV1,
-  compileNativeSheetPrintPagePreviewV1, type NativeSheetPrintPagePreviewV1,
+  compileNativeSheetPrintPagePreviewV1, type NativeSheetPrintPagePreviewV1, type NativeSheetPrintPageBandV1,
   nativeTableFillPreview, nativeTableHeaderTextPreview, nativeTableTotalsTextPreview,
   selectNativeConditionalFillPreviewV1, type NativeConditionalFillPreviewV1,
   selectNativeRichTextPreviewV1, type NativeRichTextPreviewV1,
@@ -20,6 +20,12 @@ import { DsButton, DsSelect, DsInput } from '../design-system/primitives'
 import './native-sheet-pages.css'
 
 const EMU_PER_PIXEL = 9525
+// Typical Latin ascent and descent as fractions of the em. The header and
+// footer line is placed with these rather than with the loaded font's own
+// metrics because an authored header face need not be the workbook's Normal
+// font, which is the only face this demo reads metrics from.
+const BAND_ASCENT_EM = 0.88
+const BAND_DESCENT_EM = 0.21
 const MAX_FONT_BYTES = 32 * 1024 * 1024
 // Demo responsiveness bound, not a library one: packages/sheets paginates any
 // range the source authors, and neither it nor the Go tier carries a row or
@@ -125,11 +131,19 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
         page_order: pageOrder,
         left_inches: Number(margins.left), right_inches: Number(margins.right), top_inches: Number(margins.top), bottom_inches: Number(margins.bottom),
       }
+      // The worksheet name and the workbook's Normal font size are what the
+      // authored header and footer codes stand for; without them the library
+      // leaves every band unpainted rather than inventing either.
+      const facts = model.normal_style ? { header_footer_facts: { sheet_name: sheet.name, default_font_size_points: model.normal_style.font_size_points } } : undefined
       const options = repeatHeadings ? { repeat_print_titles: true as const } : undefined
+      // Only the print-page tier paints headers, and every other preview's
+      // option reader refuses a key it does not know, so the facts travel on
+      // their own object rather than widening the shared one.
+      const printPageOptions = repeatHeadings || facts ? { ...(options ?? {}), ...(facts ?? {}) } : undefined
       let printPage: NativeSheetPrintPagePreviewV1 | undefined
       const plans = (() => {
         if (sourcePrintPage) {
-          printPage = compileNativeSheetPrintPagePreviewV1(geometries, objects, options)
+          printPage = compileNativeSheetPrintPagePreviewV1(geometries, objects, printPageOptions)
           if (printPage.status !== 'available') throw new Error(printPage.reason)
           return printPage.source_plan.areas.map(area => area.plan)
         }
@@ -196,7 +210,7 @@ function SheetPagesSession({ workbook, sheet, objects, rows, columns }: Props) {
       </>}
       <DsButton disabled={busy || !font} onClick={() => void renderPages()}>{busy ? 'Preparing pages…' : 'Preview pages'}</DsButton>
     </div>
-    <p className="ds-muted">The font stays in this browser and is not saved in the workbook. Other fonts may be substituted by the browser. Supported chart caches use saved drawing anchors; plot colors and axes are approximate. Unknown drawings get placeholders when their position is known. Page headers and footers are not drawn here. Saved print areas support up to 16 non-overlapping rectangles. Formula values are saved caches, not recalculated results.</p>
+    <p className="ds-muted">The font stays in this browser and is not saved in the workbook. Other fonts may be substituted by the browser. Supported chart caches use saved drawing anchors; plot colors and axes are approximate. Unknown drawings get placeholders when their position is known. The source print-page preview draws an authored odd-page header and footer when every printed page carries the same one and its codes resolve without a printer; a first or even page of its own, a picture, a date or a file path is not drawn. Header lines are placed from typical ascent and descent, not from the authored face's metrics. Saved print areas support up to 16 non-overlapping rectangles. Formula values are saved caches, not recalculated results.</p>
     {(usePrintArea || printPagePreview) && savedRanges.length > 0 && <p className="ds-muted" aria-label="Saved print area provenance">{(savedSet ?? savedArea)?.warnings.join(' ')}</p>}
     <p className="ds-muted" aria-label="Unmodeled worksheet markup">{neutralCodes.length
       ? `Unmodeled worksheet markup cleared as non-dimensional for this sheet: ${neutralCodes.join(', ')}. ${neutrality[0]!.warnings.join(' ')}`
@@ -232,7 +246,7 @@ export function assertNativeSheetHeadingDrawings(plan: NativeSheetPagePreviewV1,
   }
 }
 
-export function NativeSheetPageImages({ workbook, sheet, objects, geometry, plan, fontFamily, descentEm, drawings = [], formControls = [], compactGeneral = false, conditionalFills = false, richRuns = false, printPage }: Pick<Props, 'workbook' | 'sheet' | 'objects'> & Result) {
+export function NativeSheetPageImages({ workbook, sheet, objects, geometry, plan, fontFamily, descentEm, drawings = [], formControls = [], compactGeneral = false, conditionalFills = false, richRuns = false, printPage, areaIndex = 0 }: Pick<Props, 'workbook' | 'sheet' | 'objects'> & Result) {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '')
   if (plan.source_package_sha256 !== workbook.source.package_sha256 || geometry.source_package_sha256 !== workbook.source.package_sha256 || objects.package_sha256 !== workbook.source.package_sha256 || plan.sheet_id !== sheet.id || geometry.sheet_id !== sheet.id || plan.geometry_sha256 !== geometry.geometry_sha256) return <p role="alert">Page preview no longer matches this workbook.</p>
   let conditional: NativeConditionalFillPreviewV1 | undefined
@@ -285,10 +299,30 @@ export function NativeSheetPageImages({ workbook, sheet, objects, geometry, plan
     </section>
     {richRuns && <p>{richError || 'Rich-run styling is approximate; unavailable cell evidence retains plain text.'}</p>}
     {plan.pages.map(page => {
+    // Header and footer text belongs to the printed page, which only the
+    // print-page tier produces; the selected-range preview has no paper edge to
+    // measure a header margin from and stays unchanged.
+    const bands = printPage?.status === 'available' ? printPage.pages.find(raster => raster.area_index === areaIndex && raster.number === page.number) : undefined
     return <figure key={page.number}>
       <figcaption>Page {page.number} · {page.regions ? 'body ' : ''}rows {page.rows.start + 1}–{page.rows.end + 1}, columns {page.columns.start + 1}–{page.columns.end + 1}</figcaption>
       <svg role="img" aria-label={`Approximate spreadsheet page ${page.number}`} viewBox={`0 0 ${page.width_emu / EMU_PER_PIXEL} ${page.height_emu / EMU_PER_PIXEL}`} {...(printPage?.status === 'available' ? { width: page.width_emu / EMU_PER_PIXEL, height: page.height_emu / EMU_PER_PIXEL, 'data-capture-dpi': 96 } : {})}>
         <rect width="100%" height="100%" fill="#FFFFFF"/>
+        {([bands?.header, bands?.footer].filter(Boolean) as NativeSheetPrintPageBandV1[]).map(band => <g key={band.kind} data-page-band={band.kind} aria-label={`Source print ${band.kind}`}>
+          {band.sections.map(section => {
+            // A header line starts at its own margin and a footer line ends at
+            // its own, so the same band carries the top of one and the bottom of
+            // the other. Ascent and descent are taken as fractions of the em
+            // because the authored face may not be the one metric the demo
+            // loaded; that keeps an unloaded face on the printed line instead of
+            // dropping it. This is approximate placement, not Excel calibration.
+            const size = Math.max(...section.runs.map(run => run.font_size_points)) * 96 / 72
+            const y = band.kind === 'header' ? band.y_css_px + size * BAND_ASCENT_EM : band.y_css_px - size * BAND_DESCENT_EM
+            const x = section.align === 'left' ? band.x_css_px : section.align === 'right' ? band.x_css_px + band.width_css_px : band.x_css_px + band.width_css_px / 2
+            return <text key={section.align} x={x} y={y} textAnchor={section.align === 'left' ? 'start' : section.align === 'right' ? 'end' : 'middle'} fill="#000000">
+              {section.runs.map((run, index) => <tspan key={index} fontFamily={run.font_name ?? fontFamily} fontSize={run.font_size_points * 96 / 72} fontWeight={run.bold ? 700 : 400} fontStyle={run.italic ? 'italic' : 'normal'}>{run.text}</tspan>)}
+            </text>
+          })}
+        </g>)}
         {(page.regions ?? [{ ...page, kind: 'body' as const }]).map(region => {
         const clip = `${uid}-page-${page.number}${page.regions ? `-${region.kind}` : ''}`
         return <Fragment key={region.kind}>

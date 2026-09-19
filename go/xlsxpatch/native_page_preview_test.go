@@ -216,6 +216,8 @@ func TestNativePageSettingsECMADefaultsAndNonGeometryPrintFacts(t *testing.T) {
 		scale       int
 		defaults    []string
 		disclose    []string
+		header      string
+		footer      string
 	}{
 		{
 			name:  "authored orientation only defaults Letter and 100%",
@@ -243,7 +245,8 @@ func TestNativePageSettingsECMADefaultsAndNonGeometryPrintFacts(t *testing.T) {
 			body:  margins + `<pageSetup paperSize="9" orientation="portrait" r:id="rId1"/><headerFooter><oddHeader>&amp;C&amp;A</oddHeader><oddFooter>&amp;CPage &amp;P</oddFooter></headerFooter>`,
 			paper: "A4", orientation: "portrait", scale: 100,
 			defaults: []string{"scale"},
-			disclose: []string{"Header and footer text is not painted"},
+			disclose: []string{"odd-page header and footer that every printed page carries"},
+			header:   "&C&A", footer: "&CPage &P",
 		},
 		{
 			name: "a fully authored LibreOffice page survives its print options and printer attributes",
@@ -254,7 +257,8 @@ func TestNativePageSettingsECMADefaultsAndNonGeometryPrintFacts(t *testing.T) {
 				`<headerFooter differentFirst="false" differentOddEven="false"><oddHeader>&amp;C&amp;A</oddHeader></headerFooter>`,
 			paper: "Letter", orientation: "portrait", scale: 90,
 			defaults: nil,
-			disclose: []string{"Header and footer text is not painted", "Printed gridlines are not painted", "Printer-directed page setup attributes are not resolved"},
+			disclose: []string{"odd-page header and footer that every printed page carries", "Printed gridlines are not painted", "Printer-directed page setup attributes are not resolved"},
+			header:   "&C&A",
 		},
 		{
 			name:  "stored fit dimensions without the fit switch stay a percentage page",
@@ -275,6 +279,13 @@ func TestNativePageSettingsECMADefaultsAndNonGeometryPrintFacts(t *testing.T) {
 		}
 		if strings.Join(got.Defaults, ",") != strings.Join(tc.defaults, ",") {
 			t.Fatalf("%s: defaulted facts %v, want %v", tc.name, got.Defaults, tc.defaults)
+		}
+		if tc.header == "" && tc.footer == "" {
+			if got.HeaderFooter != nil {
+				t.Fatalf("%s: unauthored header/footer reported: %+v", tc.name, got.HeaderFooter)
+			}
+		} else if got.HeaderFooter == nil || got.HeaderFooter.OddHeader != tc.header || got.HeaderFooter.OddFooter != tc.footer {
+			t.Fatalf("%s: header/footer %+v, want %q / %q", tc.name, got.HeaderFooter, tc.header, tc.footer)
 		}
 		joined := strings.Join(got.Warnings, "\n")
 		for _, want := range tc.disclose {
@@ -297,6 +308,31 @@ func TestNativePageSettingsECMADefaultsAndNonGeometryPrintFacts(t *testing.T) {
 	}
 	if !strings.Contains(strings.Join(noSetup.Warnings, "\n"), "Header and footer text is not painted") {
 		t.Fatalf("undisclosed header/footer: %v", noSetup.Warnings)
+	}
+	// One odd pair that every printed page carries is the only shape whose text
+	// is reported. Everything else keeps saying the header is not painted rather
+	// than painting a pair some pages do not print, or one placed by a rule this
+	// tier does not apply.
+	for _, tc := range []struct{ name, header string }{
+		{"a first page of its own", `<headerFooter differentFirst="true"><oddHeader>&amp;C&amp;A</oddHeader><firstHeader>&amp;CFirst</firstHeader></headerFooter>`},
+		{"different odd and even pages", `<headerFooter differentOddEven="true"><oddHeader>&amp;C&amp;A</oddHeader><evenHeader>&amp;CEven</evenHeader></headerFooter>`},
+		{"an even page this tier never sees", `<headerFooter><oddHeader>&amp;C&amp;A</oddHeader><evenHeader>&amp;CEven</evenHeader></headerFooter>`},
+		{"a header that does not scale with the document", `<headerFooter scaleWithDoc="false"><oddHeader>&amp;C&amp;A</oddHeader></headerFooter>`},
+		{"a header aligned to the printer, not the margins", `<headerFooter alignWithMargins="false"><oddHeader>&amp;C&amp;A</oddHeader></headerFooter>`},
+		{"an unreadable flag", `<headerFooter differentFirst="yes"><oddHeader>&amp;C&amp;A</oddHeader></headerFooter>`},
+		{"an unknown attribute", `<headerFooter zoom="2"><oddHeader>&amp;C&amp;A</oddHeader></headerFooter>`},
+		{"a duplicated odd header", `<headerFooter><oddHeader>&amp;C&amp;A</oddHeader><oddHeader>&amp;C&amp;A</oddHeader></headerFooter>`},
+		{"foreign markup inside the header", `<headerFooter><oddHeader xmlns="urn:foreign">&amp;C&amp;A</oddHeader></headerFooter>`},
+		{"an empty pair", `<headerFooter differentFirst="false"/>`},
+		{"unbounded header text", `<headerFooter><oddHeader>` + strings.Repeat("x", 1025) + `</oddHeader></headerFooter>`},
+	} {
+		got := previewNativePageSettings(sheet(margins+`<pageSetup paperSize="1" orientation="portrait" scale="100"/>`+tc.header), "xl/worksheets/sheet1.xml", "1")
+		if got.Status != "available" || got.HeaderFooter != nil {
+			t.Fatalf("%s: %+v %+v", tc.name, got.Status, got.HeaderFooter)
+		}
+		if !strings.Contains(strings.Join(got.Warnings, "\n"), "Header and footer text is not painted") {
+			t.Fatalf("%s: undisclosed refusal: %v", tc.name, got.Warnings)
+		}
 	}
 	// Facts with no defensible default still refuse rather than inventing one.
 	for _, tc := range []struct{ name, body string }{

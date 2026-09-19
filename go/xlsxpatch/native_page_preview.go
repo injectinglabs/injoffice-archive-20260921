@@ -31,7 +31,26 @@ type NativeSheetPageSettingsV1 struct {
 	// Facts in Settings taken from an ECMA-376 attribute default because the
 	// source omitted the attribute. Present only with status "available".
 	Defaults []string `json:"defaulted,omitempty"`
-	Warnings []string `json:"warnings"`
+	// Authored odd-page header and footer text, present only when the
+	// worksheet's headerFooter element carries nothing this tier cannot honour.
+	HeaderFooter *NativeSheetHeaderFooterV1 `json:"header_footer,omitempty"`
+	Warnings     []string                   `json:"warnings"`
+}
+
+// Authored odd-page header and footer text, carried verbatim as the ECMA-376
+// Part 1 §18.3.1.46 format-code string the worksheet stores. The codes are not
+// expanded here: &A is the worksheet name and &P/&N are page numbers, and a
+// page-settings reader has neither the sheet name nor the pagination. This is
+// the source fact; expanding it is the paginating tier's job.
+//
+// Reported only for the shape whose every printed page carries this one pair:
+// a different first page or different odd and even pages would print text this
+// field never names, and a header that does not scale and align with the
+// document prints somewhere this field cannot describe. Those keep refusing,
+// so an absent HeaderFooter never means "no header".
+type NativeSheetHeaderFooterV1 struct {
+	OddHeader string `json:"odd_header"`
+	OddFooter string `json:"odd_footer"`
 }
 
 // Authored page margins for a worksheet that declares no pageSetup.
@@ -74,6 +93,7 @@ type NativeSheetFitToPageV1 struct {
 
 const (
 	nativePageDefaultsDisclosure     = "Paper, orientation or scale is an ECMA-376 CT_PageSetup attribute default rather than an authored workbook value; the source omits the attribute and Excel prints the same default. Authored facts and authored margins are used unchanged."
+	nativePageHeaderFooterPainted    = "Worksheet declares an odd-page header and footer that every printed page carries. Its authored format-code string is reported unexpanded; the authored header and footer margins are reserved as Excel reserves them, so the body starts below max(top, header) and ends above max(bottom, footer). An overlong header that Excel would grow that reservation for is not reproduced."
 	nativePageHeaderFooterNotPainted = "Worksheet declares headerFooter content. Header and footer text is not painted. The authored header and footer margins are reserved as Excel reserves them, so the body starts below max(top, header) and ends above max(bottom, footer); an overlong header that Excel would grow that reservation for is not reproduced."
 	nativePageGridlinesNotPainted    = "Worksheet declares printOptions. Printed gridlines are not painted; printed row and column headings and page centering are not defaulted and still refuse."
 	nativePagePrinterFactsIgnored    = "Printer-directed page setup attributes are not resolved: there is no printer, so printer defaults, copies, draft, black-and-white and printer DPI are ignored and 96 CSS px/in is the preview raster."
@@ -89,7 +109,7 @@ func previewNativePageSettings(raw []byte, part, id string) NativeSheetPageSetti
 	if margins == nil {
 		return result
 	}
-	var fitPr *previewXML
+	var fitPr, headerFooter *previewXML
 	sheetPrCount, pageSetupCount, headerFooterCount, printOptionsCount := 0, 0, 0, 0
 	// Do not silently ignore alternate/foreign settings or page-affecting data.
 	for _, child := range root.children {
@@ -116,6 +136,7 @@ func previewNativePageSettings(raw []byte, part, id string) NativeSheetPageSetti
 			if headerFooterCount > 1 || child.name.Space != root.name.Space {
 				return result
 			}
+			headerFooter = child
 		case "printOptions":
 			printOptionsCount++
 			if printOptionsCount > 1 || child.name.Space != root.name.Space || !printOptionsWithoutPageGeometry(child) {
@@ -212,7 +233,12 @@ func previewNativePageSettings(raw []byte, part, id string) NativeSheetPageSetti
 		result.Margins = &NativeSheetPageMarginsV1{Left: values["left"], Right: values["right"], Top: values["top"], Bottom: values["bottom"], Header: values["header"], Footer: values["footer"]}
 		result.Warnings = []string{"Worksheet declares authored page margins and no pageSetup element, so no paper size, orientation or scale is authored. Page geometry requires a host paper choice; this tier does not select one."}
 		if headerFooterCount == 1 {
-			result.Warnings = append(result.Warnings, nativePageHeaderFooterNotPainted)
+			result.HeaderFooter = previewNativeSheetHeaderFooter(headerFooter, root.name.Space)
+			if result.HeaderFooter != nil {
+				result.Warnings = append(result.Warnings, nativePageHeaderFooterPainted)
+			} else {
+				result.Warnings = append(result.Warnings, nativePageHeaderFooterNotPainted)
+			}
 		}
 		if printOptionsCount == 1 {
 			result.Warnings = append(result.Warnings, nativePageGridlinesNotPainted)
@@ -284,7 +310,12 @@ func previewNativePageSettings(raw []byte, part, id string) NativeSheetPageSetti
 		result.Warnings = append(result.Warnings, nativePageDefaultsDisclosure)
 	}
 	if headerFooterCount == 1 {
-		result.Warnings = append(result.Warnings, nativePageHeaderFooterNotPainted)
+		result.HeaderFooter = previewNativeSheetHeaderFooter(headerFooter, root.name.Space)
+		if result.HeaderFooter != nil {
+			result.Warnings = append(result.Warnings, nativePageHeaderFooterPainted)
+		} else {
+			result.Warnings = append(result.Warnings, nativePageHeaderFooterNotPainted)
+		}
 	}
 	if printOptionsCount == 1 {
 		result.Warnings = append(result.Warnings, nativePageGridlinesNotPainted)
@@ -439,4 +470,67 @@ func pageSetupSupportedAttrs(setup *previewXML, required []string) bool {
 		}
 	}
 	return true
+}
+
+// The one headerFooter shape whose text every printed page carries: odd header
+// and footer only, both scaling and aligning with the document. nil for every
+// other shape, including a first or even page of its own, an unreadable flag,
+// foreign markup and unbounded text, so the caller keeps saying the header is
+// not painted rather than painting the wrong one.
+//
+// ECMA-376 Part 1 §18.3.1.46 defaults scaleWithDoc and alignWithMargins to
+// true, so their omission is the honoured case and only an explicit false
+// refuses; differentFirst and differentOddEven default to false, so their
+// omission is likewise the single-pair case these files author.
+func previewNativeSheetHeaderFooter(n *previewXML, space string) *NativeSheetHeaderFooterV1 {
+	if n == nil || strings.TrimSpace(n.text) != "" {
+		return nil
+	}
+	for _, a := range n.attrs {
+		if isPreviewNamespaceDeclaration(a) {
+			continue
+		}
+		if a.Name.Space != "" {
+			return nil
+		}
+		value, ok := previewRowBool(a.Value)
+		if !ok {
+			return nil
+		}
+		switch a.Name.Local {
+		case "differentFirst", "differentOddEven":
+			if value {
+				return nil
+			}
+		case "scaleWithDoc", "alignWithMargins":
+			if !value {
+				return nil
+			}
+		default:
+			return nil
+		}
+	}
+	result := &NativeSheetHeaderFooterV1{}
+	seen := map[string]int{}
+	for _, child := range n.children {
+		if child.name.Space != space || len(child.children) != 0 || len(child.attrs) != 0 {
+			return nil
+		}
+		if child.name.Local != "oddHeader" && child.name.Local != "oddFooter" {
+			return nil
+		}
+		seen[child.name.Local]++
+		if seen[child.name.Local] != 1 || len(child.text) > 1024 {
+			return nil
+		}
+		if child.name.Local == "oddHeader" {
+			result.OddHeader = child.text
+		} else {
+			result.OddFooter = child.text
+		}
+	}
+	if result.OddHeader == "" && result.OddFooter == "" {
+		return nil
+	}
+	return result
 }
