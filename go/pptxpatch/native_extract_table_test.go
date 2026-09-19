@@ -547,3 +547,79 @@ func TestExtractNativePPTXTableVerticalAnchorRefusals(t *testing.T) {
 		})
 	}
 }
+
+// PowerPoint writes <a:graphicFrameLocks noGrp="1"/> on every table it
+// creates, and a p14:modId extension on every table it has edited. Neither can
+// move a pixel, so neither may cost the whole table.
+func TestExtractNativePPTXTableKeepsGraphicFrameLocksAndModId(t *testing.T) {
+	t.Parallel()
+	cell := nativeExactTableCellXML("Cell", "l", "FFFFFF")
+	base := nativeExactTableGraphicFrameXML(3, "Locked table", []int64{500000}, []int64{500000}, [][]string{{cell}}, "")
+	locks := `<p:cNvGraphicFramePr><a:graphicFrameLocks noGrp="1"/></p:cNvGraphicFramePr>`
+	modID := `<p:nvPr><p:extLst><p:ext uri="{D42A27DB-BD31-4B8C-83A1-F6EECF244321}"><p14:modId xmlns:p14="http://schemas.microsoft.com/office/powerpoint/2010/main" val="3618587023"/></p:ext></p:extLst></p:nvPr>`
+	withLocks := strings.Replace(base, `<p:cNvGraphicFramePr/>`, locks, 1)
+	withModID := strings.Replace(base, `<p:nvPr/>`, modID, 1)
+	for name, frame := range map[string]string{
+		"locks": withLocks,
+		"modId": withModID,
+		"both":  strings.Replace(withLocks, `<p:nvPr/>`, modID, 1),
+	} {
+		t.Run(name, func(t *testing.T) {
+			data := nativeTableFixture(t, false, frame)
+			before := append([]byte(nil), data...)
+			deck, err := ExtractNativePPTX(data, nativeTestExtractOptions())
+			if err != nil {
+				t.Fatal(err)
+			}
+			var table *NativeElement
+			for index := range deck.Slides[0].Elements {
+				if deck.Slides[0].Elements[index].Kind == NativeElementKindTable {
+					table = &deck.Slides[0].Elements[index]
+				}
+			}
+			if table == nil {
+				t.Fatalf("the table was refused for nonvisual metadata: %+v", deck.Slides[0].Elements)
+			}
+			if table.Table == nil || len(table.Table.Rows) != 1 || len(table.Table.Rows[0]) != 1 {
+				t.Fatalf("the projected table lost its cells: %+v", table.Table)
+			}
+			// Neither lock nor modId travels on the wire, so a replacement
+			// would drop them: the target may never claim to be editable.
+			if table.Compatibility.Status != NativeCompatibilityStatusPreserveOnly {
+				t.Fatalf("preserved nonvisual metadata left the table editable: %s", table.Compatibility.Status)
+			}
+			if !nativeDiagnosticsContain(table.Compatibility.Diagnostics, nativeTableNonVisualPreservedCode) {
+				t.Fatalf("preserved nonvisual metadata was not disclosed: %+v", table.Compatibility.Diagnostics)
+			}
+			if issues := ValidateNativePPTX(deck); len(issues) != 0 {
+				t.Fatalf("invalid deck: %#v", issues)
+			}
+			if !bytes.Equal(data, before) {
+				t.Fatal("source changed")
+			}
+		})
+	}
+	// The grammar stays bounded: an unknown lock attribute, an unknown
+	// extension uri and a placeholder still lose the projection.
+	for name, frame := range map[string]string{
+		"unknown-lock":  strings.Replace(base, `<p:cNvGraphicFramePr/>`, `<p:cNvGraphicFramePr><a:graphicFrameLocks noMove="1"/></p:cNvGraphicFramePr>`, 1),
+		"unknown-ext":   strings.Replace(base, `<p:nvPr/>`, `<p:nvPr><p:extLst><p:ext uri="{00000000-0000-0000-0000-000000000000}"><p14:modId xmlns:p14="http://schemas.microsoft.com/office/powerpoint/2010/main" val="1"/></p:ext></p:extLst></p:nvPr>`, 1),
+		"placeholder":   strings.Replace(base, `<p:nvPr/>`, `<p:nvPr><p:ph type="tbl"/></p:nvPr>`, 1),
+		"lock-children": strings.Replace(base, `<p:cNvGraphicFramePr/>`, `<p:cNvGraphicFramePr><a:graphicFrameLocks noGrp="1"><a:extLst/></a:graphicFrameLocks></p:cNvGraphicFramePr>`, 1),
+	} {
+		t.Run(name, func(t *testing.T) {
+			deck, err := ExtractNativePPTX(nativeTableFixture(t, false, frame), nativeTestExtractOptions())
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, element := range deck.Slides[0].Elements {
+				if element.Kind == NativeElementKindTable {
+					t.Fatalf("unmodeled nonvisual metadata leaked a table projection: %+v", element)
+				}
+			}
+			if !nativeDiagnosticsContain(deck.Slides[0].Compatibility.Diagnostics, "pptx.table-inheritance-unavailable") {
+				t.Fatalf("the refusal was not disclosed: %+v", deck.Slides[0].Compatibility)
+			}
+		})
+	}
+}
