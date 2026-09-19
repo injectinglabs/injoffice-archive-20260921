@@ -4,6 +4,7 @@ import type {NativeLiteralBubble} from './chartBubbleTypes.js'
 import type {NativeLiteralArea} from './chartAreaTypes.js'
 import type {
   NativeAnimationEffect,
+  NativeAssetSourceTransform,
   NativeCompatibilityStatus,
   NativeDiagnosticSeverity,
   NativeDirection,
@@ -77,6 +78,17 @@ export interface NativeAsset {
   byteLength: number
   dataBase64?: string
   source?: NativeSourceAnchor
+  /**
+   * Names a deterministic, in-process derivation the host applies to the
+   * source part before serving this asset, for a format the preview contract
+   * cannot carry. When it is absent the asset is its part byte for byte and
+   * sha256 equals source.fingerprintSha256. When it is present the two differ
+   * on purpose: source.fingerprintSha256 with sourceByteLength pin the part
+   * the host reads, and sha256 with byteLength pin what the derivation must
+   * produce from it.
+   */
+  sourceTransform?: NativeAssetSourceTransform
+  sourceByteLength?: number
   passthrough: NativePassthroughRef[]
 }
 
@@ -432,6 +444,7 @@ export interface NativeSlide {
 
 export type {
   NativeAnimationEffect,
+  NativeAssetSourceTransform,
   NativeCompatibilityStatus,
   NativeDiagnosticSeverity,
   NativeDirection,

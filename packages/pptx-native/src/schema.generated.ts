@@ -3,7 +3,7 @@
 
 export const PPTX_NATIVE_SCHEMA_ID = "https://injoffice.dev/schemas/pptx-native-v1.schema.json" as const
 export const PPTX_NATIVE_CONTRACT_VERSION = "pptx-native/v1" as const
-export const PPTX_NATIVE_SCHEMA_SHA256 = "9c16b6909d2c5636c61cdcdb0ab612178aba93ceb089091617215a03d679afb0" as const
+export const PPTX_NATIVE_SCHEMA_SHA256 = "ea819aa05cf0ef3b9f693b195c42473d5dc35ce5f20edf273500a87464d50e57" as const
 export const PPTX_NATIVE_RESOURCE_LIMITS = {
   "maxJsonBytes": 268435456,
   "maxNodes": 1000000,
@@ -73,7 +73,9 @@ export const PPTX_NATIVE_OBJECT_BINDINGS = {
       "passthrough",
       "provenance",
       "sha256",
-      "source"
+      "source",
+      "sourceByteLength",
+      "sourceTransform"
     ],
     "required": [
       "byteLength",
@@ -1491,6 +1493,14 @@ export const PPTX_NATIVE_SCHEMA = {
         "source": {
           "$ref": "#/$defs/sourceAnchor"
         },
+        "sourceTransform": {
+          "$ref": "#/$defs/assetSourceTransform"
+        },
+        "sourceByteLength": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 536870912
+        },
         "passthrough": {
           "type": "array",
           "maxItems": 10000,
@@ -1499,6 +1509,14 @@ export const PPTX_NATIVE_SCHEMA = {
           }
         }
       }
+    },
+    "assetSourceTransform": {
+      "x-binding-name": "AssetSourceTransform",
+      "description": "Names the deterministic, in-process derivation from the source package part to this asset's bytes. Absent means the asset is that part, byte for byte, and sourceByteLength is absent with it.",
+      "type": "string",
+      "enum": [
+        "wmfRasterV1"
+      ]
     },
     "textRun": {
       "x-binding-name": "NativeTextRun",
@@ -3926,3 +3944,6 @@ export type NativeTransitionType = typeof transitionTypeValues[number]
 
 export const directionValues = ["left","right","up","down"] as const
 export type NativeDirection = typeof directionValues[number]
+
+export const assetSourceTransformValues = ["wmfRasterV1"] as const
+export type NativeAssetSourceTransform = typeof assetSourceTransformValues[number]

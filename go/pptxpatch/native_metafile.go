@@ -691,3 +691,16 @@ func nativeAdler32(payload []byte) uint32 {
 	}
 	return b<<16 | a
 }
+
+// RasterizeNativeMetafilePNG decodes a Windows Metafile control snapshot and
+// returns it as PNG bytes. It exists so a host serving a preview asset whose
+// sourceTransform is wmfRasterV1 re-derives those bytes with the same code the
+// extractor stated them with, rather than a second implementation that could
+// drift from it.
+func RasterizeNativeMetafilePNG(data []byte) ([]byte, error) {
+	raster, err := decodeNativeMetafile(data)
+	if err != nil {
+		return nil, err
+	}
+	return encodeNativeMetafilePNG(raster), nil
+}

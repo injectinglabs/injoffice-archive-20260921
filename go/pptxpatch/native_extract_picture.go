@@ -2,6 +2,7 @@ package pptxpatch
 
 import (
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"mime"
 	"strconv"
@@ -44,7 +45,77 @@ type nativePicturePartInspection struct {
 	part       string
 	digest     string
 	byteLength int64
+	delivery   nativePictureDelivery
 }
+
+// nativePictureDelivery describes the bytes the preview will actually serve for
+// a media part. For every format the contract already carries it restates the
+// part: same content type, same digest, same length. For a Windows Metafile it
+// describes the PNG this package derives from that part instead, because the
+// contract carries no metafile and a control snapshot would otherwise never
+// paint. Refusal is the third outcome and it is recorded, not thrown: the
+// picture keeps its existing preserve-only behaviour and states why.
+type nativePictureDelivery struct {
+	contentType string
+	digest      string
+	byteLength  int64
+	transform   *NativeAssetSourceTransform
+	textOmitted int
+	refusal     string
+}
+
+// Media types the OPC packages in the wild use for a Windows Metafile.
+func nativeIsMetafileMediaType(contentType string) bool {
+	switch contentType {
+	case "image/x-wmf", "image/wmf", "application/x-msmetafile":
+		return true
+	}
+	return false
+}
+
+// nativeProjectPictureDelivery decides what bytes a media part is served as.
+func nativeProjectPictureDelivery(contentType string, payload []byte, digest string, byteLength int64) nativePictureDelivery {
+	identity := nativePictureDelivery{contentType: contentType, digest: digest, byteLength: byteLength}
+	if !nativeIsMetafileMediaType(contentType) {
+		return identity
+	}
+	raster, err := decodeNativeMetafile(payload)
+	if err != nil {
+		var refusal nativeMetafileRefusal
+		if errors.As(err, &refusal) {
+			identity.refusal = refusal.reason
+			return identity
+		}
+		identity.refusal = err.Error()
+		return identity
+	}
+	encoded := encodeNativeMetafilePNG(raster)
+	transform := NativeAssetSourceTransformWmfRasterV1
+	return nativePictureDelivery{
+		contentType: "image/png",
+		digest:      nativeSHA256(encoded),
+		byteLength:  int64(len(encoded)),
+		transform:   &transform,
+		textOmitted: raster.TextOmitted,
+	}
+}
+
+// picturePartDelivery reports what the most recent nativePictureAsset call
+// decided for a part, so the element can disclose the limits that applied.
+func (extractor *nativeExtractor) picturePartDelivery(part string) nativePictureDelivery {
+	alias, err := nativePartAlias(part)
+	if err != nil {
+		return nativePictureDelivery{}
+	}
+	return extractor.picturePartInspections[alias].delivery
+}
+
+// Metafile limits are their own codes so a reader can tell a picture that is
+// painted-but-incomplete from one that is not painted at all.
+const (
+	nativePictureMetafileCode     = "pptx.picture-metafile-unavailable"
+	nativePictureMetafileTextCode = "pptx.picture-metafile-text-unavailable"
+)
 
 func (gaps *nativePictureGapSet) has(code string) bool { return gaps.seen[code] }
 
@@ -138,12 +209,21 @@ func (extractor *nativeExtractor) extractPicture(node *nativeXMLNode, slidePart,
 	if err != nil {
 		return NativeElement{}, err
 	}
-	if !supportedMIME {
-		gaps.add("pptx.picture-content-type-unavailable", "picture image MIME is preserved but is outside the native PNG/JPEG preview subset")
-	}
 	assetID, err := extractor.nativePictureAsset(relationship.Part, contentType)
 	if err != nil {
 		return NativeElement{}, err
+	}
+	delivery := extractor.picturePartDelivery(relationship.Part)
+	switch {
+	case delivery.refusal != "":
+		// A metafile this package declines stays exactly where an unreadable
+		// image already was — preserved, unpainted — but now says why.
+		gaps.add(nativePictureMetafileCode, "Picture is a Windows Metafile outside the modeled control-snapshot subset, so it is preserved but not painted: "+delivery.refusal+".")
+	case delivery.transform == nil && !supportedMIME:
+		gaps.add("pptx.picture-content-type-unavailable", "picture image MIME is preserved but is outside the native PNG/JPEG preview subset")
+	}
+	if delivery.textOmitted > 0 {
+		gaps.add(nativePictureMetafileTextCode, fmt.Sprintf("Windows Metafile picture is painted from its drawing records, but %d text record(s) in it are not: glyph rasterisation needs font bytes this reader has no access to, so any caption the metafile draws is missing. Declared omission, not PowerPoint equivalence.", delivery.textOmitted))
 	}
 
 	raw, err := rawNativeNode(extractor.pkg.parts[slidePart], node)
@@ -508,15 +588,18 @@ func (extractor *nativeExtractor) nativePictureAsset(part, contentType string) (
 		if length < 0 || length > nativeExtractMaxTotalMediaBytes-extractor.mediaBytesInspected {
 			return "", fmt.Errorf("pptxpatch: native extract: cumulative picture inspection byte budget exceeded")
 		}
-		inspection = nativePicturePartInspection{part: part, digest: nativeSHA256(payload), byteLength: length}
+		digest := nativeSHA256(payload)
+		inspection = nativePicturePartInspection{part: part, digest: digest, byteLength: length}
+		inspection.delivery = nativeProjectPictureDelivery(contentType, payload, digest, length)
 		extractor.picturePartInspections[alias] = inspection
 		extractor.mediaBytesInspected += length
 	} else if inspection.part != part || inspection.byteLength != int64(len(payload)) {
 		return "", fmt.Errorf("pptxpatch: native extract: picture part inspection identity is inconsistent")
 	}
+	delivery := inspection.delivery
 	if index, exists := extractor.assetByAlias[alias]; exists {
 		asset := extractor.assets[index]
-		if asset.Source == nil || nativeIdentityKey(asset.Source.PartName, asset.Source.ObjectID) != nativeIdentityKey(part, "asset-part") || asset.ContentType != contentType || asset.SHA256 != inspection.digest || asset.ByteLength == nil || *asset.ByteLength != inspection.byteLength {
+		if asset.Source == nil || nativeIdentityKey(asset.Source.PartName, asset.Source.ObjectID) != nativeIdentityKey(part, "asset-part") || asset.ContentType != delivery.contentType || asset.SHA256 != delivery.digest || asset.ByteLength == nil || *asset.ByteLength != delivery.byteLength {
 			return "", fmt.Errorf("pptxpatch: native extract: shared picture asset identity is inconsistent")
 		}
 		return asset.ID, nil
@@ -524,7 +607,9 @@ func (extractor *nativeExtractor) nativePictureAsset(part, contentType string) (
 	if len(extractor.assets) >= nativeMaxAssets {
 		return "", fmt.Errorf("pptxpatch: native extract: asset count exceeds %d", nativeMaxAssets)
 	}
-	if err := extractor.reserveNativeAssetBudget(int64(len(payload)), 0); err != nil {
+	// The budget is charged for the bytes the preview serves, which for a
+	// derived asset is the raster rather than the part it came from.
+	if err := extractor.reserveNativeAssetBudget(delivery.byteLength, 0); err != nil {
 		return "", err
 	}
 	objectID := "asset-part"
@@ -539,9 +624,12 @@ func (extractor *nativeExtractor) nativePictureAsset(part, contentType string) (
 		extractor.assetIDOwnerJournal = append(extractor.assetIDOwnerJournal, assetID)
 	}
 	extractor.assetIDOwners[assetID] = alias
-	digest := inspection.digest
-	length := inspection.byteLength
-	capability, err := extractor.issuePassthrough(part, objectID, digest, payload, "pptx.picture-asset-source")
+	sourceDigest := inspection.digest
+	sourceLength := inspection.byteLength
+	length := delivery.byteLength
+	// The capability is issued over the bytes the host reads: the package part
+	// itself, whether or not a derivation stands between it and the preview.
+	capability, err := extractor.issuePassthrough(part, objectID, sourceDigest, payload, "pptx.picture-asset-source")
 	if err != nil {
 		return "", err
 	}
@@ -549,9 +637,14 @@ func (extractor *nativeExtractor) nativePictureAsset(part, contentType string) (
 		return "", err
 	}
 	asset := NativeAsset{
-		ID: assetID, Provenance: NativeProvenanceParsed, ContentType: contentType,
-		SHA256: digest, ByteLength: &length, Passthrough: []NativePassthroughRef{capability},
-		Source: &NativeSourceAnchor{PartName: part, ObjectID: objectID, FingerprintSHA256: digest},
+		ID: assetID, Provenance: NativeProvenanceParsed, ContentType: delivery.contentType,
+		SHA256: delivery.digest, ByteLength: &length, Passthrough: []NativePassthroughRef{capability},
+		Source: &NativeSourceAnchor{PartName: part, ObjectID: objectID, FingerprintSHA256: sourceDigest},
+	}
+	if delivery.transform != nil {
+		transform := *delivery.transform
+		asset.SourceTransform = &transform
+		asset.SourceByteLength = &sourceLength
 	}
 	if _, exists := extractor.assetByAlias[alias]; !exists {
 		extractor.assetAliasJournal = append(extractor.assetAliasJournal, alias)
