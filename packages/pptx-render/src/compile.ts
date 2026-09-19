@@ -284,12 +284,12 @@ function checkExtent(value: number, path: string, budget: Budget): void {
 }
 
 function boundedStroke(
-  stroke: Readonly<{ color: string; widthEmu: number; cap?: 'flat' | 'round' | 'square'; join?: 'round' | 'bevel' | 'miter'; dash?: 'solid'; miterLimit?: number }>,
+  stroke: Readonly<{ color: string; widthEmu: number; cap?: 'flat' | 'round' | 'square'; join?: 'round' | 'bevel' | 'miter'; dash?: 'solid'; compound?: RenderStroke['compound']; miterLimit?: number }>,
   path: string,
   budget: Budget,
 ): RenderStroke {
   checkCoordinate(stroke.widthEmu, `${path}.widthEmu`, budget)
-  return { color: stroke.color, widthEmu: stroke.widthEmu, cap: stroke.cap, join: stroke.join, dash: stroke.dash, miterLimit: stroke.miterLimit }
+  return { color: stroke.color, widthEmu: stroke.widthEmu, cap: stroke.cap, join: stroke.join, dash: stroke.dash, compound: stroke.compound, miterLimit: stroke.miterLimit }
 }
 
 function takeNode(state: CompileState, path: string): void {

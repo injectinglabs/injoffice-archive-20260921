@@ -124,6 +124,11 @@
       "type": "string",
       "enum": ["solid"]
     },
+    "strokeCompound": {
+      "x-binding-name": "StrokeCompound",
+      "type": "string",
+      "enum": ["single", "double", "thickThin", "thinThick", "triple"]
+    },
     "textAlign": {
       "x-binding-name": "TextAlign",
       "type": "string",
@@ -342,6 +347,7 @@
         "cap": { "$ref": "#/$defs/strokeCap" },
         "join": { "$ref": "#/$defs/strokeJoin" },
         "dash": { "$ref": "#/$defs/strokeDash" },
+        "compound": { "$ref": "#/$defs/strokeCompound" },
         "miterLimit": { "type": "integer", "minimum": 0, "maximum": 2147483647 }
       }
     },

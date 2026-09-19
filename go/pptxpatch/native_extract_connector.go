@@ -270,6 +270,9 @@ func validateNativeConnectorProperties(node *nativeXMLNode, dialect nativeExtrac
 	if err != nil {
 		return NativeTransform{}, false, nil, nil, false, false, err
 	}
+	if nativeCompoundStrokeUnavailable(stroke, false) {
+		lineGaps.add("pptx.autoshape-line-unavailable", "a compound outline is approximated only on a rectangular shape", true)
+	}
 	for _, gap := range lineGaps.values {
 		code := "pptx.connector-line-unavailable"
 		if strings.Contains(gap.code, "dash") {

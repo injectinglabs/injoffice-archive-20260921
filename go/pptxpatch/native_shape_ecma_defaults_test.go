@@ -66,23 +66,28 @@ func TestExtractNativePPTXAutoShapeAppliesECMALineAndDisplayDefaults(t *testing.
 func TestExtractNativePPTXAutoShapeStillRefusesNonNeutralLineAndDisplayMarkup(t *testing.T) {
 	t.Parallel()
 	solid := `<a:solidFill><a:srgbClr val="A0A060"/></a:solidFill>`
+	rectangle := `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>`
 	for _, testCase := range []struct {
 		name      string
 		spPrAttrs string
+		geometry  string
 		line      string
 		code      string
 	}{
-		{"grayscale display mode", ` bwMode="gray"`, `<a:ln w="19080">` + solid + `<a:round/></a:ln>`, "pptx.autoshape-properties-unavailable"},
-		{"hidden display mode", ` bwMode="hidden"`, `<a:ln w="19080">` + solid + `<a:round/></a:ln>`, "pptx.autoshape-properties-unavailable"},
-		{"named tail arrow", "", `<a:ln w="19080">` + solid + `<a:round/><a:tailEnd type="triangle"/></a:ln>`, "pptx.autoshape-line-unavailable"},
-		{"compound outline", "", `<a:ln w="19080" cmpd="dbl">` + solid + `<a:round/></a:ln>`, "pptx.autoshape-line-unavailable"},
-		{"inset outline alignment", "", `<a:ln w="19080" algn="in">` + solid + `<a:round/></a:ln>`, "pptx.autoshape-line-unavailable"},
-		{"dashed outline", "", `<a:ln w="19080">` + solid + `<a:prstDash val="dash"/><a:round/></a:ln>`, "pptx.autoshape-dash-unavailable"},
+		{"grayscale display mode", ` bwMode="gray"`, rectangle, `<a:ln w="19080">` + solid + `<a:round/></a:ln>`, "pptx.autoshape-properties-unavailable"},
+		{"hidden display mode", ` bwMode="hidden"`, rectangle, `<a:ln w="19080">` + solid + `<a:round/></a:ln>`, "pptx.autoshape-properties-unavailable"},
+		{"named tail arrow", "", rectangle, `<a:ln w="19080">` + solid + `<a:round/><a:tailEnd type="triangle"/></a:ln>`, "pptx.autoshape-line-unavailable"},
+		// A modeled compound outline is painted on a rectangle only; the bands
+		// are laid out by moving the outline, and no other outline can be.
+		{"compound outline off a rectangle", "", `<a:prstGeom prst="ellipse"><a:avLst/></a:prstGeom>`, `<a:ln w="19080" cmpd="dbl">` + solid + `<a:round/></a:ln>`, "pptx.autoshape-line-unavailable"},
+		{"unmodeled compound outline", "", rectangle, `<a:ln w="19080" cmpd="quad">` + solid + `<a:round/></a:ln>`, "pptx.autoshape-line-unavailable"},
+		{"inset outline alignment", "", rectangle, `<a:ln w="19080" algn="in">` + solid + `<a:round/></a:ln>`, "pptx.autoshape-line-unavailable"},
+		{"dashed outline", "", rectangle, `<a:ln w="19080">` + solid + `<a:prstDash val="dash"/><a:round/></a:ln>`, "pptx.autoshape-dash-unavailable"},
 	} {
 		testCase := testCase
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			shape := nativeECMADefaultShapeXML(3, testCase.spPrAttrs, `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>`, testCase.line)
+			shape := nativeECMADefaultShapeXML(3, testCase.spPrAttrs, testCase.geometry, testCase.line)
 			deck, err := ExtractNativePPTX(nativeAutoShapeFixture(t, false, shape), nativeTestExtractOptions())
 			if err != nil {
 				t.Fatalf("extract AutoShape: %v", err)

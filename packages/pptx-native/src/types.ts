@@ -14,6 +14,7 @@ import type {
   NativePlaceholderType,
   NativeShapePreset,
   NativeStrokeCap,
+  NativeStrokeCompound,
   NativeStrokeDash,
   NativeStrokeJoin,
   NativeTextAlign,
@@ -166,6 +167,8 @@ export interface NativeStroke {
   cap?: NativeStrokeCap
   join?: NativeStrokeJoin
   dash?: NativeStrokeDash
+  /** Absent is the ST_CompoundLine default "sng": one line of the full width. */
+  compound?: NativeStrokeCompound
   miterLimit?: number
 }
 
