@@ -5,6 +5,7 @@ const PdfEditor = lazy(() => import('./PdfEditor'));
 const PresentationEditor = lazy(() => import('./PresentationEditor'));
 const SpreadsheetEditor = lazy(() => import('./SpreadsheetEditor').then(module => ({ default: module.SpreadsheetEditor })));
 import StartPage from './StartPage';
+import OpenError, { classifyOpenError, type OpenErrorKind } from './OpenError';
 import UpdatesDialog, { UpdateNotice } from './UpdatesDialog';
 import PreferencesDialog from './PreferencesDialog';
 import { readPreferences, writePreferences, initialView, type ViewOptions } from './preferences';
@@ -65,6 +66,7 @@ export default function App() {
   useEffect(()=>()=>importAbort.current?.abort(),[]);
   const [editorBusy, setEditorBusy] = useState(false);
   const [error, setError] = useState('');
+  const [openFailure, setOpenFailure] = useState<{ kind: OpenErrorKind; detail: string; name?: string } | null>(null);
   const [notice, setNotice] = useState('');
   const [replacePrompt, setReplacePrompt] = useState(false);
   const [showHome, setShowHome] = useState(true);
@@ -170,6 +172,7 @@ export default function App() {
     operation.current = true;
     setWorking(true);
     setError('');
+    setOpenFailure(null);
     setNotice('');
     try {
       if (action === 'save' || action === 'saveAs') {
@@ -205,7 +208,12 @@ export default function App() {
       }
     } catch (cause) {
       if(action==='importText'&&importAbort.current?.signal.aborted)setNotice('Import canceled.');
-      else setError(cause instanceof Error ? cause.message : String(cause));
+      else {
+        const message = cause instanceof Error ? cause.message : String(cause);
+        const kind = action === 'importText' ? undefined : classifyOpenError(message);
+        if (kind) { setOpenFailure({ kind, detail: message, name: typeof target === 'string' && target.includes('.') ? target : undefined }); setShowHome(true); }
+        else setError(message);
+      }
     } finally {
       if(action==='importText'){importAbort.current=undefined;setImportProgress(null);}
       bridge.setDirty(sessionsRef.current.some(item => item.dirty || item.draftDirty));
@@ -357,7 +365,9 @@ export default function App() {
       {error && <div className="app-error" role="alert"><span>{error}</span><button onClick={() => setError('')} aria-label="Dismiss error">×</button></div>}
 
       {showHome && recoveries.length > 0 && <section className="recovery-panel" aria-label="Recover unsaved work"><h2>Recover your work</h2><p>These local copies contain your last edits and supported pending drafts. Recover opens a new unsaved copy.</p>{recoveries.map(entry => <div key={entry.id}><span>{entry.name}<small>{new Date(entry.updatedAt).toLocaleString()}</small></span><button disabled={busy} onClick={() => void runAction('recover', entry.id)}>Recover</button><button disabled={busy} onClick={() => { void bridge?.discardRecovery(entry.id).then(() => setRecoveries(value => value.filter(item => item.id !== entry.id))).catch(() => setError('Recovery copy could not be discarded.')); }}>Discard copy</button></div>)}</section>}
-      {showHome && <StartPage onUpdates={() => setUpdatesOpen(true)} recentFiles={recentFiles} busy={busy} available={Boolean(bridge)} onImportText={()=>void runAction('importText')} onOpen={() => void runAction('open')} onCreate={format => void runAction('create', format)} onOpenRecent={id => void runAction('open', id)} onRemoveRecent={id => void removeRecent(id)} currentName={document?.name} onResume={document ? () => setShowHome(false) : undefined} />}
+      {showHome && (openFailure
+        ? <OpenError name={openFailure.name} kind={openFailure.kind} detail={openFailure.detail} busy={busy} onOpen={() => { setOpenFailure(null); void runAction('open'); }} onHome={() => setOpenFailure(null)} />
+        : <StartPage onUpdates={() => setUpdatesOpen(true)} recentFiles={recentFiles} busy={busy} available={Boolean(bridge)} onImportText={()=>void runAction('importText')} onOpen={() => void runAction('open')} onCreate={format => void runAction('create', format)} onOpenRecent={id => void runAction('open', id)} onRemoveRecent={id => void removeRecent(id)} currentName={document?.name} onResume={document ? () => setShowHome(false) : undefined} />)}
 
       {sessions.length > 0 && <nav className="document-tabs" aria-label="Open documents" hidden={showHome}>
         {sessions.map(item => <div className={`document-tab${item.key === document?.key ? ' active' : ''}`} key={item.key}>
