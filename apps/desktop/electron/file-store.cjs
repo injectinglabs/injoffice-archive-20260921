@@ -4,15 +4,21 @@ const { createHash, randomUUID } = require('node:crypto');
 
 const fingerprint = (bytes) => createHash('sha256').update(bytes).digest('hex');
 const untitledNames = { docx: 'Untitled.docx', xlsx: 'Workbook.xlsx', pptx: 'Presentation.pptx', pdf: 'Untitled.pdf' };
+const openableFormats = new Set(['docx', 'xlsx', 'pptx', 'pdf', 'docm']);
 
 function validateFormat(format) {
   if (typeof format !== 'string' || !Object.hasOwn(untitledNames, format)) throw new Error('Choose a DOCX document, XLSX workbook, PPTX presentation, or PDF.');
   return format;
 }
 
+function validateOpenFormat(format) {
+  if (typeof format !== 'string' || !openableFormats.has(format.toLowerCase())) throw new Error('Choose a DOCX document, XLSX workbook, PPTX presentation, or PDF.');
+  return format.toLowerCase();
+}
+
 function normalizeSaveDestination(filename, format) {
   if (typeof filename !== 'string' || !path.isAbsolute(filename)) throw new Error('Choose a valid location for this document.');
-  if (typeof format !== 'string' || !['docx', 'xlsx', 'pptx', 'pdf', 'svg', 'csv', 'tsv'].includes(format.toLowerCase())) throw new Error('This document format cannot be saved.');
+  if (typeof format !== 'string' || !['docx', 'xlsx', 'pptx', 'pdf', 'docm', 'svg', 'csv', 'tsv'].includes(format.toLowerCase())) throw new Error('This document format cannot be saved.');
   const expected = format.toLowerCase();
   const extension = path.extname(filename).toLowerCase();
   if (!extension) return `${filename}.${expected}`;
@@ -122,4 +128,4 @@ class FileStore {
   }
 }
 
-module.exports = { FileStore, atomicWrite, validateBytes, validateFormat, normalizeSaveDestination };
+module.exports = { FileStore, atomicWrite, validateBytes, validateFormat, validateOpenFormat, normalizeSaveDestination };
