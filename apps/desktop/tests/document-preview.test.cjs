@@ -30,7 +30,7 @@ async function loadPreview() {
 
 function document() {
   return {
-    headers: [], footers: [], notes: [], comment_stories: [],
+    headers: [], footers: [], notes: [], comment_stories: [], sections: [],
     default_paragraph_style_id: 'Normal', default_run_properties: {}, default_paragraph_properties: {},
     paragraph_styles: [], numbering_definitions: [],
     _targets: [{ partName: 'word/document.xml', runId: 'r1', key: 'run-1' }],
