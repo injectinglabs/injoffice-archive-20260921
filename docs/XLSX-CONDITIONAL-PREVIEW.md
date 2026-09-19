@@ -40,3 +40,26 @@ The page demo exposes the source range, operator, operand, priority, `stopIfTrue
 Microsoft's [conditional-formatting documentation](https://learn.microsoft.com/en-us/office/open-xml/spreadsheet/working-with-conditional-formatting) describes worksheet-owned `sqref` ranges, static `cellIs` operands, differential style references and worksheet-global priorities. The [rule definition](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.spreadsheet.conditionalformattingrule) describes the comparison and `stopIfTrue` attributes. [Pattern fills](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.spreadsheet.patternfill) define the solid foreground fill, and [Excel's precedence guidance](https://support.microsoft.com/en-us/excel/use-conditional-formatting-to-highlight-information-in-excel) specifies that a true conditional rule takes precedence over the existing manual format.
 
 Generated software tests and browser/WASM evidence demonstrate this implementation profile. They are not independent Excel output comparisons. General rule evaluation, overlapping priorities, richer differential styles, decimal/coercion behavior, table/merge combinations and measured print calibration remain outstanding. Source files, fonts, screenshots and qualification scripts belong in the local evidence corpus, not this repository.
+
+## Colour-scale fills
+
+A second, independent tier projects `colorScale` rules. Unlike the `cellIs` overlay above it is not opt-in: a colour scale is the cell's only visible content in Excel, so it is applied wherever the source qualifies, in the same place a table-style fill is applied. It paints *behind* the cell, so an explicit source fill or a table-style fill always wins.
+
+### Qualified source profile
+
+- Two or three `cfvo` bounds with a matching number of `color` stops, in that order and with nothing else inside `colorScale`.
+- Bound types `min`, `max`, `percent`, `percentile` and `num`. A `num` bound is a decimal literal or a reference to one cell on the same worksheet (`$A$1`); anything else, including `formula`, leaves that rule unpainted. Bounds must be ascending once resolved.
+- Stop colours are an opaque `FFRRGGBB` or a theme slot with an optional tint, resolved through the same theme table the styles tier uses. Indexed and translucent colours are outside the profile.
+- Every painted cell must carry a saved numeric value. Blanks, text, booleans and errors take no fill and are excluded from the scale's own minimum, maximum and percentiles, which is what Excel does.
+- A range that meets any other rule on the worksheet — including a rule carried in an `x14` worksheet extension, and including one this tier cannot read — is left unpainted, because the result then depends on priority and `stopIfTrue`, which are not evaluated here. A range that meets a merged region is left unpainted.
+- At most 4,096 cells per range, 16,384 per workbook and 64 worksheet entries.
+
+A rule outside the profile costs only itself: the other colour scales on the sheet are still painted and the count of unpainted rules is disclosed in the entry's warning. A sheet where nothing resolved reports `unavailable` with a reason.
+
+### Public API
+
+`InspectNativeWorkbookObjectsV1` adds optional `conditional_scale_fills` to the `injoffice.xlsx.preview-objects` version 1 supplement; supplements without it remain accepted. `decodeNativeConditionalScaleFillPreviewsV1` validates closed entry shapes, sheet identities, colours and row-major cell ordering. `nativeConditionalScaleFillPreview(objects, revision, sheetPart, row, column)` returns the colour for one zero-based coordinate, and returns nothing when the supplement does not join the opened package hash.
+
+Colour interpolation is channel-wise in sRGB between the two bounds that surround the value, clamped outside the end bounds; a three-stop scale interpolates each half separately. Percentile bounds use `PERCENTILE.INC` over the range's own numeric values.
+
+This tier changes no source style, recalculates no formula, authorizes no mutation and does not remove the worksheet's `CONDITIONAL_FORMATTING` preservation entry. `dataBar` and `iconSet` rules remain unpainted.
