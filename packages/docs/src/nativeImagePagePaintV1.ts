@@ -437,6 +437,22 @@ export function prepareNativeDocxPagePaintMediaAssetsV1(document: NativeDocxDocu
   return output.sort((left, right) => compareNativeCodeUnits(canonicalPart(left.part_name), canonicalPart(right.part_name)))
 }
 
+/** Insert one canonical media asset into an already canonical resource list,
+ * keeping the list in canonical part-name order. The approximate drawing-shape
+ * painter uses this to transport a picture no `pic:pic` drawing names, after
+ * the unmodified picture qualifier has accepted the shape's fill. Returns false
+ * when the list already carries a different asset for the same part; an
+ * identical asset is already present and nothing changes. */
+export function appendNativeDocxPagePaintResourceV1(resources: NativeDocxPagePaintMediaAssetV1[], asset: NativeDocxPagePaintMediaAssetV1): boolean {
+  const key = canonicalPart(asset.part_name)
+  const existing = resources.find((entry) => canonicalPart(entry.part_name) === key || entry.id === asset.id)
+  if (existing) return JSON.stringify(existing) === JSON.stringify(asset)
+  if (resources.length >= DOCX_INLINE_IMAGE_LIMITS.maxAssets || resources.reduce((total, entry) => total + entry.byte_length, 0) + asset.byte_length > DOCX_INLINE_IMAGE_LIMITS.maxTotalBytes) return false
+  resources.push({ ...asset })
+  resources.sort((left, right) => compareNativeCodeUnits(canonicalPart(left.part_name), canonicalPart(right.part_name)))
+  return true
+}
+
 export function decodeNativeDocxPagePaintMediaAssetsV1(document: NativeDocxDocumentV1, value: unknown): NativeDocxPagePaintMediaAssetV1[] {
   const resources = decodeNativeDocxPagePaintResourceListV1(value)
   const authoritative: NativeDocxAuthoritativeMediaAssetV1[] = resources.map((asset) => ({
