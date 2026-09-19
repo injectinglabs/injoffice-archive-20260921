@@ -316,12 +316,16 @@ func nativeDiagramPointTypeMatches(ptType string, point *nativeDiagramPoint) boo
 // point of the context node, and it is disclosed in the group diagnostic.
 func nativeDiagramSiblingSequence(parent *nativeDiagramPoint) []*nativeDiagramPoint {
 	sequence := make([]*nativeDiagramPoint, 0, len(parent.children)*3)
-	for _, child := range parent.children {
+	for index, child := range parent.children {
 		if child.parTrans != nil {
 			sequence = append(sequence, child.parTrans)
 		}
 		sequence = append(sequence, child)
-		if child.sibTrans != nil {
+		// A sibling transition sits BETWEEN two siblings, so the last child's
+		// sibTrans is not on the axis even though the data model still
+		// records the point. PowerPoint's own cached presentation tree for
+		// chevron1 confirms it: three nodes produce two spacers, not three.
+		if child.sibTrans != nil && index+1 < len(parent.children) {
 			sequence = append(sequence, child.sibTrans)
 		}
 	}
@@ -360,6 +364,7 @@ type nativeDiagramRule struct {
 
 // nativeDiagramPresNode is one evaluated layout node instance.
 type nativeDiagramPresNode struct {
+	evaluator   *nativeDiagramLayoutEvaluator
 	name        string
 	point       *nativeDiagramPoint
 	parent      *nativeDiagramPresNode
@@ -732,7 +737,7 @@ func (evaluator *nativeDiagramLayoutEvaluator) evaluateLayoutNode(node *nativeXM
 		// the matching presentation point; nothing is derived otherwise.
 		styleLbl = evaluator.model.presLabels[context.id+"\x00"+name]
 	}
-	pres := &nativeDiagramPresNode{name: name, point: context, parent: parent, vars: map[string]string{}, params: map[string]string{}, styleLbl: styleLbl, vals: map[string]float64{}}
+	pres := &nativeDiagramPresNode{evaluator: evaluator, name: name, point: context, parent: parent, vars: map[string]string{}, params: map[string]string{}, styleLbl: styleLbl, vals: map[string]float64{}}
 	if parent != nil {
 		parent.children = append(parent.children, pres)
 	}

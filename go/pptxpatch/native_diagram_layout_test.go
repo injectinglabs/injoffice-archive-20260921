@@ -736,3 +736,150 @@ func TestExtractNativePPTXDiagramLayoutPairsSelectionListsWithAxes(t *testing.T)
 		t.Fatalf("cnt=\"1 0\" did not trim the first axis step: %d children, want fewer than %d", trimmed, all)
 	}
 }
+
+// nativeDiagramLinLayoutXML mirrors the chevron1 shape of the lin algorithm:
+// one chevron per top-level node, each asking for the whole frame width and
+// 0.4 of it in height, separated by a spacer that asks for a NEGATIVE tenth of
+// that width so consecutive chevrons interlock.
+func nativeDiagramLinLayoutXML(diagramNS, linDir, align string) string {
+	params := ""
+	if linDir != "" {
+		params += `<dgm:param type="linDir" val="` + linDir + `"/>`
+	}
+	if align != "" {
+		params += `<dgm:param type="nodeVertAlign" val="` + align + `"/>`
+	}
+	return `<dgm:layoutDef xmlns:dgm="` + diagramNS + `" uniqueId="urn:test/lin"><dgm:title val=""/><dgm:desc val=""/><dgm:catLst><dgm:cat type="process" pri="9000"/></dgm:catLst>` +
+		`<dgm:layoutNode name="linRoot"><dgm:alg type="lin">` + params + `</dgm:alg><dgm:shape><dgm:adjLst/></dgm:shape><dgm:presOf/>` +
+		`<dgm:constrLst><dgm:constr type="w" for="ch" forName="linText" refType="w"/>` +
+		`<dgm:constr type="w" for="ch" forName="linSpace" refType="w" refFor="ch" refForName="linText" fact="-0.1"/>` +
+		`<dgm:constr type="primFontSz" for="ch" forName="linText" val="65"/></dgm:constrLst><dgm:ruleLst/>` +
+		`<dgm:forEach name="linLoop" axis="ch" ptType="node">` +
+		`<dgm:layoutNode name="linText" styleLbl="node0"><dgm:alg type="tx"/><dgm:shape type="chevron"><dgm:adjLst/></dgm:shape><dgm:presOf axis="self" ptType="node"/>` +
+		`<dgm:constrLst><dgm:constr type="h" refType="w" op="equ" fact="0.4"/><dgm:constr type="lMarg" refType="primFontSz" fact="0.05"/><dgm:constr type="rMarg" refType="primFontSz" fact="0.05"/><dgm:constr type="tMarg" refType="primFontSz" fact="0.05"/><dgm:constr type="bMarg" refType="primFontSz" fact="0.05"/></dgm:constrLst>` +
+		`<dgm:ruleLst><dgm:rule type="primFontSz" val="5" fact="NaN" max="NaN"/></dgm:ruleLst></dgm:layoutNode>` +
+		`<dgm:forEach name="linSpaceLoop" axis="followSib" ptType="sibTrans" cnt="1">` +
+		`<dgm:layoutNode name="linSpace"><dgm:alg type="sp"/><dgm:shape><dgm:adjLst/></dgm:shape><dgm:presOf/><dgm:constrLst/><dgm:ruleLst/></dgm:layoutNode>` +
+		`</dgm:forEach></dgm:forEach></dgm:layoutNode></dgm:layoutDef>`
+}
+
+// The frame is 6096000 x 4064000 EMU and the data model has two top-level
+// nodes, so the row asks for 6096000 - 609600 + 6096000 = 11582400 EMU and is
+// shrunk by 6096000/11582400 to fit. Only ONE spacer is instantiated: the last
+// sibling has no following sibling, so its sibTrans is not on the axis.
+func TestExtractNativePPTXDiagramLayoutLinPacksAndShrinksARow(t *testing.T) {
+	t.Parallel()
+	deck, err := ExtractNativePPTX(nativeDiagramLayoutFixture(t, nativeDiagramLayoutFixtureOptions{
+		omitDrawingPart: true, layout: nativeDiagramLinLayoutXML(nativeDiagramURITransitional, "fromL", "t"),
+	}), nativeDiagramLayoutApproximateOptions())
+	if err != nil {
+		t.Fatalf("extract linear diagram: %v", err)
+	}
+	group := nativeFixtureDiagramGroup(t, deck.Slides[0])
+	if len(group.Children) != 2 {
+		t.Fatalf("lin row is not two chevrons (the spacer must not paint): %d children", len(group.Children))
+	}
+	want := []NativeTransform{
+		{X: int64Pointer(0), Y: int64Pointer(1390316), Cx: int64Pointer(3208421), Cy: int64Pointer(1283368)},
+		{X: int64Pointer(2887579), Y: int64Pointer(1390316), Cx: int64Pointer(3208421), Cy: int64Pointer(1283368)},
+	}
+	for index, child := range group.Children {
+		if child.Kind != NativeElementKindShape || child.Geometry == nil {
+			t.Fatalf("child %d is not a painted shape: %#v", index, child)
+		}
+		got := child.Transform
+		if *got.X != *want[index].X || *got.Y != *want[index].Y || *got.Cx != *want[index].Cx || *got.Cy != *want[index].Cy {
+			t.Fatalf("chevron %d is at %d,%d %dx%d, want %d,%d %dx%d", index,
+				*got.X, *got.Y, *got.Cx, *got.Cy, *want[index].X, *want[index].Y, *want[index].Cx, *want[index].Cy)
+		}
+	}
+	// The negative spacer makes the second chevron start before the first
+	// one ends, and the shrunk row ends exactly on the frame's right edge.
+	first, second := group.Children[0].Transform, group.Children[1].Transform
+	if *second.X >= *first.X+*first.Cx {
+		t.Fatalf("the negative spacer did not overlap the chevrons: %d vs %d", *second.X, *first.X+*first.Cx)
+	}
+	if *second.X+*second.Cx != *group.Transform.Cx {
+		t.Fatalf("shrunk row does not fill the frame width: %d vs %d", *second.X+*second.Cx, *group.Transform.Cx)
+	}
+}
+
+func TestExtractNativePPTXDiagramLayoutLinRefusesOutsideTheSubset(t *testing.T) {
+	t.Parallel()
+	for _, testCase := range []struct{ name, linDir, align, want string }{
+		{"direction", "fromCenter", "", "diagram linear direction fromCenter is not modeled"},
+		{"alignment", "fromL", "mid", "diagram linear node alignment mid is not modeled"},
+	} {
+		testCase := testCase
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			deck, err := ExtractNativePPTX(nativeDiagramLayoutFixture(t, nativeDiagramLayoutFixtureOptions{
+				omitDrawingPart: true, layout: nativeDiagramLinLayoutXML(nativeDiagramURITransitional, testCase.linDir, testCase.align),
+			}), nativeDiagramLayoutApproximateOptions())
+			if err != nil {
+				t.Fatalf("extract: %v", err)
+			}
+			slide := deck.Slides[0]
+			messages := []string{}
+			for _, diagnostic := range slide.Compatibility.Diagnostics {
+				if diagnostic.Code != nativeDiagramLayoutAlgorithmCode {
+					continue
+				}
+				messages = append(messages, diagnostic.Message)
+			}
+			if slide.Compatibility.Status != NativeCompatibilityStatusRefused || !strings.Contains(strings.Join(messages, "\n"), testCase.want) {
+				t.Fatalf("expected a refusal saying %q, got %v", testCase.want, slide.Compatibility.Diagnostics)
+			}
+		})
+	}
+}
+
+// nativeDiagramLinInCompositeLayoutXML mirrors the tableList shape: a
+// composite that stacks a full-width roof over a lin row of pillars, where the
+// pillar height is assigned by the COMPOSITE (0.63 of the frame) and the
+// pillar width by the pillars node. Shrinking the row to fit must narrow the
+// pillars without shortening them.
+func nativeDiagramLinInCompositeLayoutXML(diagramNS string) string {
+	return `<dgm:layoutDef xmlns:dgm="` + diagramNS + `" uniqueId="urn:test/lincomposite"><dgm:title val=""/><dgm:desc val=""/><dgm:catLst><dgm:cat type="list" pri="9000"/></dgm:catLst>` +
+		`<dgm:layoutNode name="frame"><dgm:alg type="composite"/><dgm:shape><dgm:adjLst/></dgm:shape><dgm:presOf/>` +
+		`<dgm:constrLst><dgm:constr type="w" for="ch" forName="roof" refType="w"/><dgm:constr type="h" for="ch" forName="roof" refType="h" fact="0.3"/>` +
+		`<dgm:constr type="w" for="ch" forName="pillars" refType="w"/><dgm:constr type="h" for="ch" forName="pillars" refType="h" fact="0.63"/><dgm:constr type="t" for="ch" forName="pillars" refType="h" fact="0.3"/>` +
+		`<dgm:constr type="w" for="des" forName="pillar" refType="w"/><dgm:constr type="h" for="des" forName="pillar" refType="h" refFor="ch" refForName="pillars"/>` +
+		`<dgm:constr type="primFontSz" for="des" forName="pillar" val="65"/></dgm:constrLst><dgm:ruleLst/>` +
+		`<dgm:layoutNode name="roof" styleLbl="node0"><dgm:alg type="tx"/><dgm:shape type="rect"><dgm:adjLst/></dgm:shape><dgm:presOf axis="ch" ptType="node" cnt="1"/><dgm:constrLst/><dgm:ruleLst><dgm:rule type="primFontSz" val="5" fact="NaN" max="NaN"/></dgm:ruleLst></dgm:layoutNode>` +
+		`<dgm:layoutNode name="pillars"><dgm:alg type="lin"><dgm:param type="linDir" val="fromL"/></dgm:alg><dgm:shape><dgm:adjLst/></dgm:shape><dgm:presOf/><dgm:constrLst/><dgm:ruleLst/>` +
+		`<dgm:forEach name="pillarLoop" axis="ch" ptType="node">` +
+		`<dgm:layoutNode name="pillar" styleLbl="node0"><dgm:alg type="tx"/><dgm:shape type="rect"><dgm:adjLst/></dgm:shape><dgm:presOf axis="self" ptType="node"/><dgm:constrLst/><dgm:ruleLst><dgm:rule type="primFontSz" val="5" fact="NaN" max="NaN"/></dgm:ruleLst></dgm:layoutNode>` +
+		`</dgm:forEach></dgm:layoutNode></dgm:layoutNode></dgm:layoutDef>`
+}
+
+func TestExtractNativePPTXDiagramLayoutLinKeepsAnAncestorAssignedCrossExtent(t *testing.T) {
+	t.Parallel()
+	deck, err := ExtractNativePPTX(nativeDiagramLayoutFixture(t, nativeDiagramLayoutFixtureOptions{
+		omitDrawingPart: true, layout: nativeDiagramLinInCompositeLayoutXML(nativeDiagramURITransitional),
+	}), nativeDiagramLayoutApproximateOptions())
+	if err != nil {
+		t.Fatalf("extract linear row inside a composite: %v", err)
+	}
+	group := nativeFixtureDiagramGroup(t, deck.Slides[0])
+	if len(group.Children) != 3 {
+		t.Fatalf("expected a roof over two pillars: %d children", len(group.Children))
+	}
+	frameW, frameH := *group.Transform.Cx, *group.Transform.Cy
+	roof := group.Children[0].Transform
+	if *roof.X != 0 || *roof.Y != 0 || *roof.Cx != frameW || *roof.Cy != int64(float64(frameH)*0.3) {
+		t.Fatalf("roof is not the full-width 0.3 band: %#v", roof)
+	}
+	// Two pillars each asked for the whole width, so each is halved. Their
+	// height came from the composite, not from their own width, so it must
+	// survive the shrink at 0.63 of the frame.
+	for index, child := range group.Children[1:] {
+		got := child.Transform
+		if *got.Cx != frameW/2 || *got.Y != int64(float64(frameH)*0.3) || *got.Cy != int64(float64(frameH)*0.63) {
+			t.Fatalf("pillar %d was rescaled instead of narrowed: %#v", index, got)
+		}
+		if *got.X != int64(index)*(frameW/2) {
+			t.Fatalf("pillar %d is not packed end to end: %#v", index, got)
+		}
+	}
+}
