@@ -43,7 +43,8 @@
         "packages/agent-office",
         "packages/agent-tools",
         "packages/collab",
-        "apps/docs"
+        "apps/docs",
+        "apps/desktop"
       ],
       "scripts": ["test:native-office-completion"]
     }

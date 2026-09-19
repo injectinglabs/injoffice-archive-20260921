@@ -139,6 +139,28 @@ func TestApproximateDrawingShapesTextbox(t *testing.T) {
 	}
 }
 
+func TestApproximateDrawingShapesAdmitsDefaultAdjustPolygonPresets(t *testing.T) {
+	base := `<w:drawing xmlns:wp="` + wordDrawingTransitional + `" xmlns:a="` + drawingMLTransitional + `" xmlns:wps="` + nativeTextboxWPS + `">` +
+		nativeApproximateAnchor(`<wp:positionH relativeFrom="page"><wp:posOffset>0</wp:posOffset></wp:positionH>`, `<wp:positionV relativeFrom="page"><wp:posOffset>0</wp:posOffset></wp:positionV>`) +
+		`<a:graphic><a:graphicData uri="` + nativeTextboxWPS + `"><wps:wsp><wps:cNvSpPr/><wps:spPr><a:xfrm rot="0"><a:off x="0" y="0"/><a:ext cx="2998800" cy="2829600"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="112233"/></a:solidFill></wps:spPr><wps:bodyPr/></wps:wsp></a:graphicData></a:graphic></wp:anchor></w:drawing>`
+	for _, preset := range []string{"downArrow", "upArrow", "leftArrow", "rightArrow"} {
+		t.Run(preset, func(t *testing.T) {
+			drawing := strings.Replace(base, `prst="rect"`, `prst="`+preset+`"`, 1)
+			out, err := InspectNativeApproximateDrawingShapesV1(nativeApproximateShapeSource(t, `<w:p><w:r>`+drawing+`</w:r></w:p>`, nil))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if out == nil || len(out.Items) != 1 {
+				t.Fatalf("expected one shape: %#v", out)
+			}
+			item := out.Items[0]
+			if item.Status != "supported" || item.Preset != preset || item.FillRGB == nil || *item.FillRGB != "112233" {
+				t.Fatalf("default-adjust %s must be admitted at its authored extent: %#v", preset, item)
+			}
+		})
+	}
+}
+
 func TestApproximateDrawingShapesOmissions(t *testing.T) {
 	base := `<w:drawing xmlns:wp="` + wordDrawingTransitional + `" xmlns:a="` + drawingMLTransitional + `" xmlns:wps="` + nativeTextboxWPS + `">` +
 		nativeApproximateAnchor(`<wp:positionH relativeFrom="page"><wp:posOffset>0</wp:posOffset></wp:positionH>`, `<wp:positionV relativeFrom="page"><wp:posOffset>0</wp:posOffset></wp:positionV>`) +
@@ -147,6 +169,12 @@ func TestApproximateDrawingShapesOmissions(t *testing.T) {
 		{"ellipse", `prst="rect"`, `prst="ellipse"`, "unsupported-preset:ellipse"},
 		{"adjust values", `<a:avLst/>`, `<a:avLst><a:gd name="adj" fmla="val 1"/></a:avLst>`, "adjust-values"},
 		{"rotation", `<a:xfrm rot="0">`, `<a:xfrm rot="2700000">`, "rotation-unsupported"},
+		// A polygon preset is admitted only at its default geometry and authored
+		// extent: an adjusted, rotated or flipped one keeps its refusal.
+		{"rotated polygon preset", `<a:xfrm rot="0">` + `<a:off x="0" y="0"/><a:ext cx="2998800" cy="2829600"/></a:xfrm><a:prstGeom prst="rect">`, `<a:xfrm rot="2700000">` + `<a:off x="0" y="0"/><a:ext cx="2998800" cy="2829600"/></a:xfrm><a:prstGeom prst="downArrow">`, "rotation-unsupported"},
+		{"flipped polygon preset", `<a:xfrm rot="0">` + `<a:off x="0" y="0"/><a:ext cx="2998800" cy="2829600"/></a:xfrm><a:prstGeom prst="rect">`, `<a:xfrm rot="0" flipH="1">` + `<a:off x="0" y="0"/><a:ext cx="2998800" cy="2829600"/></a:xfrm><a:prstGeom prst="downArrow">`, "flip-unsupported"},
+		{"adjusted polygon preset", `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>`, `<a:prstGeom prst="downArrow"><a:avLst><a:gd name="adj1" fmla="val 30000"/></a:avLst></a:prstGeom>`, "adjust-values"},
+		{"star preset stays refused", `prst="rect"`, `prst="star5"`, "unsupported-preset:star5"},
 		// A group uri whose graphicData does not actually hold a wpg:wgp stays omitted.
 		{"group uri without a group shape", `uri="` + nativeTextboxWPS + `"`, `uri="` + nativeApproximateWPG + `"`, "unsupported-graphic:group-or-multiple"},
 		{"simple position", `simplePos="0"`, `simplePos="1"`, "simple-position-unsupported"},

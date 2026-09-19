@@ -7,6 +7,7 @@ import {
   selectNativeSheetPrintAreaSetV1, compileNativeSheetPrintAreaSetPreviewV1, selectNativeSheetPrintTitleViewportV1,
   compileNativeSheetPrintPagePreviewV1, type NativeSheetPrintPagePreviewV1, type NativeSheetPrintPageBandV1,
   nativeTableFillPreview, nativeTableHeaderTextPreview, nativeTableTotalsTextPreview,
+  nativeConditionalScaleFillPreview, nativeConditionalBarFillPreview,
   selectNativeConditionalFillPreviewV1, type NativeConditionalFillPreviewV1,
   selectNativeRichTextPreviewV1, type NativeRichTextPreviewV1,
   type NativeWorkbookObjectsV1, type NativeSheetGeometryV2, type NativeSheetViewportV2,
@@ -271,11 +272,15 @@ export function NativeSheetPageImages({ workbook, sheet, objects, geometry, plan
     const style = workbook.styles[styleId]?.effective
     const display = nativeSheetPageCellPreview(workbook, cell, objects, sheet.part_name, compactGeneral)
     const conditionalMatch = conditionalMatches.has(`${row.row}:${column.column}`)
-    const fill = conditionalMatch && conditional?.status === 'available' ? conditional.rule.fill : nativeTableFillPreview(objects, workbook.source.package_sha256, sheet.part_name, row.row, column.column, style?.fill, styleId) ?? style?.fill_color ?? '#FFFFFF'
+    // A colour scale paints behind the cell's own fill, so an explicitly
+    // filled or table-styled cell keeps the colour its style already carries.
+    const scale = nativeConditionalScaleFillPreview(objects, workbook.source.package_sha256, sheet.part_name, row.row, column.column)
+    const bar = nativeConditionalBarFillPreview(objects, workbook.source.package_sha256, sheet.part_name, row.row, column.column)
+    const fill = conditionalMatch && conditional?.status === 'available' ? conditional.rule.fill : nativeTableFillPreview(objects, workbook.source.package_sha256, sheet.part_name, row.row, column.column, style?.fill, styleId) ?? style?.fill_color ?? scale ?? '#FFFFFF'
     const header = nativeTableHeaderTextPreview(objects, workbook.source.package_sha256, sheet.part_name, row.row, column.column, style?.fill, styleId)
     const totals = nativeTableTotalsTextPreview(objects, workbook.source.package_sha256, sheet.part_name, row.row, column.column, styleId)
     const rect = merge?.rect ?? { x_emu: column.x_emu, y_emu: row.y_emu, width_emu: column.width_emu, height_emu: row.height_emu }
-    return [{ key: `${row.row}-${column.column}`, row: row.row, column: column.column, rect, style, display, fill, header, totals, conditionalMatch }]
+    return [{ key: `${row.row}-${column.column}`, row: row.row, column: column.column, rect, style, display, fill, header, totals, conditionalMatch, scaleFill: scale !== undefined && fill === scale, bar }]
   }))
   // Excel prints a bottom-aligned cell with the first baseline sitting the
   // font's own descent above the row's bottom edge, not a fixed inset: in Excel
@@ -334,7 +339,11 @@ export function NativeSheetPageImages({ workbook, sheet, objects, geometry, plan
             const right = cell.display.horizontal === 'right', center = cell.display.horizontal === 'center'
             const exactNormal = cell.style?.font_name === workbook.normal_style?.font_name && Boolean(cell.style?.bold) === Boolean(workbook.normal_style?.font_bold) && Boolean(cell.style?.italic) === Boolean(workbook.normal_style?.font_italic)
             return <g key={cell.key}><title>{`${address(cell.row,cell.column)}: ${cell.display.text.slice(0,2048)}${cell.display.warnings.length ? ` — ${cell.display.warnings.join(' ')}` : ''}`}</title>
-              <rect x={x} y={y} width={w} height={h} fill={cell.fill} data-conditional-fill={cell.conditionalMatch ? "true" : undefined}/>
+              <rect x={x} y={y} width={w} height={h} fill={cell.fill} data-conditional-fill={cell.conditionalMatch ? "true" : undefined} data-conditional-scale-fill={cell.scaleFill ? "true" : undefined}/>
+              {cell.bar && <g data-conditional-bar-fill="true">
+                {cell.bar.end_permille > cell.bar.start_permille && <rect x={x + w * cell.bar.start_permille / 1000} y={y} width={w * (cell.bar.end_permille - cell.bar.start_permille) / 1000} height={h} fill={cell.bar.color} {...(cell.bar.border_color ? { stroke: cell.bar.border_color, strokeWidth: 1 } : {})}/>}
+                {cell.bar.axis_permille >= 0 && <rect x={x + w * cell.bar.axis_permille / 1000} y={y} width={1} height={h} fill={cell.bar.axis_color}/>}
+              </g>}
               <clipPath id={id}><rect x={x} y={y} width={w} height={h}/></clipPath>
               <text clipPath={`url(#${id})`} x={right ? x + w - 2 : center ? x + w / 2 : x + 2} y={cell.style?.vertical_alignment === 'top' ? y + size : cell.style?.vertical_alignment === 'middle' ? y + (h + size) / 2 - 2 : y + h - descentPx(size)} textAnchor={right ? 'end' : center ? 'middle' : 'start'} fontFamily={exactNormal ? fontFamily : cell.style?.font_name || 'sans-serif'} fontSize={size} fontWeight={cell.header || cell.totals || cell.style?.bold ? 700 : 400} fontStyle={cell.style?.italic ? 'italic' : 'normal'} fill={cell.header ? '#FFFFFF' : cell.style?.font_color || '#000000'}>{richRuns && richCells.get(address(cell.row, cell.column))?.status === 'available' ? <NativeRichTextSpans entry={richCells.get(address(cell.row, cell.column))!} base={cell.style ?? {}} normal={workbook.normal_style} loadedFont={fontFamily}/> : cell.display.text.slice(0, 2048)}</text>
             </g>
