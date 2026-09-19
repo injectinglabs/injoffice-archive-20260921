@@ -79,7 +79,7 @@ The optional Electron workspace `apps/desktop` is a local editor around the same
 - Unsigned developer previews: GitHub Actions → **Desktop builds** (`desktop.yml`, `workflow_dispatch`) for mac-arm64, mac-x64, win-x64, and linux-x64. Those artifacts must not drive the public updater.
 - Signed public drafts: tag `desktop-v*` and the **Desktop release draft** workflow (`desktop-release.yml`, environment `desktop-release`). Drafts are never auto-published.
 - Keep the desktop WASM snapshot on current `main`; do not freeze a lagging snapshot as the advertised product.
-- Once the workspace has a `test` script, host tests belong in the `core` shard of `scripts/ci-test-shards.json`. Do not treat Electron, TipTap, or Univer as file authority.
+- Host tests for `apps/desktop` belong in the `core` shard of `scripts/ci-test-shards.json`. Do not treat Electron, TipTap, or Univer as file authority.
 - Do not commit `apps/desktop/release/` installer output.
 
 ## Design expectations
