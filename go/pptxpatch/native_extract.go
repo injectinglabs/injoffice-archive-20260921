@@ -1874,8 +1874,18 @@ func (extractor *nativeExtractor) extractTextShape(node *nativeXMLNode, part, sl
 	if err != nil {
 		return NativeElement{}, err
 	}
-	if err := requireOnlyNativeAttrs(spPr); err != nil {
+	// p:spPr/@bwMode (ECMA-376 Part 1 §19.3.1.44, ST_BlackWhiteMode) selects how
+	// the shape is rendered when the application is displaying black and white.
+	// It is the same hint validateNativeAutoShapeProperties and the background
+	// extractor already accept: "auto" and "clr" both mean "paint the object's
+	// own colors", which is what PowerPoint shows in normal view, so neither
+	// changes a pixel. Every restating mode still refuses. Without this a text
+	// box carrying the attribute PowerPoint writes routinely was lost whole.
+	if err := requireOnlyNativeAttrs(spPr, xml.Name{Local: "bwMode"}); err != nil {
 		return NativeElement{}, err
+	}
+	if !nativeNeutralBlackWhiteMode(spPr) {
+		return NativeElement{}, fmt.Errorf("pptxpatch: native extract: text box black-and-white display mode restates its paint")
 	}
 	if err := validateNativeTextBoxShapeProperties(spPr, dialect); err != nil {
 		return NativeElement{}, err

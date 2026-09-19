@@ -2,6 +2,7 @@ package pptxpatch
 
 import (
 	"bytes"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -241,6 +242,71 @@ func TestNativePowerPointAuthoredTextBoxPaintsOnlyInTheApproximateTier(t *testin
 			if _, err := ApplyNativePPTXMutations(original, NativePPTXMutationRequest{ExpectedSourceRevision: *deck.SourceRevision, Operations: []NativePPTXMutation{{OperationID: "replace", Kind: NativePPTXReplaceText, ElementID: element.ID, ExpectedFingerprintSHA256: element.Source.FingerprintSHA256, Paragraphs: &paragraphs}}}); err == nil {
 				t.Fatalf("%s/%v: the read-only approximation accepted a mutation", shape.name, strict)
 			}
+		}
+	}
+}
+
+// p:spPr/@bwMode is the ST_BlackWhiteMode display hint PowerPoint writes
+// routinely -- cshapes.pptx alone carries 202 of them. The AutoShape path and
+// the background extractor already accept the two neutral modes; the text path
+// did not, and lost the whole text box rather than degrading, because the
+// AutoShape fallback cannot rescue a shape the text path declined for an
+// attribute both paths see.
+func TestExtractNativePPTXKeepsTextBoxNeutralBlackWhiteMode(t *testing.T) {
+	t.Parallel()
+	const shape = `<p:sp><p:nvSpPr><p:cNvPr id="9" name="BW Text Box"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr><p:spPr%s><a:xfrm><a:off x="100000" y="200000"/><a:ext cx="2000000" cy="500000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr><p:txBody><a:bodyPr wrap="square" lIns="0" tIns="0" rIns="0" bIns="0" anchor="ctr"/><a:lstStyle/><a:p><a:r><a:rPr lang="en-US" b="0" i="0" sz="1800"><a:solidFill><a:srgbClr val="112233"/></a:solidFill><a:latin typeface="Aptos"/></a:rPr><a:t>Hello</a:t></a:r></a:p></p:txBody></p:sp>`
+	extract := func(t *testing.T, attrs string) NativePPTXDeck {
+		t.Helper()
+		payload := nativeExtractFixture(t, nativeExtractFixtureOptions{mutate: func(parts map[string]string) {
+			parts["relocated/slides/slide-a.xml"] = strings.Replace(parts["relocated/slides/slide-a.xml"], `</p:spTree>`, fmt.Sprintf(shape, attrs)+`</p:spTree>`, 1)
+		}})
+		options := nativeTestExtractOptions()
+		options.AllowSourceFrameAutoFitPreview = true
+		options.AllowInheritedTextPreview = true
+		deck, err := ExtractNativePPTX(payload, options)
+		if err != nil {
+			t.Fatalf("extract with spPr%q: %v", attrs, err)
+		}
+		return deck
+	}
+	find := func(deck NativePPTXDeck) *NativeElement {
+		for index := range deck.Slides[0].Elements {
+			if name := deck.Slides[0].Elements[index].Name; name != nil && *name == "BW Text Box" {
+				return &deck.Slides[0].Elements[index]
+			}
+		}
+		return nil
+	}
+	// The hint must not change the projection at all.
+	plain := find(extract(t, ``))
+	if plain == nil || plain.Kind != NativeElementKindText || plain.TextBody == nil {
+		t.Fatalf("the unmarked text box did not project as text: %#v", plain)
+	}
+	for _, mode := range []string{`auto`, `clr`} {
+		deck := extract(t, ` bwMode="`+mode+`"`)
+		marked := find(deck)
+		if marked == nil {
+			t.Fatalf("bwMode=%q lost the whole text box: %#v", mode, deck.Slides[0].Elements)
+		}
+		if marked.Kind != NativeElementKindText || marked.TextBody == nil {
+			t.Fatalf("bwMode=%q downgraded the text box: %#v", mode, marked)
+		}
+		if marked.TextBody.VerticalAnchor != plain.TextBody.VerticalAnchor || marked.Compatibility.Status != plain.Compatibility.Status {
+			t.Fatalf("bwMode=%q changed the projection: %#v vs %#v", mode, marked.TextBody, plain.TextBody)
+		}
+		if issues := ValidateNativePPTX(deck); len(issues) != 0 {
+			t.Fatalf("invalid deck for bwMode=%q: %#v", mode, issues)
+		}
+	}
+	// A mode that restates the paint is not a no-op and keeps refusing, which
+	// is the policy nativeNeutralBlackWhiteMode already states for AutoShapes.
+	for _, mode := range []string{`gray`, `black`, `white`, `hidden`, `invGray`, `nonsense`} {
+		deck := extract(t, ` bwMode="`+mode+`"`)
+		if marked := find(deck); marked != nil {
+			t.Fatalf("bwMode=%q restates the paint but projected anyway: %#v", mode, marked)
+		}
+		if !nativeDiagnosticsContain(deck.Slides[0].Compatibility.Diagnostics, "pptx.unsupported-shape") {
+			t.Fatalf("bwMode=%q was not disclosed as unsupported: %#v", mode, deck.Slides[0].Compatibility)
 		}
 	}
 }
