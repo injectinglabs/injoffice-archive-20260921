@@ -32,7 +32,8 @@ shape presets map to SVG ellipse/polygon/rect without a canvas. Slide
 duplicate/delete/reorder and grouped preview coordinates live in
 presentationCommands.ts. Align/distribute uses unrotated boxes and keeps
 rotation; spacing keeps the outer objects fixed. SlideArrangePanel is the
-checkbox UI for that selection.
+checkbox UI for that selection. DocumentPreview is the flowing HTML paper
+with per-run contenteditable; Apply is Ctrl/⌘+Enter, Cancel is Escape.
 The rest of the renderer,
 the real Electron dependency, GitHub provider, and packaging workflows land
 in follow-up changes. Preview builds never load an updater.
