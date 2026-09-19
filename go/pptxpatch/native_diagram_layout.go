@@ -27,7 +27,7 @@ const (
 	contentTypeDiagramStyle  = "application/vnd.openxmlformats-officedocument.drawingml.diagramStyle+xml"
 	contentTypeDiagramColors = "application/vnd.openxmlformats-officedocument.drawingml.diagramColors+xml"
 
-	nativeDiagramLayoutGroupMessage = "SmartArt laid out from the diagram data, layout, quick style and color parts (" + nativeDiagramLayoutPolicy + "): composite, lin, hierRoot, hierChild, sp, tx and conn evaluated from the layout definition (ECMA-376 §21.4). Declared approximations: uniform fit-to-frame scaling and centering; lin packs children along linDir, cross-aligned by nodeVertAlign/nodeHorzAlign (ctr default), spacers counting along the packing axis only, and an overrunning row is shrunk by re-solving each child's own constrLst over a proportional share of the extent (the §21.4.2.24 relaxation), so what a child derives from its own extent follows and what an ancestor assigned across the axis stays; hierRoot stacks assistant blocks above regular children, bCtrCh default, alignOff as a fraction of the root width, hierAlign tL/tR laid out as hanging blocks below the root (deviating from §21.4.7.36); hanging trunk gap sibSp/2; sibling subtrees packed by painted contour, every painted pair still clearing sibSp; connectors as right-angle bends to the nearest offered end site, bending at the midpoint without bendDist; text fitted with an average-advance model (0.5 em per glyph, 1.2 line height); siblings ordered [parTrans, node, sibTrans], the last sibling contributing no trailing sibTrans; maxDepth relative to the context point and depth from the first selected point; constraint references read the first referenced node; unconsumed constraint types refuse; budgets 256 points, depth 32, 2048 presentation nodes, 65536 selections, 4096 constraint evaluations. Cached presOf/presParOf connections are skipped while authored presStyleLbl and presLayoutVars are honored; effects, 3D and image fills are omitted; the frame remains read-only"
+	nativeDiagramLayoutGroupMessage = "SmartArt laid out from the diagram data, layout, style and colour parts (" + nativeDiagramLayoutPolicy + "): composite, lin, snake, hierRoot, hierChild, sp, tx and conn from the layout definition (ECMA-376 §21.4). Declared approximations. FIT: scaled uniformly to the frame and centred. PAINT: dgm:bg fills behind every shape; dgm:adj and dgm:shape@rot are applied; a colour at zero alpha paints nothing, a partly transparent one paints opaque; effects, 3D and image fills are omitted. LIN: children packed along linDir, cross-aligned by nodeVertAlign/nodeHorzAlign (ctr default), spacers counting along that axis only; an overrunning line shrinks by re-solving each child's constrLst over a proportional share of the extent (§21.4.2.24), so values along that axis follow and the other stays. SNAKE: whole lines, broken where the packed grid is closest in aspect to the node, a DEVIATION from ST_BreakpointType. HIERROOT: assistants above regular children, bCtrCh default, alignOff a fraction of root width, hierAlign tL/tR laid out as hanging blocks below the root (deviating from §21.4.7.36), trunk gap sibSp/2. HIERCHILD: subtrees packed by painted contour, each painted pair clearing sibSp. CONN: right-angle bends to the nearest end site, midpoint bend without bendDist. TX: average-advance fitting, 0.5 em per glyph, 1.2 line height. CONSTRAINTS: font sizes and margins are in points, converted to EMU when an extent references them; a bare constraint declares the default without erasing a value; a reference selecting nothing is inert; an unmodeled relationship or type refuses; maxDepth is relative to the context point, depth from the first selected point, pos/revPos count sibling data nodes; siblings run [parTrans, node, sibTrans], the last without a sibTrans. Budgets 256 points, depth 32, 2048 nodes, 65536 selections, 4096 constraints. Cached presOf/presParOf is skipped; authored presStyleLbl and presLayoutVars are honored; the frame stays read-only"
 	nativeDiagramLayoutChildMessage = "diagram element positioned by the approximate layout evaluation (" + nativeDiagramLayoutPolicy + "); target remains read-only"
 )
 
@@ -114,12 +114,12 @@ func nativeDiagramStyleLabels(root *nativeXMLNode, diagramNS string) map[string]
 // nativeDiagramColorAt applies ST_ClrAppMethod (§21.4.7.16) to pick the
 // color for the index-th node of a style label. span needs interpolation and
 // is only accepted for a single color.
-func nativeDiagramColorAt(list *nativeXMLNode, index, count int, dialect nativeExtractDialect, theme nativeResolvedTheme) (string, bool, error) {
+func nativeDiagramColorAt(list *nativeXMLNode, index, count int, dialect nativeExtractDialect, theme nativeResolvedTheme) (string, bool, bool, error) {
 	if list == nil || len(list.Children) == 0 {
-		return "", false, nil
+		return "", false, false, nil
 	}
 	if requireOnlyNativeAttrs(list, xml.Name{Local: "meth"}, xml.Name{Local: "hueDir"}) != nil {
-		return "", false, refuseNativeDiagram(nativeDiagramLayoutStyleCode, "diagram color list carries unknown attributes")
+		return "", false, false, refuseNativeDiagram(nativeDiagramLayoutStyleCode, "diagram color list carries unknown attributes")
 	}
 	colors := list.Children
 	method, _ := exactNativeAttr(list, "", "meth")
@@ -137,17 +137,58 @@ func nativeDiagramColorAt(list *nativeXMLNode, index, count int, dialect nativeE
 		}
 	case "span":
 		if len(colors) > 1 {
-			return "", false, refuseNativeDiagram(nativeDiagramLayoutStyleCode, "diagram spanning color interpolation is not approximated")
+			return "", false, false, refuseNativeDiagram(nativeDiagramLayoutStyleCode, "diagram spanning color interpolation is not approximated")
 		}
 	default:
-		return "", false, refuseNativeDiagram(nativeDiagramLayoutStyleCode, "diagram color application method "+method+" is unknown")
+		return "", false, false, refuseNativeDiagram(nativeDiagramLayoutStyleCode, "diagram color application method "+method+" is unknown")
 	}
-	wrapper := &nativeXMLNode{Name: xml.Name{Space: dialect.drawing, Local: "solidFill"}, Children: []*nativeXMLNode{colors[position]}}
+	entry, alpha, err := nativeDiagramOpaqueColor(colors[position], dialect)
+	if err != nil {
+		return "", false, false, err
+	}
+	if alpha == 0 {
+		// A fully transparent list entry paints nothing. That is a decision
+		// the list made, not a gap in it, so the style resolves with no
+		// color for that matrix reference instead of refusing the frame.
+		return "", false, true, nil
+	}
+	wrapper := &nativeXMLNode{Name: xml.Name{Space: dialect.drawing, Local: "solidFill"}, Children: []*nativeXMLNode{entry}}
 	color, err := exactNativeSolidColor(wrapper, dialect, theme)
 	if err != nil {
-		return "", false, refuseNativeDiagram(nativeDiagramLayoutStyleCode, "diagram color list requires exact sRGB or documented theme colors")
+		return "", false, true, refuseNativeDiagram(nativeDiagramLayoutStyleCode, "diagram color list requires exact sRGB or documented theme colors")
 	}
-	return color, true, nil
+	return color, true, true, nil
+}
+
+// nativeDiagramOpaqueColor splits a color list entry (§21.4.5) into the color
+// without its a:alpha transforms and the resulting opacity in thousandths of
+// a percent. The native contract carries an opaque sRGB triple, so a
+// partially transparent list entry is painted at full opacity under this
+// approximate tier, which the group diagnostic declares; a fully transparent
+// one paints nothing, which IS representable and must not become a solid box.
+// alphaMod and alphaOff are not folded in and still refuse downstream.
+func nativeDiagramOpaqueColor(entry *nativeXMLNode, dialect nativeExtractDialect) (*nativeXMLNode, int64, error) {
+	alpha := nativePositiveFixedPct
+	kept := make([]*nativeXMLNode, 0, len(entry.Children))
+	for _, child := range entry.Children {
+		if child.Name != (xml.Name{Space: dialect.drawing, Local: "alpha"}) {
+			kept = append(kept, child)
+			continue
+		}
+		value, ok := exactNativeAttr(child, "", "val")
+		if !ok {
+			return nil, 0, refuseNativeDiagram(nativeDiagramLayoutStyleCode, "diagram color list alpha transform has no value")
+		}
+		percent, parseErr := strconv.ParseInt(value, 10, 64)
+		if parseErr != nil || percent < 0 || percent > nativePositiveFixedPct {
+			return nil, 0, refuseNativeDiagram(nativeDiagramLayoutStyleCode, "diagram color list alpha transform is out of range")
+		}
+		alpha = nativeRoundDiv(alpha*percent, nativePositiveFixedPct)
+	}
+	if len(kept) == len(entry.Children) {
+		return entry, alpha, nil
+	}
+	return &nativeXMLNode{Name: entry.Name, Attrs: entry.Attrs, Children: kept}, alpha, nil
 }
 
 // resolveNativeDiagramLayoutStyle joins the quick style matrix references with
@@ -189,15 +230,15 @@ func (extractor *nativeExtractor) resolveNativeDiagramLayoutStyle(label string, 
 	if err != nil {
 		return refuse("theme has no format scheme")
 	}
-	fillColor, hasFill, err := nativeDiagramColorAt(nativeChild(colors, diagramNS, "fillClrLst"), index, count, dialect, extractor.theme)
+	fillColor, hasFill, fillListed, err := nativeDiagramColorAt(nativeChild(colors, diagramNS, "fillClrLst"), index, count, dialect, extractor.theme)
 	if err != nil {
 		return result, err
 	}
-	lineColor, hasLine, err := nativeDiagramColorAt(nativeChild(colors, diagramNS, "linClrLst"), index, count, dialect, extractor.theme)
+	lineColor, hasLine, lineListed, err := nativeDiagramColorAt(nativeChild(colors, diagramNS, "linClrLst"), index, count, dialect, extractor.theme)
 	if err != nil {
 		return result, err
 	}
-	textColor, hasText, err := nativeDiagramColorAt(nativeChild(colors, diagramNS, "txFillClrLst"), index, count, dialect, extractor.theme)
+	textColor, hasText, _, err := nativeDiagramColorAt(nativeChild(colors, diagramNS, "txFillClrLst"), index, count, dialect, extractor.theme)
 	if err != nil {
 		return result, err
 	}
@@ -206,7 +247,8 @@ func (extractor *nativeExtractor) resolveNativeDiagramLayoutStyle(label string, 
 		ref, list string
 		color     string
 		hasColor  bool
-	}{{"fillRef", "fillStyleLst", fillColor, hasFill}, {"lnRef", "lnStyleLst", lineColor, hasLine}} {
+		listed    bool
+	}{{"fillRef", "fillStyleLst", fillColor, hasFill, fillListed}, {"lnRef", "lnStyleLst", lineColor, hasLine, lineListed}} {
 		value, _ := exactNativeAttr(refs[item.ref], "", "idx")
 		if value == "0" {
 			continue
@@ -221,6 +263,11 @@ func (extractor *nativeExtractor) resolveNativeDiagramLayoutStyle(label string, 
 		}
 		entry := list.Children[selected-1]
 		if !item.hasColor {
+			if item.listed {
+				// The color transform listed a fully transparent entry for
+				// this reference, so it paints nothing.
+				continue
+			}
 			return refuse("diagram color transform defines no color for the " + item.ref + " matrix entry")
 		}
 		colored, err := nativeStylePlaceholderColor(entry, dialect, item.color)
@@ -452,7 +499,7 @@ func (extractor *nativeExtractor) extractNativeDiagramLayoutGraphicFrame(node, g
 		words[current] = paragraphs
 		maximum := current.value("primFontSz", nativeDiagramDefaultPrimFontSizePt)
 		minimum := maximum
-		for _, rule := range current.rules {
+		for _, rule := range current.appliedRules {
 			if rule.typ == "primFontSz" && rule.val > 0 {
 				minimum = rule.val
 			}
@@ -492,7 +539,30 @@ func (extractor *nativeExtractor) extractNativeDiagramLayoutGraphicFrame(node, g
 		return NativeElement{}, err
 	}
 	fingerprint := nativeSHA256(raw)
-	children := make([]NativeElement, 0, len(items))
+	children := make([]NativeElement, 0, len(items)+1)
+	if model.background != nil {
+		// The diagram background fills the whole frame behind every shape
+		// (§21.4.3.2). It is source-backed paint, not layout.
+		color, colorErr := exactNativeSolidColor(model.background, dialect, extractor.theme)
+		if colorErr != nil {
+			return NativeElement{}, refuseNativeDiagram(nativeDiagramLayoutStyleCode, "diagram background requires one exact sRGB or documented theme color")
+		}
+		backdrop := &nativeDiagramLayoutItem{node: &nativeDiagramPresNode{name: "background"}, order: -1}
+		element, elementErr := extractor.nativeDiagramLayoutElementBase(NativeElementKindShape, slidePart, slideID, objectID, fingerprint, backdrop)
+		if elementErr != nil {
+			return NativeElement{}, elementErr
+		}
+		geometry, geometryErr := EvaluateNativePPTXPresetGeometry("rect", *transform.Cx, *transform.Cy, nil)
+		if geometryErr != nil || geometry == nil {
+			return NativeElement{}, refuseNativeDiagram(nativeDiagramLayoutGeometryCode, "diagram background rectangle is outside the evaluated profile")
+		}
+		element.Transform = NativeTransform{X: int64Pointer(0), Y: int64Pointer(0), Cx: int64Pointer(*transform.Cx), Cy: int64Pointer(*transform.Cy)}
+		element.Geometry = geometry
+		element.Fill = stringPointer(color)
+		paragraphs := []NativeParagraph{}
+		element.Paragraphs = &paragraphs
+		children = append(children, element)
+	}
 	for _, item := range items {
 		child, childErr := extractor.emitNativeDiagramLayoutItem(item, fit, words[item.node], slidePart, slideID, objectID, fingerprint, dialect)
 		if childErr != nil {
@@ -579,7 +649,7 @@ func (extractor *nativeExtractor) emitNativeDiagramLayoutItem(item *nativeDiagra
 	if cx <= 0 || cy <= 0 {
 		return nil, nil
 	}
-	geometry, err := EvaluateNativePPTXPresetGeometry(current.shapeType, cx, cy, nil)
+	geometry, err := EvaluateNativePPTXPresetGeometry(current.shapeType, cx, cy, current.adjust)
 	if err != nil || geometry == nil {
 		return nil, refuseNativeDiagram(nativeDiagramLayoutGeometryCode, "diagram layout shape preset "+current.shapeType+" is outside the evaluated profile")
 	}
@@ -588,6 +658,9 @@ func (extractor *nativeExtractor) emitNativeDiagramLayoutItem(item *nativeDiagra
 		return nil, err
 	}
 	element.Transform = NativeTransform{X: int64Pointer(x), Y: int64Pointer(y), Cx: int64Pointer(cx), Cy: int64Pointer(cy)}
+	if current.rotation60000 != 0 {
+		element.Transform.RotationAngle = int64Pointer(current.rotation60000)
+	}
 	element.Geometry = geometry
 	element.Fill = item.style.fill
 	element.Stroke = item.style.stroke
@@ -732,6 +805,9 @@ func (extractor *nativeExtractor) emitNativeDiagramLayoutConnector(item *nativeD
 		return nil, err
 	}
 	element.Transform = NativeTransform{X: int64Pointer(x), Y: int64Pointer(y), Cx: int64Pointer(cx), Cy: int64Pointer(cy)}
+	if current.rotation60000 != 0 {
+		element.Transform.RotationAngle = int64Pointer(current.rotation60000)
+	}
 	element.Geometry = &NativeEvaluatedGeometry{
 		Profile:  "drawingml-paths-v1",
 		TextRect: NativeGeometryTextRect{X: 0, Y: 0, CX: cx, CY: cy},

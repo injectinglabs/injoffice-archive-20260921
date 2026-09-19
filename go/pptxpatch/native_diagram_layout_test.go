@@ -573,9 +573,11 @@ func TestExtractNativePPTXDiagramLayoutRefusesReviewedAdversarialInputs(t *testi
 		t.Fatal("layout fixture drifted")
 	}
 	assertNativeDiagramLayoutRefused(t, nativeDiagramLayoutFixtureOptions{layout: nested}, nativeDiagramLayoutAlgorithmCode)
-	// Constraint types the subset does not consume, and rules aimed at other nodes.
+	// Constraint types the subset does not consume, rule relationships it
+	// cannot resolve, and extent rules that bound the relaxation.
 	assertNativeDiagramLayoutRefused(t, nativeDiagramLayoutFixtureOptions{layout: strings.Replace(layout, `<dgm:constr type="alignOff"/>`, `<dgm:constr type="alignOff"/><dgm:constr type="wOff" val="10"/>`, 1)}, nativeDiagramLayoutConstraintCode)
-	assertNativeDiagramLayoutRefused(t, nativeDiagramLayoutFixtureOptions{layout: strings.Replace(layout, `<dgm:rule type="primFontSz" val="5" fact="NaN" max="NaN"/>`, `<dgm:rule type="primFontSz" for="ch" forName="rootText1" val="5" fact="NaN" max="NaN"/>`, 1)}, nativeDiagramLayoutConstraintCode)
+	assertNativeDiagramLayoutRefused(t, nativeDiagramLayoutFixtureOptions{layout: strings.Replace(layout, `<dgm:rule type="primFontSz" val="5" fact="NaN" max="NaN"/>`, `<dgm:rule type="primFontSz" for="ancst" val="5" fact="NaN" max="NaN"/>`, 1)}, nativeDiagramLayoutConstraintCode)
+	assertNativeDiagramLayoutRefused(t, nativeDiagramLayoutFixtureOptions{layout: strings.Replace(layout, `<dgm:rule type="primFontSz" val="5" fact="NaN" max="NaN"/>`, `<dgm:rule type="w" val="1200" fact="NaN" max="NaN"/>`, 1)}, nativeDiagramLayoutConstraintCode)
 }
 
 func TestExtractNativePPTXDiagramLayoutHiddenConnectorsAreNotEmitted(t *testing.T) {
@@ -881,5 +883,268 @@ func TestExtractNativePPTXDiagramLayoutLinKeepsAnAncestorAssignedCrossExtent(t *
 		if *got.X != int64(index)*(frameW/2) {
 			t.Fatalf("pillar %d is not packed end to end: %#v", index, got)
 		}
+	}
+}
+
+// A rule carries the same for/forName/ptType aim a constraint does: the
+// process and list layouts bound the primary font size of every descendant
+// text node from their root, and that bound must reach those nodes.
+func TestExtractNativePPTXDiagramLayoutRulesReachTheirTargets(t *testing.T) {
+	t.Parallel()
+	layout := nativeDiagramLinLayoutXML(nativeDiagramURITransitional, "fromL", "t")
+	aimed := strings.Replace(layout,
+		`<dgm:ruleLst><dgm:rule type="primFontSz" val="5" fact="NaN" max="NaN"/></dgm:ruleLst>`,
+		`<dgm:ruleLst/>`, 1)
+	aimed = strings.Replace(aimed, `<dgm:constr type="primFontSz" for="ch" forName="linText" val="65"/></dgm:constrLst><dgm:ruleLst/>`,
+		`<dgm:constr type="primFontSz" for="ch" forName="linText" val="65"/></dgm:constrLst>`+
+			`<dgm:ruleLst><dgm:rule type="primFontSz" for="ch" forName="linText" val="5" fact="NaN" max="NaN"/></dgm:ruleLst>`, 1)
+	if aimed == layout || strings.Contains(aimed, `<dgm:rule type="primFontSz" val="5"`) {
+		t.Fatal("lin layout fixture drifted")
+	}
+	self, err := ExtractNativePPTX(nativeDiagramLayoutFixture(t, nativeDiagramLayoutFixtureOptions{omitDrawingPart: true, layout: layout}), nativeDiagramLayoutApproximateOptions())
+	if err != nil {
+		t.Fatalf("extract with a self-aimed rule: %v", err)
+	}
+	aimedDeck, err := ExtractNativePPTX(nativeDiagramLayoutFixture(t, nativeDiagramLayoutFixtureOptions{omitDrawingPart: true, layout: aimed}), nativeDiagramLayoutApproximateOptions())
+	if err != nil {
+		t.Fatalf("extract with an aimed rule: %v", err)
+	}
+	want := nativeDiagramLayoutFontSizes(t, nativeFixtureDiagramGroup(t, self.Slides[0]))
+	got := nativeDiagramLayoutFontSizes(t, nativeFixtureDiagramGroup(t, aimedDeck.Slides[0]))
+	if len(want) == 0 || fmt.Sprint(want) != fmt.Sprint(got) {
+		t.Fatalf("a rule aimed from the root did not bound the same sizes as the same rule on the node: %v vs %v", got, want)
+	}
+}
+
+func nativeDiagramLayoutFontSizes(t *testing.T, group NativeElement) []int64 {
+	t.Helper()
+	sizes := []int64{}
+	for _, child := range group.Children {
+		if child.Paragraphs == nil {
+			continue
+		}
+		for _, paragraph := range *child.Paragraphs {
+			for _, run := range paragraph.Runs {
+				if run.FontSizeHundredthPt != nil {
+					sizes = append(sizes, *run.FontSizeHundredthPt)
+				}
+			}
+		}
+	}
+	return sizes
+}
+
+// nativeDiagramUnitsLayoutXML sizes a band from the primary font size, the
+// way the list layouts do: h = 0.8 x primFontSz. The font size is in points
+// and the band is in EMU, so the two have to be converted across.
+func nativeDiagramUnitsLayoutXML(diagramNS, extra string) string {
+	return `<dgm:layoutDef xmlns:dgm="` + diagramNS + `" uniqueId="urn:test/units"><dgm:title val=""/><dgm:desc val=""/><dgm:catLst><dgm:cat type="list" pri="9000"/></dgm:catLst>` +
+		`<dgm:layoutNode name="unitsRoot"><dgm:alg type="lin"><dgm:param type="linDir" val="fromT"/></dgm:alg><dgm:shape><dgm:adjLst/></dgm:shape><dgm:presOf/>` +
+		`<dgm:constrLst><dgm:constr type="w" for="ch" forName="band" refType="w"/>` +
+		`<dgm:constr type="primFontSz" for="ch" forName="band" val="20"/>` +
+		`<dgm:constr type="h" for="ch" forName="band" refType="primFontSz" refFor="ch" refForName="band" fact="0.8"/>` +
+		`<dgm:constr type="userH" for="ch" forName="band" refType="h" refFor="ch" refForName="band"/></dgm:constrLst><dgm:ruleLst/>` +
+		`<dgm:forEach name="unitsLoop" axis="ch" ptType="node">` +
+		`<dgm:layoutNode name="band" styleLbl="node0"><dgm:alg type="tx"/><dgm:shape type="rect"><dgm:adjLst/></dgm:shape><dgm:presOf axis="self" ptType="node"/>` +
+		`<dgm:constrLst>` + extra + `</dgm:constrLst><dgm:ruleLst><dgm:rule type="primFontSz" val="5" fact="NaN" max="NaN"/></dgm:ruleLst></dgm:layoutNode>` +
+		`</dgm:forEach></dgm:layoutNode></dgm:layoutDef>`
+}
+
+func nativeDiagramLayoutBandHeights(t *testing.T, layout string) []int64 {
+	t.Helper()
+	deck, err := ExtractNativePPTX(nativeDiagramLayoutFixture(t, nativeDiagramLayoutFixtureOptions{omitDrawingPart: true, layout: layout}), nativeDiagramLayoutApproximateOptions())
+	if err != nil {
+		t.Fatalf("extract: %v", err)
+	}
+	heights := []int64{}
+	for _, child := range nativeFixtureDiagramGroup(t, deck.Slides[0]).Children {
+		heights = append(heights, *child.Transform.Cy)
+	}
+	return heights
+}
+
+// 20 pt x 0.8 is 16 pt, which is 203200 EMU. Read as EMU it is 16 EMU: a
+// hairline that rounds to nothing, which is exactly how the list decks
+// rendered.
+func TestExtractNativePPTXDiagramLayoutConvertsFontSizedExtentsToEMU(t *testing.T) {
+	t.Parallel()
+	for _, height := range nativeDiagramLayoutBandHeights(t, nativeDiagramUnitsLayoutXML(nativeDiagramURITransitional, "")) {
+		if height != 203_200 {
+			t.Fatalf("a band of 0.8 x 20 pt is %d EMU, want 203200", height)
+		}
+	}
+}
+
+// <constr type="h"/> declares the type with the schema default of 0; it does
+// not erase a height an earlier constraint established. The list layouts
+// declare userH on a node their root has already given one and then read it
+// back, so assigning 0 collapses every box.
+func TestExtractNativePPTXDiagramLayoutBareConstraintDoesNotEraseAValue(t *testing.T) {
+	t.Parallel()
+	declared := nativeDiagramLayoutBandHeights(t, nativeDiagramUnitsLayoutXML(nativeDiagramURITransitional, `<dgm:constr type="userH"/><dgm:constr type="h" refType="userH"/>`))
+	plain := nativeDiagramLayoutBandHeights(t, nativeDiagramUnitsLayoutXML(nativeDiagramURITransitional, ""))
+	if len(declared) == 0 || fmt.Sprint(declared) != fmt.Sprint(plain) {
+		t.Fatalf("re-declaring userH changed the layout: %v vs %v", declared, plain)
+	}
+	// A bare constraint on a type nothing has set still establishes the
+	// schema default of 0, which collapses the band and refuses.
+	assertNativeDiagramLayoutRefused(t, nativeDiagramLayoutFixtureOptions{
+		omitDrawingPart: true,
+		layout:          nativeDiagramUnitsLayoutXML(nativeDiagramURITransitional, `<dgm:constr type="userA"/><dgm:constr type="h" refType="userA"/>`),
+	}, nativeDiagramLayoutGeometryCode)
+}
+
+// A colour list entry at zero alpha paints nothing rather than a solid box;
+// a partially transparent one is painted opaque under this approximate tier.
+func TestExtractNativePPTXDiagramLayoutColorListAlpha(t *testing.T) {
+	t.Parallel()
+	fills := func(alpha string) []string {
+		t.Helper()
+		colors := strings.Replace(nativeDiagramLayoutColorsXML(nativeDiagramURITransitional, nsDrawingTransitional),
+			`<dgm:fillClrLst meth="repeat"><a:schemeClr val="accent1"/></dgm:fillClrLst>`,
+			`<dgm:fillClrLst meth="repeat"><a:schemeClr val="accent1">`+alpha+`</a:schemeClr></dgm:fillClrLst>`, -1)
+		if alpha != "" && colors == nativeDiagramLayoutColorsXML(nativeDiagramURITransitional, nsDrawingTransitional) {
+			t.Fatal("colors fixture drifted")
+		}
+		deck, err := ExtractNativePPTX(nativeDiagramLayoutFixture(t, nativeDiagramLayoutFixtureOptions{omitDrawingPart: true, colors: colors}), nativeDiagramLayoutApproximateOptions())
+		if err != nil {
+			t.Fatalf("extract: %v", err)
+		}
+		out := []string{}
+		for _, child := range nativeFixtureDiagramGroup(t, deck.Slides[0]).Children {
+			if child.Kind != NativeElementKindShape {
+				continue
+			}
+			if child.Fill == nil {
+				out = append(out, "none")
+				continue
+			}
+			out = append(out, *child.Fill)
+		}
+		return out
+	}
+	opaque := fills("")
+	if len(opaque) == 0 || opaque[0] == "none" {
+		t.Fatalf("baseline diagram painted no fill: %v", opaque)
+	}
+	if partial := fills(`<a:alpha val="90000"/>`); fmt.Sprint(partial) != fmt.Sprint(opaque) {
+		t.Fatalf("a 90%% alpha entry did not paint its opaque colour: %v vs %v", partial, opaque)
+	}
+	for _, fill := range fills(`<a:alpha val="0"/>`) {
+		if fill != "none" {
+			t.Fatalf("a fully transparent entry painted %s", fill)
+		}
+	}
+}
+
+// A data point may carry an effects-only spPr: effects are already outside
+// the painted subset, so the layout is the same as an unstyled point's. A
+// fill, line or geometry override still refuses.
+func TestExtractNativePPTXDiagramLayoutAdmitsEffectsOnlyPointOverrides(t *testing.T) {
+	t.Parallel()
+	data := nativeDiagramLayoutDataXML(nativeDiagramURITransitional, nsDrawingTransitional, "", "", "")
+	shadow := strings.Replace(data, `<dgm:spPr/>`, `<dgm:spPr><a:effectLst><a:outerShdw blurRad="50800" dist="38100"><a:prstClr val="black"><a:alpha val="40000"/></a:prstClr></a:outerShdw></a:effectLst></dgm:spPr>`, -1)
+	if shadow == data {
+		t.Fatal("data fixture drifted")
+	}
+	deck, err := ExtractNativePPTX(nativeDiagramLayoutFixture(t, nativeDiagramLayoutFixtureOptions{omitDrawingPart: true, dataXML: shadow}), nativeDiagramLayoutApproximateOptions())
+	if err != nil {
+		t.Fatalf("extract shadowed points: %v", err)
+	}
+	plain, err := ExtractNativePPTX(nativeDiagramLayoutFixture(t, nativeDiagramLayoutFixtureOptions{omitDrawingPart: true}), nativeDiagramLayoutApproximateOptions())
+	if err != nil {
+		t.Fatalf("extract plain points: %v", err)
+	}
+	got, want := nativeFixtureDiagramGroup(t, deck.Slides[0]), nativeFixtureDiagramGroup(t, plain.Slides[0])
+	if len(got.Children) == 0 || len(got.Children) != len(want.Children) {
+		t.Fatalf("an effects-only override changed the layout: %d vs %d children", len(got.Children), len(want.Children))
+	}
+	fill := strings.Replace(data, `<dgm:spPr/>`, `<dgm:spPr><a:solidFill><a:srgbClr val="FF0000"/></a:solidFill></dgm:spPr>`, 1)
+	assertNativeDiagramLayoutRefused(t, nativeDiagramLayoutFixtureOptions{dataXML: fill}, nativeDiagramLayoutDataCode)
+}
+
+// nativeDiagramSnakeLayoutXML mirrors the block-list shape: every item asks
+// for the WHOLE diagram extent and leaves the wrapping to the algorithm.
+func nativeDiagramSnakeLayoutXML(diagramNS, growth, flow, continuation string) string {
+	return `<dgm:layoutDef xmlns:dgm="` + diagramNS + `" uniqueId="urn:test/snake"><dgm:title val=""/><dgm:desc val=""/><dgm:catLst><dgm:cat type="list" pri="9000"/></dgm:catLst>` +
+		`<dgm:layoutNode name="snakeRoot"><dgm:alg type="snake"><dgm:param type="grDir" val="` + growth + `"/><dgm:param type="flowDir" val="` + flow + `"/><dgm:param type="contDir" val="` + continuation + `"/><dgm:param type="off" val="ctr"/></dgm:alg>` +
+		`<dgm:shape><dgm:adjLst/></dgm:shape><dgm:presOf/>` +
+		`<dgm:constrLst><dgm:constr type="w" for="ch" forName="cell" refType="w"/>` +
+		`<dgm:constr type="h" for="ch" forName="cell" refType="w" refFor="ch" refForName="cell" fact="0.6"/>` +
+		`<dgm:constr type="primFontSz" for="ch" forName="cell" op="equ" val="65"/></dgm:constrLst><dgm:ruleLst/>` +
+		`<dgm:forEach name="snakeLoop" axis="ch" ptType="node">` +
+		`<dgm:layoutNode name="cell" styleLbl="node0"><dgm:alg type="tx"/><dgm:shape type="rect"><dgm:adjLst/></dgm:shape><dgm:presOf axis="desOrSelf" ptType="node"/>` +
+		`<dgm:constrLst/><dgm:ruleLst><dgm:rule type="primFontSz" val="5" fact="NaN" max="NaN"/></dgm:ruleLst></dgm:layoutNode>` +
+		`</dgm:forEach></dgm:layoutNode></dgm:layoutDef>`
+}
+
+// The fixture's document point has four top-level children, so a 3:2 frame
+// wraps them into two rows of two -- not four rows of one, which is what a
+// literal end-of-canvas break gives when every item asks for the whole width.
+func TestExtractNativePPTXDiagramLayoutSnakeWrapsIntoAGrid(t *testing.T) {
+	t.Parallel()
+	data := nativeDiagramLayoutDataXML(nativeDiagramURITransitional, nsDrawingTransitional, "",
+		nativeDiagramLayoutPointXML("{T3}", "", "Third")+nativeDiagramLayoutPointXML("{T4}", "", "Fourth"),
+		`<dgm:cxn modelId="{CT3}" srcId="{DOC}" destId="{T3}" srcOrd="2" destOrd="0"/><dgm:cxn modelId="{CT4}" srcId="{DOC}" destId="{T4}" srcOrd="3" destOrd="0"/>`)
+	cells := func(growth string) []NativeTransform {
+		t.Helper()
+		deck, err := ExtractNativePPTX(nativeDiagramLayoutFixture(t, nativeDiagramLayoutFixtureOptions{
+			omitDrawingPart: true, dataXML: data, layout: nativeDiagramSnakeLayoutXML(nativeDiagramURITransitional, growth, "row", "sameDir"),
+		}), nativeDiagramLayoutApproximateOptions())
+		if err != nil {
+			t.Fatalf("extract snake diagram: %v", err)
+		}
+		out := []NativeTransform{}
+		for _, child := range nativeFixtureDiagramGroup(t, deck.Slides[0]).Children {
+			out = append(out, child.Transform)
+		}
+		return out
+	}
+	grid := cells("tL")
+	if len(grid) != 4 {
+		t.Fatalf("expected four wrapped cells: %d", len(grid))
+	}
+	columns, rows := map[int64]bool{}, map[int64]bool{}
+	for _, cell := range grid {
+		columns[*cell.X] = true
+		rows[*cell.Y] = true
+	}
+	if len(columns) != 2 || len(rows) != 2 {
+		t.Fatalf("snake did not wrap into a 2x2 grid: %d columns, %d rows", len(columns), len(rows))
+	}
+	// grDir names the corner the grid grows from, so tR mirrors it.
+	mirrored := cells("tR")
+	if *mirrored[0].X <= *mirrored[1].X || *grid[0].X >= *grid[1].X {
+		t.Fatalf("grDir did not mirror the growth direction: %d,%d vs %d,%d", *grid[0].X, *grid[1].X, *mirrored[0].X, *mirrored[1].X)
+	}
+}
+
+// dgm:bg fills the whole frame behind every laid-out shape.
+func TestExtractNativePPTXDiagramLayoutPaintsTheDiagramBackground(t *testing.T) {
+	t.Parallel()
+	data := nativeDiagramLayoutDataXML(nativeDiagramURITransitional, nsDrawingTransitional, "", "", "")
+	green := strings.Replace(data, `<dgm:bg/>`, `<dgm:bg><a:solidFill><a:srgbClr val="339933"/></a:solidFill></dgm:bg>`, 1)
+	if green == data {
+		t.Fatal("data fixture drifted")
+	}
+	deck, err := ExtractNativePPTX(nativeDiagramLayoutFixture(t, nativeDiagramLayoutFixtureOptions{omitDrawingPart: true, dataXML: green}), nativeDiagramLayoutApproximateOptions())
+	if err != nil {
+		t.Fatalf("extract diagram with a background: %v", err)
+	}
+	group := nativeFixtureDiagramGroup(t, deck.Slides[0])
+	backdrop := group.Children[0]
+	if backdrop.Fill == nil || *backdrop.Fill != "339933" || backdrop.Geometry == nil {
+		t.Fatalf("the diagram background is not the first painted child: %#v", backdrop)
+	}
+	if *backdrop.Transform.X != 0 || *backdrop.Transform.Y != 0 || *backdrop.Transform.Cx != *group.Transform.Cx || *backdrop.Transform.Cy != *group.Transform.Cy {
+		t.Fatalf("the diagram background does not fill the frame: %#v", backdrop.Transform)
+	}
+	// An empty dgm:bg paints nothing.
+	plain, err := ExtractNativePPTX(nativeDiagramLayoutFixture(t, nativeDiagramLayoutFixtureOptions{omitDrawingPart: true}), nativeDiagramLayoutApproximateOptions())
+	if err != nil {
+		t.Fatalf("extract plain diagram: %v", err)
+	}
+	if len(nativeFixtureDiagramGroup(t, plain.Slides[0]).Children) != len(group.Children)-1 {
+		t.Fatal("an empty dgm:bg still painted a backdrop")
 	}
 }
