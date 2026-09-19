@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { PPTX_TABLE_BUILTIN_STYLE_POLICY, PPTX_TABLE_BUILTIN_STYLE_PREVIEW_CODE } from './tableBuiltinStyle'
+import { PPTX_TABLE_BUILTIN_STYLE_POLICY, PPTX_TABLE_BUILTIN_STYLE_PREVIEW_CODE, PPTX_TABLE_NONVISUAL_PRESERVED_CODE } from './tableBuiltinStyle'
 import type { NativeDiagnostic, NativeElement, NativePptxDeck } from './types'
 import { validateNativePptx } from './validate'
 
@@ -48,6 +48,25 @@ describe('built-in table style preview contract', () => {
       expect(result.issues.map((issue) => issue.code)).toContain('native.tableStylePreview')
       expect(result.issues.find((issue) => issue.code === 'native.tableStylePreview')?.path).toBe('$.slides[0].elements[0].compatibility')
     }
+  })
+
+  it('rejects the preserved lock/modId code on an editable or non-table element', () => {
+    const preserved: NativeDiagnostic = {
+      severity: 'warning', code: PPTX_TABLE_NONVISUAL_PRESERVED_CODE,
+      message: 'table a:graphicFrameLocks and PowerPoint modId metadata are source-preserved but not modeled in native PPTX v1',
+    }
+    expect(PPTX_TABLE_NONVISUAL_PRESERVED_CODE).toBe('pptx.table-nonvisual-preserved')
+    const editable = validateNativePptx(deck([styledTable([preserved])]))
+    expect(editable.ok).toBe(false)
+    if (!editable.ok) expect(editable.issues.map((issue) => issue.code)).toContain('native.tableNonVisualPreserved')
+    const text: NativeElement = {
+      kind: 'text', id: 'text-lock', provenance: 'authored', transform: { x: 0, y: 0, cx: 100_000, cy: 100_000 },
+      paragraphs: [{ align: 'left', level: 0, bullet: false, runs: [{ text: 'A' }] }],
+      passthrough: [], compatibility: { status: 'preserveOnly', diagnostics: [preserved] },
+    }
+    const wrongKind = validateNativePptx(deck([text]))
+    expect(wrongKind.ok).toBe(false)
+    if (!wrongKind.ok) expect(wrongKind.issues.map((issue) => issue.code)).toContain('native.tableNonVisualPreserved')
   })
 
   it('rejects the preview code on a non-table element even when read-only', () => {

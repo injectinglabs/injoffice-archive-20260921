@@ -9,6 +9,11 @@ import (
 
 const nativeDrawingTableURI = "http://schemas.openxmlformats.org/drawingml/2006/table"
 
+// nativeTableNonVisualPreservedCode discloses a table kept through the
+// read-only nonvisual inspection grammar (a:graphicFrameLocks noGrp="1" and
+// the PowerPoint p14:modId extension) rather than the exact projection.
+const nativeTableNonVisualPreservedCode = "pptx.table-nonvisual-preserved"
+
 // nativeGraphicFrameProjectionRefusal identifies a structurally readable
 // graphic frame whose complete visual semantics are outside the exact native
 // table subset. Callers preserve the whole p:graphicFrame subtree and never
@@ -113,11 +118,14 @@ func (extractor *nativeExtractor) extractNativeTableGraphicFrame(node *nativeXML
 
 	sourceTable, sourceTypography := extractor.exactSourceNoBorderTable(node, slidePart, dialect)
 	objectID, name, err := validateNativeTableNonVisual(nonVisual, dialect)
-	// The exact projection refuses locks and modification identifiers. The
+	// The exact projection refuses locks and modification identifiers, but
+	// PowerPoint writes a:graphicFrameLocks on every table it creates, so that
+	// refusal loses the whole table for metadata that cannot move a pixel. The
 	// read-only inspection grammar accepts exactly the no-group lock and the
-	// PowerPoint modId extension; only the built-in style preview (below) may
-	// keep a table whose nonvisual metadata passes that grammar.
+	// PowerPoint modId extension; a table that passes it is kept and marked
+	// preserve-only, because a replacement would not round-trip either one.
 	nonVisualRefusal := err
+	nonVisualPreserved := false
 	if err != nil {
 		if !sourceTypography {
 			var refusal nativeGraphicFrameProjectionRefusal
@@ -130,6 +138,7 @@ func (extractor *nativeExtractor) extractNativeTableGraphicFrame(node *nativeXML
 			return NativeElement{}, nonVisualRefusal
 		}
 		name, _ = exactNativeAttr(nativeChild(nonVisual, dialect.presentation, "cNvPr"), "", "name")
+		nonVisualPreserved = true
 	}
 	transform, err := validateNativeTableTransform(transformNode, dialect)
 	if err != nil {
@@ -141,9 +150,12 @@ func (extractor *nativeExtractor) extractNativeTableGraphicFrame(node *nativeXML
 	})
 	if sourceTypography {
 		exact = sourceTable
-	} else if nonVisualRefusal != nil && (err != nil || exact.styleDiagnostic == nil) {
-		return NativeElement{}, nonVisualRefusal
 	} else if err != nil {
+		// A table the exact projection already declined for its nonvisual
+		// metadata reports that first refusal, not the later one.
+		if nonVisualRefusal != nil {
+			return NativeElement{}, nonVisualRefusal
+		}
 		return NativeElement{}, err
 	}
 	if err := extractor.reserveNativeTableOutput(exact); err != nil {
@@ -170,6 +182,14 @@ func (extractor *nativeExtractor) extractNativeTableGraphicFrame(node *nativeXML
 	}
 	if sourceTypography {
 		element.Compatibility.Status = NativeCompatibilityStatusPreserveOnly
+	}
+	if nonVisualPreserved {
+		element.Compatibility.Status = worseNativeStatus(element.Compatibility.Status, NativeCompatibilityStatusPreserveOnly)
+		element.Compatibility.Diagnostics = append(element.Compatibility.Diagnostics, NativeDiagnostic{
+			Severity: NativeDiagnosticSeverityWarning,
+			Code:     nativeTableNonVisualPreservedCode,
+			Message:  "table a:graphicFrameLocks and PowerPoint modId metadata are source-preserved but not modeled in native PPTX v1; the table paints and the target remains read-only",
+		})
 	}
 	if exact.styleDiagnostic != nil {
 		element.Compatibility.Status = NativeCompatibilityStatusPreserveOnly
