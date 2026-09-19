@@ -96,6 +96,15 @@ func (extractor *nativeExtractor) extractPicture(node *nativeXMLNode, slidePart,
 	if err != nil {
 		return NativeElement{}, err
 	}
+	// A picture placeholder authors an empty p:spPr; its box lives on the
+	// layout/master placeholder. The read-only preview proposes that box to the
+	// unmodified qualifier below, so the strict tier is unchanged.
+	if extractor.options.AllowInheritedTextPreview && nativeChild(shapeProperties, dialect.drawing, "xfrm") == nil {
+		if projected := extractor.projectNativePicturePlaceholderFrame(nonVisual, shapeProperties, dialect); projected != nil {
+			shapeProperties = projected
+			gaps.add(nativePicturePlaceholderFrameCode, "Read-only approximate placeholder inheritance: the picture authors no transform, so its frame is the nearest a:xfrm on its layout-then-master placeholder chain, with that ancestor's a:prstGeom when the picture declares no geometry. Declared approximation, not PowerPoint layout equivalence.")
+		}
+	}
 	var clip *string
 	var geometry *NativeEvaluatedGeometry
 	transform, err := validateNativePictureShapeProperties(shapeProperties, dialect, &gaps, &clip, &geometry)
