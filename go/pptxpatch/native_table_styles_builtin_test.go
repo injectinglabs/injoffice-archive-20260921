@@ -290,7 +290,11 @@ func TestExtractNativePPTXBuiltinTableStyleRefusesExplicitPackageDefinition(t *t
 	}
 }
 
-func TestExtractNativePPTXExactTableStillRefusesLocksAndModificationIdentifiers(t *testing.T) {
+// The exact projection used to lose a locked table entirely. It now keeps it
+// and marks it read-only instead: neither a:graphicFrameLocks nor the p14:modId
+// extension travels on the wire, so the projection may never be editable, but
+// neither can move a pixel, so neither may cost the table.
+func TestExtractNativePPTXExactTableKeepsLocksAndModificationIdentifiersReadOnly(t *testing.T) {
 	t.Parallel()
 	table := nativeStyledTableWithLocksXML(nativeExactTableGraphicFrameXML(3, "Locked exact table", []int64{500000, 500000}, []int64{500000}, [][]string{{
 		nativeExactTableCellXML("One", "l", "FFFFFF"), nativeExactTableCellXML("Two", "r", "EEEEEE"),
@@ -299,13 +303,32 @@ func TestExtractNativePPTXExactTableStillRefusesLocksAndModificationIdentifiers(
 	if err != nil {
 		t.Fatalf("extract locked exact table: %v", err)
 	}
-	for _, element := range deck.Slides[0].Elements {
-		if element.Kind == NativeElementKindTable {
-			t.Fatalf("locked exact table must stay opaque: %#v", element)
+	var projected *NativeElement
+	for index := range deck.Slides[0].Elements {
+		if deck.Slides[0].Elements[index].Kind == NativeElementKindTable {
+			projected = &deck.Slides[0].Elements[index]
 		}
 	}
-	if !nativeDiagnosticsContain(deck.Slides[0].Compatibility.Diagnostics, "pptx.table-inheritance-unavailable") {
-		t.Fatalf("nonvisual refusal changed: %#v", deck.Slides[0].Compatibility)
+	if projected == nil {
+		t.Fatalf("locked exact table was refused: %#v", deck.Slides[0].Elements)
+	}
+	if projected.Compatibility.Status != NativeCompatibilityStatusPreserveOnly {
+		t.Fatalf("locked exact table stayed editable: %s", projected.Compatibility.Status)
+	}
+	if !nativeDiagnosticsContain(projected.Compatibility.Diagnostics, nativeTableNonVisualPreservedCode) {
+		t.Fatalf("preserved nonvisual metadata was not disclosed: %#v", projected.Compatibility)
+	}
+	// The read-only status is enforced, not merely conventional.
+	editable := deck
+	editable.Slides[0].Elements[len(deck.Slides[0].Elements)-1].Compatibility.Status = NativeCompatibilityStatusEditable
+	found := false
+	for _, issue := range ValidateNativePPTX(editable) {
+		if issue.Code == "native.tableNonVisualPreserved" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("an editable locked table validated: %#v", ValidateNativePPTX(editable))
 	}
 }
 
