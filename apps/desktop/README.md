@@ -43,6 +43,7 @@ OfficeEditor hosts that preview with the ribbon, find/replace, and Apply for pen
 Local spreadsheet calculation projects source values into a worker host and writes a revision-checked cache.
 PresentationEditor is the PPTX canvas, inspector, and Present control that launches PresentationPlayer.
 PdfEditor is the PDF page and annotation workspace; it applies through pdf-commands and does not import OfficeEditor.
+SpreadsheetCharts is the worksheet chart sidebar; empty selections disable insert and a valid range emits chart.insert.
 The rest of the renderer,
 the real Electron dependency, GitHub provider, and packaging workflows land
 in follow-up changes. Preview builds never load an updater.
