@@ -5,6 +5,12 @@ export type PreviewRect = {x:number;y:number;cx:number;cy:number}
 // `d` is a validated source-evaluated outline in the group's local units; a
 // clip carries either a corner radius or a path, never both.
 export type PreviewClip = PreviewRect & {radius?:number;d?:string}
+// A linear gradient slide background. `angle` is 1/60000 of a degree clockwise
+// from the positive x axis; stops carry 1/1000-of-a-percent positions in
+// strictly increasing order. Transported as numbers and hex triplets only —
+// never as a CSS or SVG string.
+export type PreviewGradientStop = {pos:number;color:string}
+export type PreviewLinearGradient = {angle:number;stops:PreviewGradientStop[]}
 export type PreviewStroke = {stroke?:string;strokeWidth?:number;strokeLinecap?:'butt'|'round'|'square';strokeLinejoin?:'round'|'bevel'|'miter';strokeMiterlimit?:number}
 export type PreviewNode =
  | {kind:'group';transform:PreviewMatrix;clip?:PreviewClip;children:PreviewNode[];sourceRole?:'paragraphBullet'|'contentRun'|'connectorArrow'}
@@ -15,7 +21,7 @@ export type PreviewNode =
  | {kind:'image';rect:PreviewRect;resourceId:string;crop?:{left:number;top:number;right:number;bottom:number}}
 export interface PptxPreview {
  version:1; package_sha256:string;slide_index:number;slide_count:number;
- width:number;height:number;background:string;policy:'max-run-natural-v1';
+ width:number;height:number;background:string;background_gradient?:PreviewLinearGradient;policy:'max-run-natural-v1';
  nodes:PreviewNode[];diagnostics:string[];font_digests:string[];resources:NativeDocxPagePaintMediaAssetV1[]
  workbook_chart_preview?:true
  source_chart_preview?:true
@@ -88,6 +94,19 @@ export function decodePptxPreview(value:unknown):PptxPreview {
  number(v.width,1);number(v.height,1);number(v.slide_count,1,10000);number(v.slide_index,0,Number(v.slide_count)-1)
  if(!Number.isInteger(v.slide_count)||!Number.isInteger(v.slide_index))fail()
  color(v.background)
+ if(v.background_gradient!==undefined){
+  const g=record(v.background_gradient)
+  if(Object.keys(g).sort().join(',')!=='angle,stops')fail()
+  number(g.angle,0,21599999);if(!Number.isInteger(g.angle))fail()
+  if(!Array.isArray(g.stops)||g.stops.length<2||g.stops.length>64)fail()
+  let previous=-1
+  for(const entry of g.stops as unknown[]){
+   const stop=record(entry)
+   if(Object.keys(stop).sort().join(',')!=='color,pos')fail()
+   number(stop.pos,0,100000);if(!Number.isInteger(stop.pos)||Number(stop.pos)<=previous)fail()
+   previous=Number(stop.pos);color(stop.color)
+  }
+ }
  if(!Array.isArray(v.nodes)||!Array.isArray(v.diagnostics)||v.diagnostics.length>2000||v.diagnostics.some(s=>typeof s!=='string'||s.length>2048)||!Array.isArray(v.font_digests)||v.font_digests.length>256||v.font_digests.some(s=>typeof s!=='string'||!/^sha256:[a-f0-9]{64}$/.test(s)))return fail()
  v.nodes.forEach(n=>node(n,0))
  return value as PptxPreview

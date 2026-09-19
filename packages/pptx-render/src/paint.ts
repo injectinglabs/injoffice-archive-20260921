@@ -2,12 +2,12 @@ import {renderTransformMatrix} from './sourceRenderTransform.js'
 import {SourceAffineBudget} from './sourceAffine.js'
 import {geometryPathFill} from './geometryFillPolicy.js'
 import {textBodyWarp, warpGlyphRun} from './textWarp.js'
-import { PPTX_RENDER_LIMITS, RenderCompileError, type RenderNode, type RenderParagraphNode, type RenderPathCommand, type RenderRect, type RenderStroke, type RenderTextBodyNode, type RenderTextRunNode, type RenderTransform, type SlideRenderTree } from './types.js'
+import { PPTX_RENDER_LIMITS, RenderCompileError, type RenderNode, type RenderParagraphNode, type RenderLinearGradient, type RenderPathCommand, type RenderRect, type RenderStroke, type RenderTextBodyNode, type RenderTextRunNode, type RenderTransform, type SlideRenderTree } from './types.js'
 
 import type { NativePictureCrop,NativeArrowEnd } from '@injoffice/pptx-native'
 
 export type PaintCommand =
-  | { readonly kind: 'beginSlide'; readonly size: { readonly cx: number; readonly cy: number }; readonly background: string }
+  | { readonly kind: 'beginSlide'; readonly size: { readonly cx: number; readonly cy: number }; readonly background: string; readonly backgroundGradient?: RenderLinearGradient }
   | { readonly kind: 'endSlide' }
   | { readonly kind: 'save' }
   | { readonly kind: 'restore' }
@@ -183,7 +183,7 @@ export function paintSlideRenderTree(tree: SlideRenderTree, surface: PaintSurfac
   // A native paint-budget refusal is therefore atomic; arbitrary host-surface
   // exceptions during the subsequent replay remain owned by that host.
   const staging = createRecordingPaintSurface(maxCommands)
-  staging.push({ kind: 'beginSlide', size: tree.size, background: tree.background.color })
+  staging.push({ kind: 'beginSlide', size: tree.size, background: tree.background.color, ...(tree.backgroundGradient ? { backgroundGradient: tree.backgroundGradient } : {}) })
   staging.push({ kind: 'save' })
   staging.push({ kind: 'clipRect', rect: tree.clip.rect })
   for (const node of tree.nodes) paintNode(node, staging, tree.clip.rect)

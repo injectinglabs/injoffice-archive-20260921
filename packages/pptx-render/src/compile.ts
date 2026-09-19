@@ -2633,6 +2633,7 @@ export async function compileNativePptxSlide(deckInput: NativePptxDeck, slide: n
     slideIndex,
     size: { ...deck.size },
     background: { color: nativeSlide.background ?? DEFAULT_BACKGROUND },
+    ...(nativeSlide.backgroundGradient ? { backgroundGradient: { angle: nativeSlide.backgroundGradient.angle, stops: nativeSlide.backgroundGradient.stops.map(stop => ({ positionPct: stop.positionPct, color: stop.color })) } } : {}),
     clip: { kind: 'rect', rect: localBounds(deck.size.cx, deck.size.cy) },
     nodes,
     assets: [...state.referencedAssets.values()].sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0),

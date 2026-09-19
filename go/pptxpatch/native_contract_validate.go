@@ -154,6 +154,12 @@ func ValidateNativePPTX(deck NativePPTXDeck) []NativeContractIssue {
 		if slide.Background != nil {
 			v.color(*slide.Background, p+".background")
 		}
+		if slide.BackgroundGradient != nil {
+			if slide.Background != nil {
+				v.add(p+".backgroundGradient", "native.backgroundFill", "a slide states either one background color or one background gradient")
+			}
+			v.linearGradient(*slide.BackgroundGradient, p+".backgroundGradient")
+		}
 		if slide.Elements == nil {
 			v.add(p+".elements", "schema.required", "must be an array")
 		}
@@ -1310,6 +1316,29 @@ func (v *nativeValidator) hash(value, p string) {
 		v.add(p, "schema.pattern", "must be a lowercase SHA-256 digest")
 	}
 }
+
+func (v *nativeValidator) linearGradient(gradient NativeLinearGradient, p string) {
+	if gradient.Angle < 0 || gradient.Angle > nativeMaxPositiveFixedAngle {
+		v.add(p+".angle", "schema.range", fmt.Sprintf("must be 0..%d", nativeMaxPositiveFixedAngle))
+	}
+	if len(gradient.Stops) < 2 || len(gradient.Stops) > nativeMaxGradientStops {
+		v.add(p+".stops", "schema.items", fmt.Sprintf("must hold 2..%d stops", nativeMaxGradientStops))
+		return
+	}
+	previous := int64(-1)
+	for index, stop := range gradient.Stops {
+		q := fmt.Sprintf("%s.stops[%d]", p, index)
+		if stop.PositionPct < 0 || stop.PositionPct > nativePositiveFixedPct {
+			v.add(q+".positionPct", "schema.range", fmt.Sprintf("must be 0..%d", nativePositiveFixedPct))
+		}
+		if stop.PositionPct <= previous {
+			v.add(q+".positionPct", "native.gradientStopOrder", "stops must be ordered by strictly increasing position")
+		}
+		previous = stop.PositionPct
+		v.color(stop.Color, q+".color")
+	}
+}
+
 func (v *nativeValidator) color(value, p string) {
 	if !colorPattern.MatchString(value) {
 		v.add(p, "schema.pattern", "must be six uppercase hexadecimal digits")

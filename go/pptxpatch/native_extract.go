@@ -1548,9 +1548,10 @@ func (extractor *nativeExtractor) extractSlide(part, objectID, relationshipID st
 			// handles schemeClr, bgRef and PowerPoint's bwMode/empty effectLst,
 			// before declaring the authored background unrepresentable.
 			background, backgroundErr := extractNativeSlideBackground(child, dialect)
+			var gradient *NativeLinearGradient
 			if backgroundErr != nil {
-				if widened := nativeBackgroundNodeColor(child, dialect, extractor.theme); widened != "" {
-					background, backgroundErr = widened, nil
+				if widened := nativeBackgroundNodePaint(child, dialect, extractor.theme); !widened.empty() {
+					background, gradient, backgroundErr = widened.color, widened.gradient, nil
 				}
 			}
 			if backgroundErr != nil {
@@ -1561,6 +1562,8 @@ func (extractor *nativeExtractor) extractSlide(part, objectID, relationshipID st
 				if err := extractor.markSlideUnsupported(&slide, unsupported.part, unsupported.objectID, unsupported.fingerprint, unsupported.payload, unsupported.code, unsupported.message); err != nil {
 					return NativeSlide{}, err
 				}
+			} else if gradient != nil {
+				slide.BackgroundGradient = gradient
 			} else {
 				slide.Background = &background
 			}
@@ -1578,9 +1581,14 @@ func (extractor *nativeExtractor) extractSlide(part, objectID, relationshipID st
 	// master, then the implicit default (schemeClr bg1 through the slide's
 	// effective colour map). Leaving this unresolved painted every such deck
 	// white, including decks whose entire design is a master background.
-	if slide.Background == nil {
-		if inherited := resolveNativeInheritedBackground(graph, root, dialect, extractor.theme); inherited != "" {
-			slide.Background = &inherited
+	if slide.Background == nil && slide.BackgroundGradient == nil {
+		if inherited := resolveNativeInheritedBackground(graph, root, dialect, extractor.theme); !inherited.empty() {
+			if inherited.gradient != nil {
+				slide.BackgroundGradient = inherited.gradient
+			} else {
+				color := inherited.color
+				slide.Background = &color
+			}
 		}
 	}
 	spTree, err := nativeSingleton(cSld, dialect.presentation, "spTree", true)

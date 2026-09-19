@@ -420,13 +420,32 @@ type NativeElement struct {
 	Compatibility      NativeCompatibility      `json:"compatibility"`
 }
 
+// NativeLinearGradientStop is one a:gs stop of a linear gradient.
+// PositionPct is ST_PositiveFixedPercentage in 1/1000 of a percent.
+type NativeLinearGradientStop struct {
+	PositionPct int64  `json:"positionPct"`
+	Color       string `json:"color"`
+}
+
+// NativeLinearGradient is a DrawingML a:gradFill whose direction is an a:lin.
+// Angle is ST_PositiveFixedAngle in 1/60000 of a degree, measured clockwise
+// from the positive x axis, and Stops is ordered by strictly increasing
+// position.
+type NativeLinearGradient struct {
+	Angle int64                      `json:"angle"`
+	Stops []NativeLinearGradientStop `json:"stops"`
+}
+
 type NativeSlide struct {
-	ID            string                 `json:"id"`
-	Provenance    NativeProvenance       `json:"provenance"`
-	Background    *string                `json:"background,omitempty"`
-	Transition    *NativeTransition      `json:"transition,omitempty"`
-	Elements      []NativeElement        `json:"elements"`
-	Source        *NativeSourceAnchor    `json:"source,omitempty"`
-	Passthrough   []NativePassthroughRef `json:"passthrough"`
-	Compatibility NativeCompatibility    `json:"compatibility"`
+	ID         string           `json:"id"`
+	Provenance NativeProvenance `json:"provenance"`
+	Background *string          `json:"background,omitempty"`
+	// BackgroundGradient replaces Background when the slide's effective
+	// background is a modeled linear gradient. Exactly one of the two is set.
+	BackgroundGradient *NativeLinearGradient  `json:"backgroundGradient,omitempty"`
+	Transition         *NativeTransition      `json:"transition,omitempty"`
+	Elements           []NativeElement        `json:"elements"`
+	Source             *NativeSourceAnchor    `json:"source,omitempty"`
+	Passthrough        []NativePassthroughRef `json:"passthrough"`
+	Compatibility      NativeCompatibility    `json:"compatibility"`
 }

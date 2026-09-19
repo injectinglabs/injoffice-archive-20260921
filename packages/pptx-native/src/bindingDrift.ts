@@ -17,6 +17,8 @@ import type {
   NativePptxDeck,
   NativeShapeElement,
   NativeSize,
+  NativeLinearGradient,
+  NativeLinearGradientStop,
   NativeSlide,
   NativeSourceAnchor,
   NativeStroke,
@@ -81,6 +83,8 @@ type NativePptxBindingChecks = [
   Assert<Fields<'NativeTableElement', NativeTableElement>>, Assert<Required<'NativeTableElement', NativeTableElement>>,
   Assert<Fields<'NativeChartElement', NativeChartElement>>, Assert<Required<'NativeChartElement', NativeChartElement>>,
   Assert<Fields<'NativeGroupElement', NativeGroupElement>>, Assert<Required<'NativeGroupElement', NativeGroupElement>>,
+  Assert<Fields<'NativeLinearGradient', NativeLinearGradient>>, Assert<Required<'NativeLinearGradient', NativeLinearGradient>>,
+  Assert<Fields<'NativeLinearGradientStop', NativeLinearGradientStop>>, Assert<Required<'NativeLinearGradientStop', NativeLinearGradientStop>>,
   Assert<Fields<'NativeSlide', NativeSlide>>, Assert<Required<'NativeSlide', NativeSlide>>,
 ]
 

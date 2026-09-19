@@ -44,6 +44,8 @@ export type {
   RenderImageNode,
   RenderNode,
   RenderPaint,
+  RenderGradientStop,
+  RenderLinearGradient,
   RenderParagraphNode,
   RenderPathCommand,
   RenderPlaceholderNode,

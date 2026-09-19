@@ -5,7 +5,7 @@ package pptxpatch
 
 const NativePPTXContractVersion = "pptx-native/v1"
 const NativePPTXSchemaID = "https://injoffice.dev/schemas/pptx-native-v1.schema.json"
-const NativePPTXSchemaSHA256 = "521b28d4abd34e68b898536d4a79057ef418a603dcd9853b1c8bdecd131060d6"
+const NativePPTXSchemaSHA256 = "7a75aef29ea0c95d6e9483892803b18268b4304af1aba0bed87400f7b2503409"
 const nativeMaxJsonBytes = 268435456
 const nativeMaxNodes = 1000000
 const nativeMaxDepth = 64
@@ -97,6 +97,14 @@ var nativePPTXBindingShapes = map[string]nativePPTXBindingShape{
 	"NativeGroupElement": {
 		Properties: []string{"animation", "childTransform", "children", "compatibility", "id", "kind", "name", "passthrough", "provenance", "source", "transform"},
 		Required:   []string{"children", "compatibility", "id", "kind", "passthrough", "provenance", "transform"},
+	},
+	"NativeLinearGradient": {
+		Properties: []string{"angle", "stops"},
+		Required:   []string{"angle", "stops"},
+	},
+	"NativeLinearGradientStop": {
+		Properties: []string{"color", "positionPct"},
+		Required:   []string{"color", "positionPct"},
 	},
 	"NativeLiteralArea": {
 		Properties: []string{"categories", "dataOrigin", "grouping", "profile", "series", "sourceBaseline", "xAxis", "yAxis"},
@@ -191,7 +199,7 @@ var nativePPTXBindingShapes = map[string]nativePPTXBindingShape{
 		Required:   []string{"cx", "cy"},
 	},
 	"NativeSlide": {
-		Properties: []string{"background", "compatibility", "elements", "id", "passthrough", "provenance", "source", "transition"},
+		Properties: []string{"background", "backgroundGradient", "compatibility", "elements", "id", "passthrough", "provenance", "source", "transition"},
 		Required:   []string{"compatibility", "elements", "id", "passthrough", "provenance"},
 	},
 	"NativeSourceAnchor": {
