@@ -165,3 +165,99 @@ func TestExtractNativePPTXCustomGeometryIgnoresUnpaintedHandleAndConnectionLists
 		})
 	}
 }
+
+// EG_LineJoinProperties is optional on a:ln (ECMA-376 Part 1 §20.1.2.2.24),
+// and 736 of the 1337 a:ln elements in the hard-v2 corpus state no join at
+// all, so refusing an unstated join threw away the majority case. PowerPoint
+// falls back to a miter: its raster of layout-clrmap-override.pptx paints a
+// pixel-sharp square at a 2pt rectangle corner, which neither a round nor a
+// bevel join can produce.
+func TestExtractNativePPTXAutoShapeDefaultsAnUnstatedOutlineJoinToMiter(t *testing.T) {
+	t.Parallel()
+	solid := `<a:solidFill><a:srgbClr val="A0A060"/></a:solidFill>`
+	rectangle := `<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>`
+	extract := func(t *testing.T, line string) (NativeElement, NativePPTXDeck) {
+		t.Helper()
+		shape := nativeECMADefaultShapeXML(3, "", rectangle, line)
+		deck, err := ExtractNativePPTX(nativeAutoShapeFixture(t, false, shape), nativeTestExtractOptions())
+		if err != nil {
+			t.Fatalf("extract AutoShape: %v", err)
+		}
+		shapes := nativeFixtureAutoShapes(deck.Slides[0])
+		if len(shapes) != 1 {
+			t.Fatalf("expected one AutoShape, got %#v", shapes)
+		}
+		return shapes[0], deck
+	}
+	warned := func(element NativeElement) bool {
+		for _, diagnostic := range element.Compatibility.Diagnostics {
+			if diagnostic.Code == nativeOutlineDefaultJoinCode {
+				return diagnostic.Severity == NativeDiagnosticSeverityWarning
+			}
+		}
+		return false
+	}
+
+	// No join at all: the outline paints, as a disclosed read-only miter.
+	element, deck := extract(t, `<a:ln w="19080">`+solid+`</a:ln>`)
+	if element.Compatibility.Status != NativeCompatibilityStatusRefused && element.Stroke == nil {
+		t.Fatalf("an unstated join lost the outline: %#v", element)
+	}
+	if element.Compatibility.Status != NativeCompatibilityStatusPreserveOnly {
+		t.Fatalf("a defaulted join must stay read-only, got %q: %#v", element.Compatibility.Status, element.Compatibility.Diagnostics)
+	}
+	if element.Stroke == nil || element.Stroke.Join == nil || *element.Stroke.Join != NativeStrokeJoinMiter {
+		t.Fatalf("an unstated join did not default to a miter: %#v", element.Stroke)
+	}
+	if element.Stroke.MiterLimit == nil || *element.Stroke.MiterLimit != nativeDefaultOutlineMiterLimit {
+		t.Fatalf("the defaulted miter carried no limit: %#v", element.Stroke)
+	}
+	// Nothing else about the outline moves.
+	if element.Stroke.Color != "A0A060" || element.Stroke.WidthEMU == nil || *element.Stroke.WidthEMU != 19080 ||
+		element.Stroke.Cap == nil || *element.Stroke.Cap != NativeStrokeCapFlat ||
+		element.Stroke.Dash == nil || *element.Stroke.Dash != NativeStrokeDashSolid {
+		t.Fatalf("defaulting the join changed the rest of the outline: %#v", element.Stroke)
+	}
+	if !warned(element) {
+		t.Fatalf("the defaulted join was not disclosed as a warning: %#v", element.Compatibility.Diagnostics)
+	}
+	if issues := ValidateNativePPTX(deck); len(issues) != 0 {
+		t.Fatalf("invalid extracted deck: %#v", issues)
+	}
+
+	// An authored join is untouched and carries no disclosure.
+	for _, authored := range []struct {
+		markup string
+		want   NativeStrokeJoin
+	}{
+		{`<a:round/>`, NativeStrokeJoinRound},
+		{`<a:bevel/>`, NativeStrokeJoinBevel},
+		{`<a:miter lim="800000"/>`, NativeStrokeJoinMiter},
+	} {
+		stated, _ := extract(t, `<a:ln w="19080">`+solid+authored.markup+`</a:ln>`)
+		if stated.Stroke == nil || stated.Stroke.Join == nil || *stated.Stroke.Join != authored.want {
+			t.Fatalf("authored join %s was not honored: %#v", authored.markup, stated.Stroke)
+		}
+		if warned(stated) {
+			t.Fatalf("authored join %s was reported as defaulted: %#v", authored.markup, stated.Compatibility.Diagnostics)
+		}
+		if stated.Compatibility.Status != NativeCompatibilityStatusEditable {
+			t.Fatalf("authored join %s stopped being editable: %#v", authored.markup, stated.Compatibility)
+		}
+	}
+
+	// The tolerance is exactly "no join". More than one join, and a miter that
+	// states no limit, both still preserve the outline instead of guessing.
+	for name, line := range map[string]string{
+		"two joins":       `<a:ln w="19080">` + solid + `<a:round/><a:miter lim="800000"/></a:ln>`,
+		"limitless miter": `<a:ln w="19080">` + solid + `<a:miter/></a:ln>`,
+	} {
+		refused, _ := extract(t, line)
+		if refused.Compatibility.Status != NativeCompatibilityStatusRefused {
+			t.Fatalf("%s was tolerated: status=%q %#v", name, refused.Compatibility.Status, refused.Compatibility.Diagnostics)
+		}
+		if !nativeECMADefaultRefusalCodes(refused)["pptx.autoshape-line-unavailable"] {
+			t.Fatalf("%s did not refuse as an outline gap: %#v", name, refused.Compatibility.Diagnostics)
+		}
+	}
+}

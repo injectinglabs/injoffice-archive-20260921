@@ -813,13 +813,28 @@ func validateNativeAutoShapeLine(node *nativeXMLNode, dialect nativeExtractDiale
 			joinCount++
 		}
 	}
-	if joinCount != 1 {
-		gaps.add("pptx.autoshape-line-unavailable", "outline requires one explicit native join", true)
+	if joinCount > 1 {
+		gaps.add("pptx.autoshape-line-unavailable", "outline states more than one join", true)
 		return nil, nil
 	}
 	join := NativeStrokeJoinRound
 	var miterLimit *int64
-	if round != nil {
+	if joinCount == 0 {
+		// EG_LineJoinProperties is optional on a:ln (ECMA-376 Part 1
+		// §20.1.2.2.24) and 736 of the 1337 a:ln elements in the hard-v2
+		// corpus state no join at all, so refusing them threw away the
+		// majority case. An unstated join resolves through the style and
+		// theme chain, and when nothing states one either -- the usual case,
+		// because a:lnStyleLst rarely does -- PowerPoint falls back to a
+		// miter. Its raster of layout-clrmap-override.pptx paints a pixel
+		// sharp square at a 2pt rectangle corner, which a round or bevel
+		// join cannot produce, and 358 of the 454 explicit miters in the
+		// same corpus carry lim="800000". The preview paints that, and
+		// discloses it rather than claiming the source stated it.
+		join = NativeStrokeJoinMiter
+		miterLimit = int64Pointer(nativeDefaultOutlineMiterLimit)
+		gaps.add(nativeOutlineDefaultJoinCode, nativeOutlineDefaultJoinMessage, false)
+	} else if round != nil {
 		if requireEmptyNativeElement(round) != nil {
 			gaps.add("pptx.autoshape-line-unavailable", "round outline join is malformed", true)
 			return nil, nil
@@ -858,6 +873,17 @@ func validateNativeAutoShapeLine(node *nativeXMLNode, dialect nativeExtractDiale
 	dash := NativeStrokeDashSolid
 	return &NativeStroke{Color: color, WidthEMU: int64Pointer(width), Cap: &cap, Join: &join, Dash: &dash, Compound: strokeCompound, MiterLimit: miterLimit}, nil
 }
+
+// nativeDefaultOutlineMiterLimit is the ST_PositivePercentage miter limit the
+// preview paints for an a:ln that states no join. It is the value PowerPoint
+// writes on the overwhelming majority of the explicit miters in the hard-v2
+// corpus (358 of 454), and every limit at or above 141% produces the same full
+// miter on the 90-degree corner of a rectangle, so the exact figure only
+// matters for sharper corners than that.
+const nativeDefaultOutlineMiterLimit = int64(800000)
+
+const nativeOutlineDefaultJoinCode = "pptx.autoshape-line-join-preview"
+const nativeOutlineDefaultJoinMessage = "outline states no join; the read-only preview paints PowerPoint's default miter at 800% and the unstated source join is preserved"
 
 func nativeStrokeCompoundPointer(value NativeStrokeCompound) *NativeStrokeCompound {
 	return &value
