@@ -16,21 +16,23 @@ import (
 // NativeWorkbookObjectsV1 is a read-only supplement, never mutation authority.
 // Chart values come from saved chart caches, not evaluated worksheet formulas.
 type NativeWorkbookObjectsV1 struct {
-	RichText            *NativeRichTextPreviewV1           `json:"rich_text,omitempty"`
-	ConditionalFills    []NativeConditionalFillPreviewV1   `json:"conditional_fills,omitempty"`
-	Protocol            string                             `json:"protocol"`
-	Version             int                                `json:"version"`
-	PackageSHA256       string                             `json:"package_sha256"`
-	Tables              []NativeTablePreviewV1             `json:"tables"`
-	Charts              []NativeChartPreviewV1             `json:"charts"`
-	RowGeometry         []NativeStoredRowGeometryV1        `json:"row_geometry,omitempty"`
-	DimensionNeutrality []NativeSheetDimensionNeutralityV1 `json:"dimension_neutrality,omitempty"`
-	PageSettings        []NativeSheetPageSettingsV1        `json:"page_settings,omitempty"`
-	DrawingObjects      []NativeDrawingObjectV1            `json:"drawing_objects,omitempty"`
-	FormControls        []NativeFormControlV1              `json:"form_controls,omitempty"`
-	PrintAreas          []NativeSheetPrintAreaV1           `json:"print_areas,omitempty"`
-	PrintAreaSets       []NativeSheetPrintAreaSetV1        `json:"print_area_sets,omitempty"`
-	PrintTitles         []NativeSheetPrintTitlesV1         `json:"print_titles,omitempty"`
+	RichText              *NativeRichTextPreviewV1              `json:"rich_text,omitempty"`
+	ConditionalFills      []NativeConditionalFillPreviewV1      `json:"conditional_fills,omitempty"`
+	ConditionalScaleFills []NativeConditionalScaleFillPreviewV1 `json:"conditional_scale_fills,omitempty"`
+	ConditionalBarFills   []NativeConditionalBarFillPreviewV1   `json:"conditional_bar_fills,omitempty"`
+	Protocol              string                                `json:"protocol"`
+	Version               int                                   `json:"version"`
+	PackageSHA256         string                                `json:"package_sha256"`
+	Tables                []NativeTablePreviewV1                `json:"tables"`
+	Charts                []NativeChartPreviewV1                `json:"charts"`
+	RowGeometry           []NativeStoredRowGeometryV1           `json:"row_geometry,omitempty"`
+	DimensionNeutrality   []NativeSheetDimensionNeutralityV1    `json:"dimension_neutrality,omitempty"`
+	PageSettings          []NativeSheetPageSettingsV1           `json:"page_settings,omitempty"`
+	DrawingObjects        []NativeDrawingObjectV1               `json:"drawing_objects,omitempty"`
+	FormControls          []NativeFormControlV1                 `json:"form_controls,omitempty"`
+	PrintAreas            []NativeSheetPrintAreaV1              `json:"print_areas,omitempty"`
+	PrintAreaSets         []NativeSheetPrintAreaSetV1           `json:"print_area_sets,omitempty"`
+	PrintTitles           []NativeSheetPrintTitlesV1            `json:"print_titles,omitempty"`
 }
 type NativeTablePreviewV1 struct {
 	Part          string                      `json:"part"`
@@ -236,6 +238,8 @@ func InspectNativeWorkbookObjectsV1(data []byte) (*NativeWorkbookObjectsV1, erro
 	}
 	result.PrintTitles = previewNativePrintTitles(pkg.files[workbookPart.part], workbook.Sheets)
 	result.ConditionalFills = previewNativeConditionalFills(pkg, workbook.Sheets)
+	result.ConditionalScaleFills = previewNativeConditionalScaleFills(pkg, workbook.Sheets)
+	result.ConditionalBarFills = previewNativeConditionalBarFills(pkg, workbook.Sheets)
 	owners := map[string]string{}
 	for _, sheet := range workbook.Sheets {
 		if len(result.RowGeometry) < 64 {

@@ -46,6 +46,43 @@ describe('selected-range page presentation', () => {
     // A selected-range preview has no paper edge to measure a header from.
     expect(render(props)).not.toContain('data-page-band')
   })
+  it('paints a source colour scale behind a cell that has no fill of its own', () => {
+    const props = fixture()
+    const revision = props.workbook.source.package_sha256
+    props.objects = { ...props.objects, conditional_scale_fills: [{ sheet_id: '1', sheet_part: 'xl/worksheets/sheet1.xml', status: 'available', warnings: ['Read-only colour-scale preview.'], ranges: [{ ref: 'A1:A2', priority: 1, stops: 2 }], cells: [{ row: 0, column: 0, color: '#FF0000' }, { row: 1, column: 0, color: '#0000FF' }] }] } as unknown as NativeWorkbookObjectsV1
+    expect(props.objects.package_sha256).toBe(revision)
+    expect(render(props)).toMatch(/<rect x="0" y="0" width="100" height="20" fill="#FF0000" data-conditional-scale-fill="true">/)
+    // Excel paints a colour scale behind the cell, so an explicit source fill
+    // stays on top and the scale must not overwrite it.
+    props.workbook.styles[0]!.effective.fill_color = '#00FF00'
+    const html = render(props)
+    expect(html).toMatch(/<rect x="0" y="0" width="100" height="20" fill="#00FF00">/)
+    expect(html).not.toContain('data-conditional-scale-fill')
+  })
+  it('draws a source data bar over the cell fill and under its text', () => {
+    const props = fixture()
+    props.objects = { ...props.objects, conditional_bar_fills: [{ sheet_id: '1', sheet_part: 'xl/worksheets/sheet1.xml', status: 'available', warnings: ['Read-only data-bar preview.'], ranges: [{ ref: 'A1:A2', priority: 1 }], cells: [
+      { row: 0, column: 0, start_permille: 400, end_permille: 600, axis_permille: 400, color: '#0000FF', border_color: '#000080', axis_color: '#008000' },
+      { row: 1, column: 0, start_permille: 0, end_permille: 400, axis_permille: 400, color: '#FF0000', border_color: '#800000', axis_color: '#008000' },
+    ] }] } as unknown as NativeWorkbookObjectsV1
+    const html = render(props)
+    // The cell is 100px wide, so the span is 40%..60% of it and the axis sits
+    // on the 40% mark; the bar follows the cell fill and precedes the text.
+    expect(html).toMatch(/fill="#FFFFFF"><\/rect><g data-conditional-bar-fill="true"><rect x="40" y="0" width="20" height="20" fill="#0000FF" stroke="#000080" stroke-width="1"><\/rect><rect x="40" y="0" width="1" height="20" fill="#008000">/)
+    expect(html.indexOf('data-conditional-bar-fill')).toBeLessThan(html.indexOf('<text'))
+  })
+  it('draws no data bar when the engine reported the sheet as unavailable', () => {
+    const props = fixture()
+    props.objects = { ...props.objects, conditional_bar_fills: [{ sheet_id: '1', sheet_part: 'xl/worksheets/sheet1.xml', status: 'unavailable', warnings: ['Data-bar preview unavailable.'] }] } as unknown as NativeWorkbookObjectsV1
+    expect(render(props)).not.toContain('data-conditional-bar-fill')
+  })
+  it('paints no colour scale when the engine reported the sheet as unavailable', () => {
+    const props = fixture()
+    props.objects = { ...props.objects, conditional_scale_fills: [{ sheet_id: '1', sheet_part: 'xl/worksheets/sheet1.xml', status: 'unavailable', warnings: ['Colour-scale preview unavailable.'] }] } as unknown as NativeWorkbookObjectsV1
+    const html = render(props)
+    expect(html).not.toContain('data-conditional-scale-fill')
+    expect(html).toMatch(/<rect x="0" y="0" width="100" height="20" fill="#FFFFFF">/)
+  })
   it('shows visible cache and compact-number disclosures without changing strict default output', () => {
     const props = fixture()
     props.workbook.styles[0]!.effective.number_format = 'General'
