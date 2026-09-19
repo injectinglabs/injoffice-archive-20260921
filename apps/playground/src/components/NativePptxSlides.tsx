@@ -31,7 +31,25 @@ export function NativePptxVector({preview,onImageError}:{preview:PptxPreview;onI
    case 'placeholder':return <g key={key} data-native-placeholder="refused-region"><rect data-native-placeholder-outline x={node.rect.x} y={node.rect.y} width={node.rect.cx} height={node.rect.cy} fill="none" stroke="#777" strokeWidth={1} strokeDasharray="4 3"/><text data-native-placeholder-label x={node.rect.x+1} y={node.rect.y+10} fontSize={8} fill="#777">{node.label}</text></g>
   }
  }
- return <svg role="img" aria-label={`Measured native slide ${preview.slide_index+1}`} viewBox={`0 0 ${preview.width/SVG_EMU_PER_POINT} ${preview.height/SVG_EMU_PER_POINT}`} style={{display:'block',width:'100%',background:color(preview.background),border:'1px solid var(--ds-line)'}}>{preview.nodes.map((node,i)=>draw(nativePptxSvgNode(node),String(i)))}</svg>
+ const width=preview.width/SVG_EMU_PER_POINT,height=preview.height/SVG_EMU_PER_POINT
+ // A gradient background is painted as a real SVG paint server, not a CSS
+ // background: the capture rasterizes this vector on its own, so only what is
+ // inside it is measured. DrawingML a:lin @ang is 1/60000 of a degree clockwise
+ // from the positive x axis, and SVG user space also grows downward, so the
+ // direction vector is (cos, sin) of that same angle. The axis runs through the
+ // box centre and is extended to the box's projection onto it so the first and
+ // last stops land on the edges, which is what PowerPoint paints.
+ const gradient=preview.background_gradient
+ const radians=gradient?gradient.angle/60000*Math.PI/180:0
+ const dx=Math.cos(radians),dy=Math.sin(radians),half=(Math.abs(dx)*width+Math.abs(dy)*height)/2
+ const gradientId=`${prefix}-slide-background`
+ return <svg role="img" aria-label={`Measured native slide ${preview.slide_index+1}`} viewBox={`0 0 ${width} ${height}`} style={{display:'block',width:'100%',background:color(preview.background),border:'1px solid var(--ds-line)'}}>
+  {gradient&&<defs><linearGradient id={gradientId} gradientUnits="userSpaceOnUse" x1={width/2-dx*half} y1={height/2-dy*half} x2={width/2+dx*half} y2={height/2+dy*half}>
+   {gradient.stops.map((stop,i)=><stop key={i} offset={stop.pos/100000} stopColor={color(stop.color)}/>)}
+  </linearGradient></defs>}
+  {gradient&&<rect data-native-slide-background="gradient" x={0} y={0} width={width} height={height} fill={`url(#${gradientId})`}/>}
+  {preview.nodes.map((node,i)=>draw(nativePptxSvgNode(node),String(i)))}
+ </svg>
 }
 
 export function NativePptxPreviewResult({preview,source,onImageError}:{preview:PptxPreview;source?:NativePptxDeck;onImageError?:()=>void}){

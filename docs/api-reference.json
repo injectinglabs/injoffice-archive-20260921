@@ -12149,7 +12149,7 @@
             {
               "name": "PPTX_NATIVE_SCHEMA_SHA256",
               "kind": "const",
-              "signature": "export declare const PPTX_NATIVE_SCHEMA_SHA256: \"521b28d4abd34e68b898536d4a79057ef418a603dcd9853b1c8bdecd131060d6\""
+              "signature": "export declare const PPTX_NATIVE_SCHEMA_SHA256: \"7a75aef29ea0c95d6e9483892803b18268b4304af1aba0bed87400f7b2503409\""
             },
             {
               "name": "PPTX_TABLE_BUILTIN_STYLE_POLICY",
@@ -12494,6 +12494,11 @@
               "signature": "RenderGlyph"
             },
             {
+              "name": "RenderGradientStop",
+              "kind": "type",
+              "signature": "RenderGradientStop"
+            },
+            {
               "name": "RenderGroupNode",
               "kind": "type",
               "signature": "RenderGroupNode"
@@ -12502,6 +12507,11 @@
               "name": "RenderImageNode",
               "kind": "type",
               "signature": "RenderImageNode"
+            },
+            {
+              "name": "RenderLinearGradient",
+              "kind": "type",
+              "signature": "RenderLinearGradient"
             },
             {
               "name": "RenderNode",

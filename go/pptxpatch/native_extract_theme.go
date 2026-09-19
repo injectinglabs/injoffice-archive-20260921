@@ -449,6 +449,8 @@ func exactNativeSchemeColor(node *nativeXMLNode, dialect nativeExtractDialect, t
 		{Space: dialect.drawing, Local: "shade"},
 		{Space: dialect.drawing, Local: "lumMod"},
 		{Space: dialect.drawing, Local: "lumOff"},
+		{Space: dialect.drawing, Local: "satMod"},
+		{Space: dialect.drawing, Local: "hueMod"},
 		{Space: dialect.drawing, Local: "alpha"},
 		{Space: dialect.drawing, Local: "alphaMod"},
 		{Space: dialect.drawing, Local: "alphaOff"},
@@ -563,6 +565,32 @@ func applyNativeSchemeColorTransforms(base string, node *nativeXMLNode, dialect 
 			l = nativeClampInt64(l+value, 0, nativeColorPercent)
 			if l == 0 || l == nativeColorPercent {
 				s = 0
+			}
+			color = nativeHSLToSRGB(h, s, l)
+			applied = true
+		case "satMod":
+			// ECMA-376 Part 1 §20.1.2.3.29: multiply the saturation by the
+			// percentage, in the same HSL space lumMod/lumOff already use.
+			value, valueErr := parseNativeColorTransformPercent(child, 0, nativeMaxDrawingPercentage)
+			if valueErr != nil {
+				return "", valueErr
+			}
+			h, s, l := nativeSRGBToHSL(color)
+			s = nativeClampInt64(nativeRoundDiv(s*value, nativeColorPercent), 0, nativeColorPercent)
+			color = nativeHSLToSRGB(h, s, l)
+			applied = true
+		case "hueMod":
+			// ECMA-376 Part 1 §20.1.2.3.18: multiply the hue angle by the
+			// percentage. The angle is periodic, so the product wraps at a
+			// full turn rather than clamping.
+			value, valueErr := parseNativeColorTransformPercent(child, 0, nativeMaxDrawingPercentage)
+			if valueErr != nil {
+				return "", valueErr
+			}
+			h, s, l := nativeSRGBToHSL(color)
+			h = nativeRoundDiv(h*value, nativeColorPercent) % nativeColorHueMax
+			if h < 0 {
+				h += nativeColorHueMax
 			}
 			color = nativeHSLToSRGB(h, s, l)
 			applied = true

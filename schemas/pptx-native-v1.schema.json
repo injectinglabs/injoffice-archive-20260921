@@ -358,6 +358,33 @@
         "distancePpm": { "type": "integer", "minimum": 0, "maximum": 1000000 }
       }
     },
+    "linearGradientStop": {
+      "x-binding-name": "NativeLinearGradientStop",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["positionPct", "color"],
+      "description": "One a:gs stop. positionPct is the DrawingML ST_PositiveFixedPercentage in 1/1000 of a percent.",
+      "properties": {
+        "positionPct": { "type": "integer", "minimum": 0, "maximum": 100000 },
+        "color": { "$ref": "#/$defs/color" }
+      }
+    },
+    "linearGradient": {
+      "x-binding-name": "NativeLinearGradient",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["angle", "stops"],
+      "description": "A DrawingML a:gradFill with an a:lin direction. angle is ST_PositiveFixedAngle in 1/60000 of a degree, clockwise from the positive x axis. Stops are ordered by strictly increasing position.",
+      "properties": {
+        "angle": { "type": "integer", "minimum": 0, "maximum": 21599999 },
+        "stops": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 64,
+          "items": { "$ref": "#/$defs/linearGradientStop" }
+        }
+      }
+    },
     "transition": {
       "x-binding-name": "NativeTransition",
       "type": "object",
@@ -1853,6 +1880,7 @@
         "id": { "$ref": "#/$defs/nativeId" },
         "provenance": { "$ref": "#/$defs/provenance" },
         "background": { "$ref": "#/$defs/color" },
+        "backgroundGradient": { "$ref": "#/$defs/linearGradient" },
         "transition": { "$ref": "#/$defs/transition" },
         "elements": {
           "type": "array",

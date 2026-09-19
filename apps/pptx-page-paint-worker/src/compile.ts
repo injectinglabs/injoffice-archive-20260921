@@ -205,7 +205,7 @@ export async function compilePptxPreview(input:unknown):Promise<PptxPreview>{
    }
   }
  }
- const result:PptxPreview={version:1,package_sha256:request.package_sha256,slide_index:request.slide_index as number,slide_count:deck.slides.length,width:tree.size.cx,height:tree.size.cy,background:tree.background.color,policy:'max-run-natural-v1',nodes:root.children,diagnostics,font_digests:[...fonts.resources.values()].map(r=>r.face.contentDigest),resources:[]}
+ const result:PptxPreview={version:1,package_sha256:request.package_sha256,slide_index:request.slide_index as number,slide_count:deck.slides.length,width:tree.size.cx,height:tree.size.cy,background:tree.background.color,...(tree.backgroundGradient?{background_gradient:{angle:tree.backgroundGradient.angle,stops:tree.backgroundGradient.stops.map(s=>({pos:s.positionPct,color:s.color}))}}:{}),policy:'max-run-natural-v1',nodes:root.children,diagnostics,font_digests:[...fonts.resources.values()].map(r=>r.face.contentDigest),resources:[]}
  result.resources=[...resources.values()].sort((a,b)=>a.part_name.toLowerCase()<b.part_name.toLowerCase()?-1:1)
  if(request.source_chart_preview===true){result.source_chart_preview=true;result.chart_axis_layout_policy='supplied-outline-margins-v1'}
  if(request.workbook_chart_preview===true){result.workbook_chart_preview=true;result.chart_axis_layout_policy='supplied-outline-margins-v1';for(const refusal of workbookResolution!.refusals)result.diagnostics.push(`Workbook chart ${refusal.objectId}: ${refusal.reason}`.slice(0,2048))}
