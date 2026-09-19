@@ -8,6 +8,9 @@
   "workspaces": ["packages/*", "apps/*"],
   "scripts": {
     "dev": "npm run dev -w apps/playground",
+    "desktop:build": "npm run build -w @injoffice/desktop",
+    "desktop:start": "npm run start -w @injoffice/desktop",
+    "desktop:dist": "npm run dist -w @injoffice/desktop",
     "docs:dev": "npm run dev -w apps/docs",
     "docs:build": "npm run build -w apps/docs",
     "docs:preview": "npm run preview -w apps/docs",
