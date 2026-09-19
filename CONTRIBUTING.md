@@ -72,11 +72,21 @@ Browser checks require Chrome or Chromium (`CHROME_BIN` can select the executabl
 
 External fidelity comparisons and Microsoft Office/reference exports remain local-only. The manual workflow uses only the repository's synthetic qualification corpus; do not add private documents, external benchmark downloads, or proprietary fonts to it.
 
+## Desktop app
+
+The optional Electron workspace `apps/desktop` is a local editor around the same native extract/apply engines. It is not a required hosted backend and is not published to npm. Desktop packaging, signed updates, and native WASM editor tests are not PR merge gates. See [docs/DESKTOP.md](docs/DESKTOP.md).
+
+- Unsigned developer previews: GitHub Actions → **Desktop builds** (`desktop.yml`, `workflow_dispatch`) for mac-arm64, mac-x64, win-x64, and linux-x64. Those artifacts must not drive the public updater.
+- Signed public drafts: tag `desktop-v*` and the **Desktop release draft** workflow (`desktop-release.yml`, environment `desktop-release`). Drafts are never auto-published.
+- Keep the desktop WASM snapshot on current `main`; do not freeze a lagging snapshot as the advertised product.
+- Once the workspace has a `test` script, host tests belong in the `core` shard of `scripts/ci-test-shards.json`. Do not treat Electron, TipTap, or Univer as file authority.
+- Do not commit `apps/desktop/release/` installer output.
+
 ## Design expectations
 
 - Keep persisted and wire-facing specs plain JSON.
 - Put editor-independent logic in pure functions and keep DOM/editor adapters thin.
-- Treat Univer as an optional editor shell and native paint as preview. Neither is the OOXML file authority.
+- Treat Univer as an optional editor shell and native paint as preview. Neither is the OOXML file authority. Electron is a host shell only; it is not native authority either.
 - Follow the native file API: Go `Extract*` → native JSON → TypeScript paint (preview) → mutation JSON → Go `Apply*`.
 - Treat OOXML/PDF input as untrusted and bound allocations and recursion.
 - Preserve unknown archive parts when patching an existing file. A writer must fail when it cannot prove that an operation is safe.
