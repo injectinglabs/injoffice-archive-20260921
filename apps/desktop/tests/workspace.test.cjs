@@ -6,7 +6,7 @@ const { create, act } = require('react-test-renderer');
 global.IS_REACT_ACT_ENVIRONMENT = true;
 async function loadApp({busyOnMount=false} = {}) {
   const { rolldown } = await import('rolldown');
-  const bundle = await rolldown({ input: path.resolve(__dirname, '../src/App.tsx'), platform: 'node', external: id => /^react(?:\/|$)/.test(id), transform: { jsx: { runtime: 'automatic' } }, plugins: [{ name: 'workspace-boundaries', resolveId(id) { if(id==='./UpdatesDialog')return '\0mock-updates'; if(id==='./spreadsheetDelimited')return '\0mock-delimited'; if (['./OfficeEditor', './PdfEditor', './PresentationEditor', './SpreadsheetEditor', './StartPage'].includes(id) || id.endsWith('.png')) return '\0mock:' + id; }, load(id) { if(id==='\0mock-updates')return 'export const UpdateNotice=()=>null; export default ()=>null;'; if(id==='\0mock-delimited')return 'export const importDelimitedWorkbook=(...args)=>globalThis.__importDelimited(...args)'; if (id.startsWith('\0mock:')) return id.endsWith('.png') ? 'export default "logo.png";' : `import React from 'react'; export function SpreadsheetEditor(props) { ${busyOnMount ? 'React.useEffect(()=>{props.onBusyChange?.(true)},[]);' : ''} return React.createElement('${!id.endsWith('StartPage') ? 'test-editor' : 'test-start'}',props); } export default SpreadsheetEditor;`; } }] });
+  const bundle = await rolldown({ input: path.resolve(__dirname, '../src/App.tsx'), platform: 'node', external: id => /^react(?:\/|$)/.test(id), transform: { jsx: { runtime: 'automatic' } }, plugins: [{ name: 'workspace-boundaries', resolveId(id) { if(id==='./UpdatesDialog')return '\0mock-updates'; if(id==='./spreadsheetDelimited')return '\0mock-delimited'; if (id.endsWith('.css')) return '\0css'; if (['./OfficeEditor', './PdfEditor', './PresentationEditor', './SpreadsheetEditor', './StartPage'].includes(id) || id.endsWith('.png')) return '\0mock:' + id; }, load(id) { if(id==='\0css')return 'export default ""'; if(id==='\0mock-updates')return 'export const UpdateNotice=()=>null; export default ()=>null;'; if(id==='\0mock-delimited')return 'export const importDelimitedWorkbook=(...args)=>globalThis.__importDelimited(...args)'; if (id.startsWith('\0mock:')) return id.endsWith('.png') ? 'export default "logo.png";' : `import React from 'react'; export function SpreadsheetEditor(props) { ${busyOnMount ? 'React.useEffect(()=>{props.onBusyChange?.(true)},[]);' : ''} return React.createElement('${!id.endsWith('StartPage') ? 'test-editor' : 'test-start'}',props); } export default SpreadsheetEditor;`; } }] });
   try { const { output } = await bundle.generate({ format: 'cjs', codeSplitting: false }); const result = { exports: {} }; new Function('require', 'module', 'exports', output[0].code)(require, result, result.exports); return result.exports.default ?? result.exports; } finally { await bundle.close(); }
 }
 test('workspace tabs retain independent bytes and editor instances; save and close target only their session', async () => {
@@ -196,4 +196,21 @@ test('workspace freezes during close preparation, waits for late drafts, and res
     await act(async()=>menu('new'));
     assert.equal(renderer.root.findAllByType('test-start').length,1);
   }finally{await act(async()=>renderer.unmount());delete global.window;}
+});
+
+test('unsupported open replaces the start page with OpenError instead of an empty home', async () => {
+  const App = await loadApp();
+  global.window = { localStorage: { getItem: () => null, setItem() {} }, document: { title: '' }, addEventListener() {}, removeEventListener() {}, injDesktop: {
+    recent: async () => [], recovery: async () => [], setDirty() {}, setBusy() {}, onMenuAction() { return () => {}; },
+    open: async () => { throw new Error('Choose a DOCX document, XLSX workbook, PPTX presentation, or PDF.'); },
+  } };
+  let renderer;
+  try {
+    await act(async () => { renderer = create(React.createElement(App)); });
+    await act(async () => renderer.root.findByType('test-start').props.onOpen());
+    assert.equal(renderer.root.findAllByType('test-start').length, 0);
+    assert.match(renderer.root.findByProps({ id: 'open-error-title' }).children.join(''), /not supported/i);
+    await act(async () => renderer.root.findAllByType('button').find(button => button.props.children === 'Back to start').props.onClick());
+    assert.equal(renderer.root.findAllByType('test-start').length, 1);
+  } finally { if (renderer) await act(async () => renderer.unmount()); delete global.window; }
 });

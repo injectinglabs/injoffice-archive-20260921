@@ -16,7 +16,8 @@ and page-layout chrome land here without WASM. Selection offsets for caret
 restore are in `document-range.ts`. Paragraph/run appearance follows the
 OOXML style cascade (bold/italic toggles, cycle-safe). PNG/JPEG insert sizes
 from file headers only. Inline PNG/JPEG preview is cached and bounded.
-`OpenError` explains unsupported, encrypted, and extract failures.
+`OpenError` explains unsupported, encrypted, and extract failures and
+replaces the start page when open/create fails closed.
 The rest of the renderer,
 the real Electron dependency, GitHub provider, and packaging workflows land
 in follow-up changes. Preview builds never load an updater.
