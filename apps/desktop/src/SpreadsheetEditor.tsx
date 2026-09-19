@@ -1,20 +1,19 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { createXlsxWasmClient, adaptWorkbookMutationBatchV1 } from '@injoffice/xlsx-wasm';
-import type { XlsxNativeChart } from '@injoffice/xlsx-wasm';
-import { SpreadsheetCharts } from './SpreadsheetCharts';
-import { definedNameCaseKey } from '@injoffice/sheets/browser';
 import type { NativeWorkbookV2, StyleDelta } from '@injoffice/sheets/browser';
 import { visibleRowWindow, visibleRowStep, borderOperations, address, cellDisplay, editableCellText, clearOperations, commandBatch, contains, copySelection, MAX_COLUMNS, MAX_ROWS, parseSelection, pasteOperations, selectedRange, selectionLabel, valueOperation, recoveryDraft, validateRecoveryDraft, type SpreadsheetRecoveryDraft, type Position, type Selection, type SheetOperation } from './spreadsheetCommands';
-import { calculationInput, calculationCache, createSpreadsheetCalculator } from './spreadsheetCalculation';
+import { calculationInput, createSpreadsheetCalculator } from './spreadsheetCalculation';
 import type { LocalCalculationResult } from '../../../packages/formulas/src/localWorkbookCalculation';
 import { exportDelimitedSheet, type DelimitedExportMode } from './spreadsheetDelimited';
 import type { DelimitedFormat } from './delimitedText';
 import { sheetLifecycleReason } from './spreadsheetSheetPolicy';
 import './spreadsheet.css';
 
+function definedNameCaseKey(value: string): string { return value.toLowerCase(); }
+
 export interface OfficeEditorProps { registerHistory?: (commands: { undo(): void; redo(): void }) => void; registerCommit?: (commit: () => Promise<boolean>) => void; initialRecoveryDraft?: unknown; onRecoveryDraftChange?: (draft: unknown | null) => void; name: string; bytes: Uint8Array; onChange: (bytes: Uint8Array) => void; onBusyChange?: (busy: boolean) => void; onDraftChange?: (dirty: boolean) => void; viewOptions?: { zoom: number; navigation: boolean; focus: boolean } }
 
-type Snapshot = { bytes: Uint8Array; workbook: NativeWorkbookV2; calculation?: LocalCalculationResult; calculationRevision?: string; charts: XlsxNativeChart[]; chartError?: string };
+type Snapshot = { bytes: Uint8Array; workbook: NativeWorkbookV2; calculation?: LocalCalculationResult; calculationRevision?: string; charts: unknown[]; chartError?: string };
 const initialSelection: Selection = { anchor: { row: 0, column: 0 }, end: { row: 0, column: 0 } };
 const HISTORY_LIMIT = 20, HISTORY_BYTES = 128 * 1024 * 1024;
 function historyPush(list: Snapshot[], entry: Snapshot): Snapshot[] {
@@ -109,16 +108,18 @@ export function SpreadsheetEditor(props: OfficeEditorProps & { initialRecoveryDr
     if (locked.current || !canEdit) return;
     updateDraft(text); setInline(inCell); setError('');
   }
-  async function readChartState(bytes: Uint8Array, workbook: NativeWorkbookV2): Promise<{charts:XlsxNativeChart[];chartError?:string}> {
-    try { return { charts: (await client.current!.readCharts(bytes, workbook)).charts }; }
-    catch (reason) { return { charts: [], chartError: reason instanceof Error ? reason.message : String(reason) }; }
+  async function readChartState(bytes: Uint8Array, workbook: NativeWorkbookV2): Promise<{charts: unknown[]; chartError?: string}> {
+    const inspect = client.current?.inspectObjects;
+    if (typeof inspect !== 'function') return { charts: [] };
+    try {
+      const objects = await inspect.call(client.current, bytes, workbook.source.package_sha256);
+      return { charts: Array.isArray(objects?.charts) ? [...objects.charts] : [] };
+    } catch (reason) { return { charts: [], chartError: reason instanceof Error ? reason.message : String(reason) }; }
   }
   async function calculateSnapshot(source: Snapshot): Promise<Snapshot> {
     const result = await calculator.current!.calculate(calculationInput(source.workbook));
     if (!result.cells.length) return source;
-    const bytes = await client.current!.apply(source.bytes, source.workbook, { expected_revision: source.workbook.revision, calculation: calculationCache(source.workbook, result) });
-    const workbook = await client.current!.extract(bytes);
-    return { bytes, workbook, calculation: result, calculationRevision: workbook.revision, ...await readChartState(bytes, workbook) };
+    return { ...source, calculation: result, calculationRevision: source.workbook.revision };
   }
   async function exportSheet() {
     const before = current.current;
@@ -141,7 +142,7 @@ export function SpreadsheetEditor(props: OfficeEditorProps & { initialRecoveryDr
     try {
       const next = await calculateSnapshot(before);
       if (!mounted.current || current.current !== before) return;
-      undo.current = historyPush(undo.current, before); redo.current = []; current.current = next; setSnapshot(next); emitted.current = next.bytes; callbacks.current.onChange(next.bytes);
+      current.current = next; setSnapshot(next);
       const unresolved = next.calculation?.cells.filter(cell => cell.status === 'unsupported' || cell.status === 'circular').length ?? 0;
       setNotice(unresolved ? `Calculated locally; ${unresolved} formulas remain unresolved (see cell details).` : 'Formulas calculated locally');
     } catch (reason) { if (mounted.current) setError(reason instanceof Error ? reason.message : String(reason)); }
@@ -266,15 +267,15 @@ export function SpreadsheetEditor(props: OfficeEditorProps & { initialRecoveryDr
         <label className="sheet-color">Fill<input aria-label="Cell fill color" type="color" disabled={disabled} value={style?.fill_color ?? '#ffffff'} onChange={event => format({ fill_color: event.target.value })}/></label>
       </div>
       <div className="sheet-tool-group"><select aria-label="Cell alignment" disabled={disabled} value={style?.horizontal_alignment ?? 'general'} onChange={event => format({ horizontal_alignment: event.target.value as StyleDelta['horizontal_alignment'] })}><option value="general">Auto align</option><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select><select aria-label="Cell vertical alignment" disabled={disabled} value={style?.vertical_alignment ?? 'bottom'} onChange={event => format({ vertical_alignment: event.target.value as StyleDelta['vertical_alignment'] })}><option value="top">Top</option><option value="middle">Middle</option><option value="bottom">Bottom</option></select><button aria-pressed={Boolean(style?.wrap_text)} disabled={disabled} onClick={() => format({ wrap_text: !style?.wrap_text })}>Wrap</button></div>
-      <div className="sheet-tool-group"><select aria-label="Cell number format" disabled={disabled} value={style?.number_format ?? 'General'} onChange={event => format({ number_format: event.target.value })}>{[...new Set(['General', '0', '0.00', 'yyyy-mm-dd', style?.number_format ?? 'General'])].map(value => <option key={value} value={value}>{({ General: 'General', '0': 'Integer', '0.00': 'Decimal · 2 places', 'yyyy-mm-dd': 'Date · YYYY-MM-DD' } as Record<string,string>)[value] ?? `Existing: ${value}`}</option>)}</select><button disabled={disabled || Boolean(merge) || selectionLabel(selection) === address(selection.anchor)} onClick={() => void execute([{ kind: 'range.merge', range }], 'Cells merged; unmerge to edit their contents')}>Merge</button><button disabled={disabled || !merge} onClick={() => merge && void execute([{ kind: 'range.unmerge', range: { row: merge.row, column: merge.column, end_row: merge.end_row, end_column: merge.end_column } }], 'Cells unmerged')}>Unmerge</button></div>
-<button disabled={!snapshot} aria-pressed={chartsOpen} onClick={() => setChartsOpen(value => !value)}>Charts</button>
-<button disabled={busy || draft !== null} aria-pressed={namesOpen} onClick={()=>setNamesOpen(value=>!value)}>Names</button>
+      <div className="sheet-tool-group"><select aria-label="Cell number format" disabled={disabled} value={style?.number_format ?? 'General'} onChange={event => format({ number_format: event.target.value })}>{[...new Set(['General', '0', '0.00', 'yyyy-mm-dd', style?.number_format ?? 'General'])].map(value => <option key={value} value={value}>{({ General: 'General', '0': 'Integer', '0.00': 'Decimal · 2 places', 'yyyy-mm-dd': 'Date · YYYY-MM-DD' } as Record<string,string>)[value] ?? `Existing: ${value}`}</option>)}</select><button disabled={true} title="Merge is not supported by the native XLSX transaction" onClick={() => void execute([{ kind: 'range.merge', range }], 'Cells merged; unmerge to edit their contents')}>Merge</button><button disabled={true} title="Unmerge is not supported by the native XLSX transaction" onClick={() => merge && void execute([{ kind: 'range.unmerge', range: { row: merge.row, column: merge.column, end_row: merge.end_row, end_column: merge.end_column } }], 'Cells unmerged')}>Unmerge</button></div>
+<button disabled={true} title="Chart mutations are not supported by the native XLSX transaction" aria-pressed={chartsOpen} onClick={() => setChartsOpen(value => !value)}>Charts</button>
+<button disabled={true} title="Defined names are not supported by the native XLSX transaction" aria-pressed={namesOpen} onClick={()=>setNamesOpen(value=>!value)}>Names</button>
       <details className="sheet-dimensions sheet-export"><summary>Export sheet</summary><div><label>Format<select aria-label="Delimited export format" value={exportFormat} onChange={event=>setExportFormat(event.target.value as DelimitedFormat)}><option value="csv">CSV</option><option value="tsv">TSV</option></select></label><label>Content<select aria-label="Delimited export content" value={exportMode} onChange={event=>setExportMode(event.target.value as DelimitedExportMode)}><option value="values">Raw values · current calculation required</option><option value="formulas">Formula source · =expressions</option></select></label><small>UTF-8 with CRLF rows. Includes hidden rows and stored blank cells. Cell types, formatting and other sheets are not saved.</small><button disabled={busy || draft !== null || !sheet} onClick={()=>void exportSheet()}>Export selected sheet</button></div></details>
-      <button disabled={disabled || range.row === range.end_row} onClick={() => { setFilterColumn(range.column); setFilterValues(''); setFilterBlank(false); setFilterOpen(true); }}>Filter text</button>
-      <button disabled={disabled || !sheet?.auto_filter} onClick={() => void execute([{kind:'sheet.filter',filter:null}], 'Filter cleared; all filtered records shown')}>Clear filter</button>
-      <button disabled={disabled || range.row === range.end_row} onClick={() => { setSortColumn(range.column); setSortOpen(true); }}>Sort range</button>
-      <details className="sheet-dimensions"><summary>Freeze panes</summary><div><button disabled={disabled} onClick={() => void execute([{kind:'sheet.freeze',rows:1,columns:0}], 'Top row frozen')}>Freeze top row</button><button disabled={disabled} onClick={() => void execute([{kind:'sheet.freeze',rows:0,columns:1}], 'First column frozen')}>Freeze first column</button><button title="Freeze rows above and columns left of the active cell (up to 50 rows and 10 columns)" disabled={disabled || selection.anchor.row > 50 || selection.anchor.column > 10 || selection.anchor.row + selection.anchor.column === 0} onClick={() => void execute([{kind:'sheet.freeze',rows:selection.anchor.row,columns:selection.anchor.column}], 'Panes frozen at active cell')}>Freeze at selection</button><button disabled={disabled || !sheet?.frozen_rows && !sheet?.frozen_columns} onClick={() => void execute([{kind:'sheet.freeze',rows:0,columns:0}], 'Panes unfrozen')}>Unfreeze panes</button></div></details>
-      <details className="sheet-dimensions"><summary>Rows & columns</summary><div>{(['row.insert','row.delete','column.insert','column.delete'] as const).map(action => <button key={action} disabled={disabled} onClick={() => setStructureAction(action)}>{action.endsWith('.insert') ? 'Insert' : 'Delete'} {action.startsWith('row.') ? 'rows' : 'columns'}</button>)}</div></details>
+      <button disabled={true} title="Filters are not supported by the native XLSX transaction" onClick={() => { setFilterColumn(range.column); setFilterValues(''); setFilterBlank(false); setFilterOpen(true); }}>Filter text</button>
+      <button disabled={true} title="Filters are not supported by the native XLSX transaction" onClick={() => void execute([{kind:'sheet.filter',filter:null}], 'Filter cleared; all filtered records shown')}>Clear filter</button>
+      <button disabled={true} title="Sort is not supported by the native XLSX transaction" onClick={() => { setSortColumn(range.column); setSortOpen(true); }}>Sort range</button>
+      <details className="sheet-dimensions"><summary>Freeze panes</summary><div><button disabled={true} title="Freeze is not supported by the native XLSX transaction" onClick={() => void execute([{kind:'sheet.freeze',rows:1,columns:0}], 'Top row frozen')}>Freeze top row</button><button disabled={true} title="Freeze is not supported by the native XLSX transaction" onClick={() => void execute([{kind:'sheet.freeze',rows:0,columns:1}], 'First column frozen')}>Freeze first column</button><button title="Freeze is not supported by the native XLSX transaction" disabled={true} onClick={() => void execute([{kind:'sheet.freeze',rows:selection.anchor.row,columns:selection.anchor.column}], 'Panes frozen at active cell')}>Freeze at selection</button><button disabled={true} title="Freeze is not supported by the native XLSX transaction" onClick={() => void execute([{kind:'sheet.freeze',rows:0,columns:0}], 'Panes unfrozen')}>Unfreeze panes</button></div></details>
+      <details className="sheet-dimensions"><summary>Rows & columns</summary><div>{(['row.insert','row.delete','column.insert','column.delete'] as const).map(action => <button key={action} disabled={true} title="Row and column insert/delete are not supported by the native XLSX transaction" onClick={() => setStructureAction(action)}>{action.endsWith('.insert') ? 'Insert' : 'Delete'} {action.startsWith('row.') ? 'rows' : 'columns'}</button>)}</div></details>
       <details className="sheet-dimensions"><summary>Cell size</summary><div><label>Row height (pt)<input aria-label="Row height in points" type="number" min="1" max="409.5" step="0.5" value={rowHeight} onChange={event => setRowHeight(event.target.value)}/></label><button disabled={disabled} onClick={() => resize('row')}>Set height</button><label>Column width (characters)<input aria-label="Column width in characters" type="number" min="1" max="255" step="0.5" value={columnWidth} onChange={event => setColumnWidth(event.target.value)}/></label><button disabled={disabled} onClick={() => resize('column')}>Set width</button></div></details>
     </div>
     <div className="sheet-formula-bar">
@@ -324,7 +325,6 @@ Blue"/></label><label><input type="checkbox" checked={filterBlank} onChange={eve
         </td>;
       })}</tr>)}</tbody></table>}
     </div>
-    {chartsOpen && snapshot && <SpreadsheetCharts charts={snapshot.charts} error={snapshot.chartError} sheetId={sheetId} range={range} disabled={disabled} onExecute={execute} onClose={() => setChartsOpen(false)}/>}
     </div>
     <div className="sheet-bottom"><div className="sheet-tab-tools"><button aria-label="Add worksheet" title={addSheetReason} disabled={disabled || Boolean(addSheetReason)} onClick={() => { let number = 1; while (workbook?.sheets.some(value => value.name.toLowerCase() === `sheet${number}`)) number++; setSheetName(`Sheet${number}`); setSheetAction('add'); }}>+</button><button disabled={disabled} onClick={() => { setSheetName(sheet?.name ?? ''); setSheetAction('rename'); }}>Rename</button><button title={deleteSheetReason} disabled={disabled || Boolean(deleteSheetReason)} onClick={() => setSheetAction('delete')}>Delete</button></div><nav aria-label="Worksheets">{workbook?.sheets.filter(value => value.state === 'visible').map(value => <button key={value.id} aria-current={value.id === sheetId ? 'page' : undefined} disabled={busy || draft !== null} onClick={() => { setSheetId(value.id); setSelection(initialSelection); setLocation('A1'); setOrigin({ row: 0, column: 0 }); }}>{value.name}{!value.editable ? ' · read-only' : ''}</button>)}</nav><div className="sheet-window-controls"><button aria-label="Previous rows" disabled={busy || draft !== null || origin.row === 0} onClick={() => select({ row: Math.max(0, origin.row - 60), column: origin.column })}>↑</button><button aria-label="Previous columns" disabled={busy || draft !== null || origin.column === 0} onClick={() => select({ row: origin.row, column: Math.max(0, origin.column - 20) })}>←</button><span>Rows {origin.row + 1}–{Math.min(MAX_ROWS, origin.row + 60)}</span><button aria-label="Next rows" disabled={busy || draft !== null || origin.row + 60 >= MAX_ROWS} onClick={() => select({ row: origin.row + 60, column: origin.column })}>↓</button><button aria-label="Next columns" disabled={busy || draft !== null || origin.column + 20 >= MAX_COLUMNS} onClick={() => select({ row: origin.row, column: origin.column + 20 })}>→</button></div></div>
     <div className="sheet-status"><span>{busy ? 'Applying native change…' : activeStatus}</span><span role="status">{notice || 'Enter / F2 to edit · Shift + arrows to select · paste a range'}</span><span>{snapshot?.calculation ? `Local calculation · ${snapshot.calculation.cells.filter(cell => cell.status === 'unsupported' || cell.status === 'circular').length} unresolved` : 'Formula caches: stored, unverified'}</span></div>

@@ -10,17 +10,21 @@ function isExternal(id) {
   return /^react(?:\/|$)/.test(id) || id === '@injoffice/xlsx-wasm' || id === '@injoffice/sheets/browser' || id.includes('packages/formulas/');
 }
 
+function adaptWorkbookMutationBatchV1(workbook, batch) {
+  const cells = (batch.operations ?? []).filter(operation => String(operation.kind).startsWith('cell.'));
+  return { expected_revision: workbook.revision, ...(cells.length ? { cells } : {}) };
+}
+
 function stubRequire(id) {
   if (id === '@injoffice/xlsx-wasm') {
     return {
       createXlsxWasmClient: () => globalThis.__xlsxClient,
-      adaptWorkbookMutationBatchV1: (_workbook, batch) => batch,
+      adaptWorkbookMutationBatchV1,
     };
   }
   if (id === '@injoffice/sheets/browser') {
     return {
       formatNativeSheetCellDisplayV2: () => { throw new Error('WASM display is mocked'); },
-      definedNameCaseKey: value => String(value).toLowerCase(),
       editableDefinedName: name => !String(name).startsWith('_'),
     };
   }
@@ -84,7 +88,7 @@ function mockClient() {
     extract: async () => structuredClone(model),
     apply: async (_bytes, _workbook, request) => {
       applied.push(request);
-      const operation = request.operations?.[0];
+      const operation = request.cells?.[0];
       if (operation?.kind === 'cell.set_value') {
         model.sheets[0].cells = [{ row: operation.cell.row, column: operation.cell.column, value: { kind: 'string', text: String(operation.value) } }];
         model.revision = 'rev-2';
@@ -92,7 +96,6 @@ function mockClient() {
       }
       return new Uint8Array([2]);
     },
-    readCharts: async () => ({ charts: [] }),
     terminate() { applied.push('terminate'); },
   };
 }
@@ -112,7 +115,11 @@ function button(view, label) {
 test('SpreadsheetEditor mounts, reports busy, and applies a cell edit', async () => {
   assert.equal(fs.existsSync(path.resolve(__dirname, '../src/spreadsheet.css')), true);
   const source = fs.readFileSync(path.resolve(__dirname, '../src/SpreadsheetEditor.tsx'), 'utf8');
+  const calculateSnapshot = source.slice(source.indexOf('function calculateSnapshot'), source.indexOf('function exportSheet'));
   assert.equal(/from ['"]\.\/OfficeEditor['"]/.test(source), false);
+  assert.equal(/\breadCharts\b/.test(source), false);
+  assert.equal(/definedNameCaseKey\s+from\s+['"]@injoffice\/sheets\/browser['"]/.test(source), false);
+  assert.equal(/\.apply\(/.test(calculateSnapshot), false);
 
   const client = mockClient();
   globalThis.__xlsxClient = client;
@@ -140,8 +147,12 @@ test('SpreadsheetEditor mounts, reports busy, and applies a cell edit', async ()
     assert.equal(apply.props.disabled, false);
     await act(async () => apply.props.onClick());
     await until(() => changes.length === 1 && busy.at(-1) === false && client.applied.length >= 1);
-    assert.equal(client.applied[0].operations[0].kind, 'cell.set_value');
-    assert.equal(client.applied[0].operations[0].value, 'Hello');
+    const transaction = client.applied[0];
+    assert.equal(transaction.operations, undefined);
+    assert.equal(transaction.calculation, undefined);
+    assert.equal(transaction.expected_revision, 'rev-1');
+    assert.equal(transaction.cells[0].kind, 'cell.set_value');
+    assert.equal(transaction.cells[0].value, 'Hello');
     assert.deepEqual([...changes[0]], [2]);
   } finally {
     if (view) await act(async () => view.unmount());
