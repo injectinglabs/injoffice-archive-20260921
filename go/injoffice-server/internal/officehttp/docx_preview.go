@@ -76,12 +76,26 @@ func docxPreviewInput(ctx context.Context, data []byte) (map[string]any, error) 
 	}
 	// Only package-referenced PNG/JPEG bytes enter the compiler; its authoritative
 	// media join independently checks part names, content digests and geometry.
-	encoded, err := json.Marshal(doc)
+	media, err := docxPreviewMediaAssets(ctx, data, doc, nil)
 	if err != nil {
 		return nil, err
 	}
-	var value any
-	if err = json.Unmarshal(encoded, &value); err != nil {
+	return map[string]any{"protocol": "injoffice.docx.page-paint-compiler", "version": 1, "source_revision": "injoffice-docx-preview-v1", "outline_provider": map[string]string{"provider_id": "injoffice.harfbuzz-outline", "provider_revision": "v1"}, "document": doc, "resolved_layout": layout, "pagination_settings": settings, "font_inventory_json": string(inventoryJSON), "font_assets": fonts, "media_assets": media}, nil
+}
+
+// docxPreviewMediaAssets reads the PNG/JPEG parts that `value` names through
+// `media_part` + `content_type` pairs, skipping parts `existing` already carries.
+// The strict document names the pictures it modeled; the approximate drawing-
+// shape sidecar names the picture a shape's a:blipFill embeds, which no strict
+// drawing does. Either way only package bytes the source itself references are
+// read, and the compiler still joins each part to its preserved digest.
+func docxPreviewMediaAssets(ctx context.Context, data []byte, value any, existing []map[string]any) ([]map[string]any, error) {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	var decoded any
+	if err = json.Unmarshal(encoded, &decoded); err != nil {
 		return nil, err
 	}
 	names := map[string]string{}
@@ -101,13 +115,22 @@ func docxPreviewInput(ctx context.Context, data []byte) (map[string]any, error) 
 			}
 		}
 	}
-	walk(value)
+	walk(decoded)
 	media := []map[string]any{}
+	total := 0
+	for _, asset := range existing {
+		if name, ok := asset["part_name"].(string); ok {
+			delete(names, name)
+		}
+		if bytes64, ok := asset["bytes_base64"].(string); ok {
+			total += base64.StdEncoding.DecodedLen(len(bytes64))
+		}
+		media = append(media, asset)
+	}
 	archive, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
 		return nil, err
 	}
-	total := 0
 	for _, part := range archive.File {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -130,7 +153,7 @@ func docxPreviewInput(ctx context.Context, data []byte) (map[string]any, error) 
 		}
 		media = append(media, map[string]any{"part_name": part.Name, "content_type": names[part.Name], "content_digest": fmt.Sprintf("sha256:%x", sha256.Sum256(content)), "bytes_base64": base64.StdEncoding.EncodeToString(content)})
 	}
-	return map[string]any{"protocol": "injoffice.docx.page-paint-compiler", "version": 1, "source_revision": "injoffice-docx-preview-v1", "outline_provider": map[string]string{"provider_id": "injoffice.harfbuzz-outline", "provider_revision": "v1"}, "document": doc, "resolved_layout": layout, "pagination_settings": settings, "font_inventory_json": string(inventoryJSON), "font_assets": fonts, "media_assets": media}, nil
+	return media, nil
 }
 
 func compileDOCXPreview(ctx context.Context, options DOCXPreviewOptions, input map[string]any) (json.RawMessage, error) {
@@ -338,6 +361,16 @@ func handleDOCXPreviewMode(w http.ResponseWriter, r *http.Request, options DOCXP
 			}
 			if shapes != nil {
 				workerInput["drawing_shapes"] = shapes
+				// A shape's a:blipFill names an image part no strict drawing
+				// does; supply its bytes so the compiler can join them to the
+				// preserved part once the picture qualifier accepts the fill.
+				existing, _ := input["media_assets"].([]map[string]any)
+				media, mediaErr := docxPreviewMediaAssets(ctx, data, shapes, existing)
+				if mediaErr != nil {
+					xlsxhttp.WriteError(w, http.StatusUnprocessableEntity, mediaErr)
+					return
+				}
+				input["media_assets"] = media
 			}
 			// Same-bytes read-only OMML sidecar; the compiler re-validates its joins.
 			equations, equationsErr := docxpatch.InspectNativeApproximateEquationsV1(data)

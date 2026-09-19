@@ -577,3 +577,111 @@ func TestApproximateDrawingGroupShapeOmissions(t *testing.T) {
 		}
 	})
 }
+
+func TestApproximateDrawingShapesBlipFill(t *testing.T) {
+	blip := func(fill string) string {
+		return `<w:drawing xmlns:wp="` + wordDrawingTransitional + `" xmlns:a="` + drawingMLTransitional + `" xmlns:wps="` + nativeTextboxWPS + `" xmlns:r="` + relNSTransitional + `">` +
+			nativeApproximateAnchor(`<wp:positionH relativeFrom="margin"><wp:align>center</wp:align></wp:positionH>`, `<wp:positionV relativeFrom="paragraph"><wp:posOffset>2399665</wp:posOffset></wp:positionV>`) +
+			`<a:graphic><a:graphicData uri="` + nativeTextboxWPS + `"><wps:wsp><wps:cNvSpPr/><wps:spPr><a:xfrm rot="0"><a:off x="0" y="0"/><a:ext cx="3197829" cy="1934210"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom>` + fill + `<a:ln><a:noFill/></a:ln></wps:spPr><wps:bodyPr/></wps:wsp></a:graphicData></a:graphic></wp:anchor></w:drawing>`
+	}
+	// The fixture Word writes for a picture-filled rectangle whose picture was
+	// cropped in place: no srcRect, and the stretch overhangs the shape above
+	// and below by 115.561% and 13.789% of the shape's height.
+	wordCrop := `<a:blipFill dpi="0" rotWithShape="1"><a:blip r:embed="rId10"/><a:srcRect/><a:stretch><a:fillRect t="-115561" b="-13789"/></a:stretch></a:blipFill>`
+	withImage := func(parts map[string]string) {
+		parts["[Content_Types].xml"] = strings.Replace(parts["[Content_Types].xml"], `</Types>`, `<Default Extension="jpg" ContentType="image/jpeg"/></Types>`, 1)
+		parts["word/_rels/document.xml.rels"] = `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId10" Type="` + relBaseTransitional + `image" Target="media/image1.jpg"/><Relationship Id="rId11" Type="` + relBaseTransitional + `image" TargetMode="External" Target="http://example.test/picture.jpg"/><Relationship Id="rId12" Type="` + relBaseTransitional + `hyperlink" Target="media/image1.jpg"/></Relationships>`
+		parts["word/media/image1.jpg"] = "\xff\xd8\xff\xe0 not decoded here; the compiler joins the bytes"
+	}
+	inspect := func(t *testing.T, fill string) NativeApproximateDrawingShapeV1 {
+		t.Helper()
+		source := nativeApproximateShapeSource(t, `<w:p><w:r>`+blip(fill)+`</w:r></w:p>`, withImage)
+		before := append([]byte(nil), source...)
+		out, err := InspectNativeApproximateDrawingShapesV1(source)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if out == nil || len(out.Items) != 1 || out.Items[0].Status != "supported" || out.Items[0].FillRGB != nil || out.Items[0].FillGradient != nil {
+			t.Fatalf("picture-filled rectangle must be admitted with no colour fill: %#v", out)
+		}
+		if !bytes.Equal(source, before) {
+			t.Fatal("source bytes changed")
+		}
+		return out.Items[0]
+	}
+	t.Run("composes the fill-rectangle overhang into one source crop", func(t *testing.T) {
+		item := inspect(t, wordCrop)
+		fill := item.BlipFill
+		if fill == nil || fill.RelationshipID != "rId10" || fill.MediaPart != "word/media/image1.jpg" || fill.ContentType != "image/jpeg" || fill.SourceCrop == nil {
+			t.Fatalf("picture fill not resolved: %#v", fill)
+		}
+		// 115561 / (100000 + 115561 + 13789) of the source is above the shape, 13789 of the same below.
+		if *fill.SourceCrop.Left != 0 || *fill.SourceCrop.Top != 50386 || *fill.SourceCrop.Right != 0 || *fill.SourceCrop.Bottom != 6012 {
+			t.Fatalf("unexpected composed crop: %+v", *fill.SourceCrop)
+		}
+		if strings.Contains(strings.Join(item.Notes, "|"), "blipFill") {
+			t.Fatalf("an admitted picture fill records no omission: %v", item.Notes)
+		}
+		encoded, err := json.Marshal(item)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(string(encoded), `"blip_fill":{"relationship_id":"rId10","media_part":"word/media/image1.jpg","content_type":"image/jpeg","source_crop":{"left":0,"top":50386,"right":0,"bottom":6012}}`) || strings.Contains(string(encoded), `"fill_rgb"`) {
+			t.Fatalf("unexpected wire: %s", encoded)
+		}
+	})
+	t.Run("keeps a plain source rectangle and omits the crop when nothing is cropped", func(t *testing.T) {
+		item := inspect(t, `<a:blipFill><a:blip r:embed="rId10"/><a:srcRect l="10000" r="20000"/><a:stretch><a:fillRect/></a:stretch></a:blipFill>`)
+		if item.BlipFill == nil || item.BlipFill.SourceCrop == nil || *item.BlipFill.SourceCrop.Left != 10000 || *item.BlipFill.SourceCrop.Right != 20000 || *item.BlipFill.SourceCrop.Top != 0 || *item.BlipFill.SourceCrop.Bottom != 0 {
+			t.Fatalf("srcRect not carried: %#v", item.BlipFill)
+		}
+		// The srcRect span is what the overhang divides: 80000 * 25000 / 125000 = 16000 more on the left.
+		item = inspect(t, `<a:blipFill><a:blip r:embed="rId10"/><a:srcRect l="10000" r="10000"/><a:stretch><a:fillRect l="-25000"/></a:stretch></a:blipFill>`)
+		if item.BlipFill == nil || item.BlipFill.SourceCrop == nil || *item.BlipFill.SourceCrop.Left != 26000 || *item.BlipFill.SourceCrop.Right != 10000 {
+			t.Fatalf("srcRect and fillRect did not compose: %#v", item.BlipFill.SourceCrop)
+		}
+		item = inspect(t, `<a:blipFill><a:blip r:embed="rId10" cstate="print"/><a:stretch><a:fillRect/></a:stretch></a:blipFill>`)
+		if item.BlipFill == nil || item.BlipFill.SourceCrop != nil {
+			t.Fatalf("an uncropped picture states no crop: %#v", item.BlipFill)
+		}
+	})
+	for _, test := range []struct{ name, fill, reason string }{
+		{"positive inset", `<a:blipFill><a:blip r:embed="rId10"/><a:stretch><a:fillRect t="5000"/></a:stretch></a:blipFill>`, "insets the picture"},
+		{"tile", `<a:blipFill><a:blip r:embed="rId10"/><a:tile tx="0" ty="0" sx="100000" sy="100000" flip="none" algn="tl"/></a:blipFill>`, "tiles the picture"},
+		{"linked blip", `<a:blipFill><a:blip r:link="rId11"/><a:stretch><a:fillRect/></a:stretch></a:blipFill>`, "linked or carries effects"},
+		{"effect-bearing blip", `<a:blipFill><a:blip r:embed="rId10"><a:lum bright="20000"/></a:blip><a:stretch><a:fillRect/></a:stretch></a:blipFill>`, "linked or carries effects"},
+		{"external relationship", `<a:blipFill><a:blip r:embed="rId11"/><a:stretch><a:fillRect/></a:stretch></a:blipFill>`, "not an internal image part"},
+		{"non-image relationship", `<a:blipFill><a:blip r:embed="rId12"/><a:stretch><a:fillRect/></a:stretch></a:blipFill>`, "not an internal image part"},
+		{"missing relationship", `<a:blipFill><a:blip r:embed="rId99"/><a:stretch><a:fillRect/></a:stretch></a:blipFill>`, "not an internal image part"},
+		{"overcrop", `<a:blipFill><a:blip r:embed="rId10"/><a:srcRect l="60000" r="40000"/><a:stretch><a:fillRect/></a:stretch></a:blipFill>`, "less than one percent"},
+		{"overhang crops everything", `<a:blipFill><a:blip r:embed="rId10"/><a:stretch><a:fillRect l="-99000000" r="-99000000"/></a:stretch></a:blipFill>`, "less than one percent"},
+	} {
+		t.Run(test.name+" omits only the fill", func(t *testing.T) {
+			item := inspect(t, test.fill)
+			notes := strings.Join(item.Notes, "|")
+			if item.BlipFill != nil || !strings.Contains(notes, "blipFill ") || !strings.Contains(notes, test.reason) || !strings.Contains(notes, "; fill omitted") {
+				t.Fatalf("expected omission %q: %#v %v", test.reason, item.BlipFill, item.Notes)
+			}
+		})
+	}
+	t.Run("a rotated rectangle or a polygon keeps no picture fill", func(t *testing.T) {
+		for _, replace := range []string{`<a:xfrm rot="5400000">`, `<a:xfrm rot="0" flipH="1">`} {
+			source := nativeApproximateShapeSource(t, `<w:p><w:r>`+strings.Replace(blip(wordCrop), `<a:xfrm rot="0">`, replace, 1)+`</w:r></w:p>`, withImage)
+			out, err := InspectNativeApproximateDrawingShapesV1(source)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if out == nil || len(out.Items) != 1 || out.Items[0].Status != "supported" || out.Items[0].BlipFill != nil || !strings.Contains(strings.Join(out.Items[0].Notes, "|"), "blipFill on a rotated, flipped or non-rectangular shape is not approximated") {
+				t.Fatalf("rotated or flipped picture fill must be omitted: %#v", out)
+			}
+		}
+		source := nativeApproximateShapeSource(t, `<w:p><w:r>`+strings.Replace(blip(wordCrop), `prst="rect"`, `prst="downArrow"`, 1)+`</w:r></w:p>`, withImage)
+		out, err := InspectNativeApproximateDrawingShapesV1(source)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if out == nil || len(out.Items) != 1 || out.Items[0].Status != "supported" || out.Items[0].BlipFill != nil || out.Items[0].Preset != "downArrow" {
+			t.Fatalf("polygon picture fill must be omitted: %#v", out)
+		}
+	})
+}

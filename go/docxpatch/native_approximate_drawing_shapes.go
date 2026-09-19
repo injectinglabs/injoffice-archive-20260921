@@ -57,6 +57,22 @@ type NativeApproximateShapeGradientStopV1 struct {
 // NativeApproximateShapeGradientV1 is an a:gradFill whose direction is an
 // a:lin. Angle is 1/60000 of a degree, clockwise from the positive x axis, and
 // stops are ordered by strictly increasing position.
+// NativeApproximateShapeBlipFillV1 is one a:blipFill resolved to the image part
+// its blip embeds, with the source rectangle that survives the fill's own crop
+// and stretch in one-hundred-thousandths. It carries identity only; the page
+// paint compiler joins it to the preserved part and transports the bytes.
+type NativeApproximateShapeBlipFillV1 struct {
+	RelationshipID string               `json:"relationship_id"`
+	MediaPart      string               `json:"media_part"`
+	ContentType    string               `json:"content_type"`
+	SourceCrop     *NativeDrawingCropV1 `json:"source_crop,omitempty"`
+}
+
+// nativeApproximateFillRectLimit bounds an a:fillRect overhang: 1000 times the
+// shape on one side is already far beyond anything Word writes, and it keeps the
+// crop composition inside int64.
+const nativeApproximateFillRectLimit = 100000000
+
 type NativeApproximateShapeGradientV1 struct {
 	Angle int64                                  `json:"angle_60000ths"`
 	Stops []NativeApproximateShapeGradientStopV1 `json:"stops"`
@@ -92,6 +108,7 @@ type NativeApproximateDrawingShapeV1 struct {
 	FlipVertical    bool                              `json:"flip_vertical"`
 	FillRGB         *string                           `json:"fill_rgb,omitempty"`
 	FillGradient    *NativeApproximateShapeGradientV1 `json:"fill_gradient,omitempty"`
+	BlipFill        *NativeApproximateShapeBlipFillV1 `json:"blip_fill,omitempty"`
 	Line            *NativeApproximateShapeLineV1     `json:"line,omitempty"`
 	PageAnchor      *NativeTextboxPageAnchorV1        `json:"page_anchor,omitempty"`
 	Wrap            string                            `json:"wrap,omitempty"`
@@ -511,7 +528,13 @@ func (context *nativeApproximateShapeContext) describeShape(item *NativeApproxim
 	if !fillOK {
 		return "unsupported-fill"
 	}
-	item.FillRGB, item.FillGradient = fill.RGB, fill.Gradient
+	item.FillRGB, item.FillGradient, item.BlipFill = fill.RGB, fill.Gradient, fill.Blip
+	// The picture paints axis-aligned in the shape's placed box, so only a
+	// rectangle the source neither rotates nor flips carries it.
+	if item.BlipFill != nil && (preset != "rect" || item.RotationDegrees != 0 || item.FlipHorizontal || item.FlipVertical) {
+		item.BlipFill = nil
+		fillNotes = append(fillNotes, "blipFill on a rotated, flipped or non-rectangular shape is not approximated; fill omitted")
+	}
 	item.Notes = append(item.Notes, fillNotes...)
 	line, lineNotes, lineOK := context.shapeLine(spPr, style)
 	if !lineOK {
@@ -715,7 +738,7 @@ func (context *nativeApproximateShapeContext) describeGroup(base NativeApproxima
 		item.WidthEMU, item.HeightEMU = width, height
 		if reason := context.describeShape(item, child); reason != "" {
 			item.Reason = reason
-			item.Preset, item.FillRGB, item.Line, item.Notes = "", nil, nil, nil
+			item.Preset, item.FillRGB, item.BlipFill, item.Line, item.Notes = "", nil, nil, nil, nil
 			item.WidthEMU, item.HeightEMU, item.RotationDegrees, item.FlipHorizontal, item.FlipVertical = 0, 0, 0, false, false
 			items = append(items, *item)
 			continue
@@ -832,6 +855,7 @@ func nativeApproximatePosition(node *nativeXMLNode, wp string, aligns map[string
 type nativeApproximateFill struct {
 	RGB      *string
 	Gradient *NativeApproximateShapeGradientV1
+	Blip     *NativeApproximateShapeBlipFillV1
 }
 
 // shapeFill returns an empty fill for no fill. A linear a:gradFill is projected
@@ -861,7 +885,13 @@ func (context *nativeApproximateShapeContext) shapeFill(spPr, style *nativeXMLNo
 				return none, append(notes, "gradFill "+reason+"; fill omitted"), true
 			}
 			return nativeApproximateFill{Gradient: gradient}, notes, true
-		case "pattFill", "blipFill", "grpFill":
+		case "blipFill":
+			blip, reason := context.blipFill(child)
+			if blip == nil {
+				return none, append(notes, "blipFill "+reason+"; fill omitted"), true
+			}
+			return nativeApproximateFill{Blip: blip}, notes, true
+		case "pattFill", "grpFill":
 			return none, append(notes, child.Name.Local+" is not approximated; fill omitted"), true
 		}
 	}
@@ -978,6 +1008,128 @@ func (context *nativeApproximateShapeContext) linearGradientFill(node *nativeXML
 		stops = append(stops, NativeApproximateShapeGradientStopV1{PositionPct: position, RGB: rgb})
 	}
 	return &NativeApproximateShapeGradientV1{Angle: angle, Stops: stops}, notes, ""
+}
+
+// blipFill resolves one a:blipFill (ECMA-376 20.1.8.14) to the image part its
+// blip embeds and the source rectangle that is painted, or returns the reason
+// it is not approximated. a:srcRect crops the source; a:stretch/a:fillRect then
+// places the cropped source in the shape, and a negative offset says the
+// picture overhangs the shape on that side, which the shape's outline clips.
+// Both compose into one crop of the source, in one-hundred-thousandths: the
+// cropped span is stretched over the shape plus its overhangs, so the fraction
+// left of the shape is span * overhang / (shape + overhangs). A tile, a
+// positive inset (the picture would not cover the shape), a linked or
+// effect-bearing blip, and a relationship that is not an internal image part
+// stay omitted and say so.
+func (context *nativeApproximateShapeContext) blipFill(node *nativeXMLNode) (*NativeApproximateShapeBlipFillV1, string) {
+	a := context.a
+	relNS, relBase := relNSTransitional, relBaseTransitional
+	if context.ns == wordMLStrict {
+		relNS, relBase = relNSStrict, relBaseStrict
+	}
+	if !nativeExactContainer(node, xml.Name{Local: "dpi"}, xml.Name{Local: "rotWithShape"}) {
+		return nil, "carries unmodeled attributes"
+	}
+	rectNames := []xml.Name{{Local: "l"}, {Local: "t"}, {Local: "r"}, {Local: "b"}}
+	var blip, stretch *nativeXMLNode
+	crop := [4]int64{}
+	for _, child := range node.Children {
+		if child.Name.Space != a {
+			return nil, "carries unmodeled children"
+		}
+		switch child.Name.Local {
+		case "blip":
+			if blip != nil {
+				return nil, "must embed exactly one blip"
+			}
+			blip = child
+		case "srcRect":
+			if !nativeExactLeaf(child, rectNames...) {
+				return nil, "srcRect carries unmodeled attributes"
+			}
+			for index, name := range []string{"l", "t", "r", "b"} {
+				if _, present := nativeUnqualifiedAttr(child, name); !present {
+					continue
+				}
+				value, ok := nativeInt64Attr(child, "", name)
+				if !ok || value < 0 || value > 99000 {
+					return nil, "srcRect is out of range"
+				}
+				crop[index] = value
+			}
+		case "stretch":
+			if !nativeExactContainer(child) || len(child.Children) > 1 {
+				return nil, "stretch is not a single fill rectangle"
+			}
+			if len(child.Children) == 1 {
+				stretch = child.Children[0]
+				if stretch.Name != (xml.Name{Space: a, Local: "fillRect"}) || !nativeExactLeaf(stretch, rectNames...) {
+					return nil, "stretch is not a fill rectangle"
+				}
+			}
+		case "tile":
+			return nil, "tiles the picture"
+		default:
+			return nil, "carries unmodeled children"
+		}
+	}
+	if blip == nil {
+		return nil, "must embed exactly one blip"
+	}
+	if !nativeExactContainer(blip, xml.Name{Space: relNS, Local: "embed"}, xml.Name{Local: "cstate"}) || !nativeInertBlipExtensions(blip, a) {
+		return nil, "blip is linked or carries effects"
+	}
+	relID, ok := nativeAttr(blip, relNS, "embed")
+	if !ok || relID == "" {
+		return nil, "blip embeds no relationship"
+	}
+	var rel *nativeRelationship
+	for i := range context.resolver.pkg.rels[context.main] {
+		if context.resolver.pkg.rels[context.main][i].ID == relID {
+			rel = &context.resolver.pkg.rels[context.main][i]
+		}
+	}
+	if rel == nil || rel.External || rel.Type != relBase+"image" || rel.PartName == "" {
+		return nil, "relationship is not an internal image part"
+	}
+	contentType := context.resolver.pkg.contentTypes[rel.PartName]
+	if !strings.HasPrefix(nativeASCIIFold(contentType), "image/") {
+		return nil, "image part has no image content type"
+	}
+	if crop[0]+crop[2] > 99000 || crop[1]+crop[3] > 99000 {
+		return nil, "srcRect leaves less than one percent of the picture"
+	}
+	if stretch != nil {
+		over := [4]int64{}
+		for index, name := range []string{"l", "t", "r", "b"} {
+			if _, present := nativeUnqualifiedAttr(stretch, name); !present {
+				continue
+			}
+			value, ok := nativeInt64Attr(stretch, "", name)
+			if !ok || value < -nativeApproximateFillRectLimit {
+				return nil, "fillRect is out of range"
+			}
+			if value > 0 {
+				return nil, "fillRect insets the picture inside the shape"
+			}
+			over[index] = -value
+		}
+		const scale = int64(100000)
+		for _, axis := range [][2]int{{0, 2}, {1, 3}} {
+			lo, hi := axis[0], axis[1]
+			span, total := scale-crop[lo]-crop[hi], scale+over[lo]+over[hi]
+			crop[lo] += (2*span*over[lo] + total) / (2 * total)
+			crop[hi] += (2*span*over[hi] + total) / (2 * total)
+		}
+		if crop[0]+crop[2] > 99000 || crop[1]+crop[3] > 99000 {
+			return nil, "fillRect overhang leaves less than one percent of the picture"
+		}
+	}
+	fill := &NativeApproximateShapeBlipFillV1{RelationshipID: relID, MediaPart: rel.PartName, ContentType: contentType}
+	if crop != [4]int64{} {
+		fill.SourceCrop = &NativeDrawingCropV1{Left: nativeInt64(crop[0]), Top: nativeInt64(crop[1]), Right: nativeInt64(crop[2]), Bottom: nativeInt64(crop[3])}
+	}
+	return fill, ""
 }
 
 func (context *nativeApproximateShapeContext) shapeLine(spPr, style *nativeXMLNode) (*NativeApproximateShapeLineV1, []string, bool) {

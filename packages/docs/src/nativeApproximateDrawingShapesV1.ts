@@ -13,13 +13,13 @@
  * rectangle/border primitives, text-box glyphs attach to the anchor line of
  * the owning paragraph. Nothing here touches strict paint or source bytes. */
 import type { NativeFontManifest, NativeFontResolver, NativeTextShaper } from '@injoffice/font-metrics/layout'
-import type { NativeDocxDocumentV1, NativeDocxParagraphV1, NativeDocxRunV1, NativeDocxSourceAnchorV1, NativeDocxUnsupportedCapabilityV1 } from './nativeContract.js'
+import type { NativeDocxDocumentV1, NativeDocxDrawingV1, NativeDocxParagraphV1, NativeDocxRunV1, NativeDocxSourceAnchorV1, NativeDocxUnsupportedCapabilityV1 } from './nativeContract.js'
 import type { NativeDocxResolvedLayoutInputV1, NativeDocxResolvedParagraphV1, NativeDocxResolvedRunPropertiesV1, NativeDocxResolvedRunV1 } from './nativeResolvedLayout.js'
 import type { NativeDocxPaginationSettingsV1 } from './nativePaginationSettings.js'
 import type { NativeDocxShapedLinesV1, NativeDocxLineFragmentV1 } from './nativeShapingLines.js'
 import { shapeNativeDocxLinesWithParagraphWidthsV1 } from './nativeShapingLines.js'
-import { ID, RGB, preflightWire, paintCommandID, DOCX_PAGE_PAINT_LIMITS } from './nativePagePaintWireV1.js'
-import { nativeDocxPageGlyphOutlineRegistryV1, nativeDocxRegisterGlyphOutlineV1, nativeDocxCaptureGlyphOutlineV1, type NativeDocxContentAddressedFaceV1, type NativeDocxFillGlyphPathCommandV1, type NativeDocxFillTableCellCommandV1, type NativeDocxFillTextHighlightCommandV1, type NativeDocxGlyphOutlineProviderV1, type NativeDocxGlyphOutlineResultV1, type NativeDocxPagePaintCommandV1, type NativeDocxPaintPathCommandV1, type NativeDocxPagePaintRequestV1, type NativeDocxPagePaintSuccessV1, type NativeDocxPaintLineV1, type NativeDocxPaintLinearGradientV1, type NativeDocxPaintPageV1, type NativeDocxStrokeTableBorderCommandV1, type NativeDocxStrokeTextUnderlineCommandV1 } from './nativePagePaintV1.js'
+import { ID, RGB, preflightWire, paintCommandID, paintImageCommandID, DOCX_PAGE_PAINT_LIMITS } from './nativePagePaintWireV1.js'
+import { nativeDocxPageGlyphOutlineRegistryV1, nativeDocxRegisterGlyphOutlineV1, nativeDocxCaptureGlyphOutlineV1, type NativeDocxContentAddressedFaceV1, type NativeDocxFillGlyphPathCommandV1, type NativeDocxFillTableCellCommandV1, type NativeDocxFillTextHighlightCommandV1, type NativeDocxGlyphOutlineProviderV1, type NativeDocxGlyphOutlineResultV1, type NativeDocxPagePaintCommandV1, type NativeDocxPaintPathCommandV1, type NativeDocxPagePaintRequestV1, type NativeDocxPagePaintSuccessV1, type NativeDocxPaintFloatingImageCommandV1, type NativeDocxPaintLineV1, type NativeDocxPaintLinearGradientV1, type NativeDocxPaintPageV1, type NativeDocxStrokeTableBorderCommandV1, type NativeDocxStrokeTextUnderlineCommandV1 } from './nativePagePaintV1.js'
 import { nativeTextUnderlineCommandsV1 } from './nativeTextUnderlineV1.js'
 import { nativeTextHighlightCommandV1 } from './nativeTextHighlightV1.js'
 import { textboxAnchorLine, type TextboxAnchorContext } from './nativeTextboxAnchorLineV2.js'
@@ -27,6 +27,8 @@ import { resolveTextboxPosition } from './nativeTextboxPositionV2.js'
 import type { NativeDocxTextboxGeometryItemV1 } from './nativeTextboxGeometryPreviewV1.js'
 import type { NativeTextboxRelativeAnchorV2 } from './nativeTextboxPageAnchorV1.js'
 import { asciiLowerNative } from './nativeDeterminism.js'
+import { qualifyNativeDocxInlineImageV1, prepareNativeRasterResourceV1, appendNativeDocxPagePaintResourceV1, type NativeDocxQualifiedInlineImageV1, type NativeDocxAuthoritativeMediaAssetV1, type NativeDocxPagePaintMediaAssetV1 } from './nativeImagePagePaintV1.js'
+import { nearestNativeDocxMilliPointEmuV1, type NativeDocxApproximatedImageExtentV1 } from './nativeApproximateImageExtentV1.js'
 import { DOCX_APPROXIMATE_OMITTED_SOURCE_UNSUPPORTED } from './nativeApproximationV1.js'
 import { nativeDocxApproximateTextboxInnerFrameV1, overflowNativeDocxApproximateLinkedStoryV1, type NativeDocxApproximateLinkedOverflowPlacementV1, type NativeDocxApproximateLinkedOverflowStoryV1 } from './nativeApproximateLinkedOverflowV1.js'
 
@@ -35,7 +37,7 @@ export const DOCX_APPROXIMATE_DRAWING_SHAPE_POLICY = 'docx.approximate-drawing-s
 export const DOCX_APPROXIMATE_DRAWING_SHAPE_CODE = 'docx.approximate-drawing-shape-preview' as const
 export const DOCX_APPROXIMATE_DRAWING_SHAPE_OMITTED_CODE = 'docx.approximate-drawing-shape-omitted' as const
 export const DOCX_APPROXIMATE_TEXTBOX_FONT_CODE = 'docx.approximate-textbox-substituted-font' as const
-export const DOCX_APPROXIMATE_DRAWING_SHAPE_WARNING = `${DOCX_APPROXIMATE_DRAWING_SHAPE_CODE}: DrawingML rectangles, lines, default-adjust arrow and five-point-star polygons and text boxes are painted approximately at resolved anchor positions with theme colors and outline widths approximated; a polygon preset is painted from its ECMA-376 preset-geometry default guides in its authored extent, clipped to the page, and is omitted when the source adjusts, rotates or flips it; body text is not wrapped around them. A group shape paints as its individual children, each mapped from the group's child coordinate space into its declared extent; nested groups and children whose transform or geometry cannot be mapped exactly stay omitted, and text inside a group is not scaled by the group transform. Stacking is approximate: behindDoc shapes paint above behind-text floating pictures and below table fills, other shapes paint above table borders and below in-front floating pictures, each group in relativeHeight order; a shape that paints its own text box paints its fill and outline directly under that text instead of in its layer, so body lines that follow its anchor line are not pushed below it. Original drawing restrictions and source bytes are unchanged.` as const
+export const DOCX_APPROXIMATE_DRAWING_SHAPE_WARNING = `${DOCX_APPROXIMATE_DRAWING_SHAPE_CODE}: DrawingML rectangles, lines, default-adjust arrow and five-point-star polygons and text boxes are painted approximately at resolved anchor positions with theme colors and outline widths approximated; a polygon preset is painted from its ECMA-376 preset-geometry default guides in its authored extent, clipped to the page, and is omitted when the source adjusts, rotates or flips it; body text is not wrapped around them. A rectangle's a:blipFill paints its embedded PNG or JPEG as a picture at the shape's resolved box once the exact picture qualifier accepts the media part, format, crop and extent; the crop is the a:srcRect plus the overhang a negative a:fillRect states, the picture is clipped to the page by cropping, and it paints in the behind layer when the shape also carries a text box so its text stays visible. A group shape paints as its individual children, each mapped from the group's child coordinate space into its declared extent; nested groups and children whose transform or geometry cannot be mapped exactly stay omitted, and text inside a group is not scaled by the group transform. Stacking is approximate: behindDoc shapes paint above behind-text floating pictures and below table fills, other shapes paint above table borders and below in-front floating pictures, each group in relativeHeight order; a shape that paints its own text box paints its fill and outline directly under that text instead of in its layer, so body lines that follow its anchor line are not pushed below it. Original drawing restrictions and source bytes are unchanged.` as const
 export const DOCX_APPROXIMATE_DRAWING_SHAPE_SIDECAR_REFUSED = `${DOCX_APPROXIMATE_DRAWING_SHAPE_OMITTED_CODE}: drawing-shape evidence did not exact-join the source document and was not used; refused drawings stay omitted` as const
 /** Table paint primitives carry these ids so consumers can tell shape paint from table paint. */
 export const DOCX_APPROXIMATE_DRAWING_SHAPE_TABLE_ID = DOCX_APPROXIMATE_DRAWING_SHAPE_POLICY
@@ -62,6 +64,16 @@ export interface NativeDocxApproximateShapeGradientStopV1 { position_pct: number
  * degree clockwise from the positive x axis, stops strictly increase. */
 export interface NativeDocxApproximateShapeGradientV1 { angle_60000ths: number; stops: NativeDocxApproximateShapeGradientStopV1[] }
 const MAX_GRADIENT_STOPS = 16
+/** A shape's a:blipFill as the sidecar resolved it: the blip's relationship
+ * and the image part it names, plus the source rectangle that remains once the
+ * a:srcRect and any negative a:fillRect overhang are composed, in
+ * one-hundred-thousandths. Identity only; no bytes travel in the sidecar. */
+export interface NativeDocxApproximateShapeBlipFillV1 {
+  relationship_id: string
+  media_part: string
+  content_type: string
+  source_crop?: { left: number; top: number; right: number; bottom: number }
+}
 export interface NativeDocxApproximateTextboxV1 {
   link_id?: string
   link_seq: number
@@ -91,6 +103,7 @@ export interface NativeDocxApproximateDrawingShapeV1 {
   flip_vertical: boolean
   fill_rgb?: string
   fill_gradient?: NativeDocxApproximateShapeGradientV1
+  blip_fill?: NativeDocxApproximateShapeBlipFillV1
   line?: NativeDocxApproximateShapeLineV1
   page_anchor?: NativeTextboxRelativeAnchorV2
   wrap?: string
@@ -131,7 +144,7 @@ export function decodeNativeDocxApproximateDrawingShapesV1(value: unknown, docum
   const ids = new Set<string>()
   const main = document.source.main_part
   for (const item of input.items) {
-    if (!record(item) || !exactKeys(item as unknown as Record<string, unknown>, ['id', 'paragraph_id', 'diagnostic_ids', 'anchor', 'run_anchor', 'status', 'width_emu', 'height_emu', 'rotation_degrees', 'flip_horizontal', 'flip_vertical'], ['reason', 'placement', 'preset', 'fill_rgb', 'fill_gradient', 'line', 'page_anchor', 'wrap', 'textbox', 'notes'])) throw new TypeError('Approximate drawing shape has unknown or missing fields')
+    if (!record(item) || !exactKeys(item as unknown as Record<string, unknown>, ['id', 'paragraph_id', 'diagnostic_ids', 'anchor', 'run_anchor', 'status', 'width_emu', 'height_emu', 'rotation_degrees', 'flip_horizontal', 'flip_vertical'], ['reason', 'placement', 'preset', 'fill_rgb', 'fill_gradient', 'blip_fill', 'line', 'page_anchor', 'wrap', 'textbox', 'notes'])) throw new TypeError('Approximate drawing shape has unknown or missing fields')
     if (typeof item.id !== 'string' || !ID.test(item.id) || ids.has(item.id)) throw new TypeError('Approximate drawing shape id is invalid or duplicated')
     ids.add(item.id)
     const paragraph = paragraphs.get(item.paragraph_id)
@@ -155,6 +168,17 @@ export function decodeNativeDocxApproximateDrawingShapesV1(value: unknown, docum
         if (!record(stop) || !exactKeys(stop, ['position_pct', 'rgb']) || !safeNonnegative(stop.position_pct, 100_000) || (stop.position_pct as number) <= previous || typeof stop.rgb !== 'string' || !RGB.test(stop.rgb)) throw new TypeError('Approximate drawing shape gradient stops are invalid')
         previous = stop.position_pct as number
       }
+    }
+    if (item.blip_fill !== undefined) {
+      const blip = item.blip_fill as unknown
+      if (!record(blip) || !exactKeys(blip, ['relationship_id', 'media_part', 'content_type'], ['source_crop']) || typeof blip.relationship_id !== 'string' || !ID.test(blip.relationship_id) || typeof blip.media_part !== 'string' || blip.media_part.length === 0 || blip.media_part.length > 1024 || typeof blip.content_type !== 'string' || blip.content_type.length === 0 || blip.content_type.length > 128) throw new TypeError('Approximate drawing shape picture fill is invalid')
+      if (blip.source_crop !== undefined) {
+        const crop = blip.source_crop as unknown
+        if (!record(crop) || !exactKeys(crop, ['left', 'top', 'right', 'bottom']) || (['left', 'top', 'right', 'bottom'] as const).some(key => !safeNonnegative(crop[key], 99000)) || (crop.left as number) + (crop.right as number) > 99000 || (crop.top as number) + (crop.bottom as number) > 99000) throw new TypeError('Approximate drawing shape picture crop must retain at least one percent per axis')
+      }
+      // The picture is painted axis-aligned in the shape's box; the sidecar only
+      // states a fill for a rectangle it did not rotate or flip.
+      if (item.preset !== 'rect' || item.rotation_degrees !== 0 || item.flip_horizontal || item.flip_vertical) throw new TypeError('Approximate drawing shape picture fill requires an unrotated, unflipped rectangle')
     }
     if (item.line !== undefined && (!record(item.line) || !exactKeys(item.line as unknown as Record<string, unknown>, ['rgb', 'width_emu', 'dash']) || typeof item.line.rgb !== 'string' || !RGB.test(item.line.rgb) || !safeNonnegative(item.line.width_emu, 12_700_000) || item.line.width_emu <= 0 || typeof item.line.dash !== 'string' || item.line.dash.length > 32)) throw new TypeError('Approximate drawing shape outline is invalid')
     if (item.placement === 'anchored') {
@@ -181,6 +205,46 @@ export interface NativeDocxApproximateInlineShapeProjectionV1 {
   paintedInlineWidths: Map<string, number>
   /** Source refusals removed from the body copy for supported shapes; restored for shapes the painter drops. */
   removedDiagnostics: NativeDocxUnsupportedCapabilityV1[]
+  /** Shape id to the picture its a:blipFill paints, as the unmodified exact
+   * picture qualifier accepted it, with the extent facts any lattice rounding
+   * recorded. Shapes whose fill the qualifier refused are absent and carry the
+   * refusal in their notes. */
+  blipFills: Map<string, NativeDocxApproximateBlipFillImageV1>
+}
+
+export interface NativeDocxApproximateBlipFillImageV1 { image: NativeDocxQualifiedInlineImageV1; extents: NativeDocxApproximatedImageExtentV1[] }
+
+/** Hand a shape's picture fill to the unmodified exact picture qualifier as an
+ * inline drawing of the shape's own extent. Identity (the preserved media part
+ * and relationship part, digest and byte length), media format, crop range and
+ * the 127-EMU milli-point lattice are its verdict, not this module's. An extent
+ * off the lattice is proposed at the nearest lattice value, exactly as the
+ * approximate picture-extent projection does for pictures, and the rounding is
+ * recorded as a fact for the envelope. Placement is never part of the proposal:
+ * the shape painter resolves the anchor, so no frame the picture qualifier does
+ * not model is invented to satisfy it. */
+function qualifyBlipFill(document: NativeDocxDocumentV1, shape: NativeDocxApproximateDrawingShapeV1): { ok: true; value: NativeDocxApproximateBlipFillImageV1 } | { ok: false; message: string } {
+  const blip = shape.blip_fill!
+  const runID = `${shape.id}:blip-run`
+  const drawing: NativeDocxDrawingV1 = {
+    id: `${shape.id}:blip`, anchor: shape.anchor, relationship_id: blip.relationship_id, media_part: blip.media_part, content_type: blip.content_type,
+    placement: 'inline', width_emu: shape.width_emu, height_emu: shape.height_emu,
+    ...(blip.source_crop ? { source_crop: { ...blip.source_crop } } : {}),
+    edit_policy: { mode: 'read-only', allowed_operations: [], refusal: { code: 'APPROXIMATE_DRAWING_SHAPE_PREVIEW', message: 'Shape picture fill qualified for read-only approximate preview', preservation: 'refuse-mutation' } },
+  }
+  const exact = qualifyNativeDocxInlineImageV1(document, runID, drawing)
+  if (exact.ok) return { ok: true, value: { image: exact.value, extents: [] } }
+  const extents: NativeDocxApproximatedImageExtentV1[] = []
+  const rounded: NativeDocxDrawingV1 = { ...drawing }
+  for (const field of ['width_emu', 'height_emu'] as const) {
+    const painted = nearestNativeDocxMilliPointEmuV1(drawing[field])
+    if (painted === undefined) continue
+    rounded[field] = painted
+    extents.push({ run_id: runID, drawing_id: drawing.id, part_name: drawing.anchor.part_name, path: drawing.anchor.path, field, source_emu: drawing[field], painted_emu: painted })
+  }
+  if (extents.length === 0) return { ok: false, message: exact.message }
+  const proposed = qualifyNativeDocxInlineImageV1(document, runID, rounded)
+  return proposed.ok ? { ok: true, value: { image: proposed.value, extents } } : { ok: false, message: proposed.message }
 }
 
 /** Reserve supported inline shapes as glyphless textbox atoms so surrounding
@@ -192,12 +256,18 @@ export function projectNativeDocxApproximateInlineShapesV1(document: NativeDocxD
   const inlineRuns = new Map<string, string>()
   const paintedInlineWidths = new Map<string, number>()
   const removed = new Set<string>()
+  const blipFills = new Map<string, NativeDocxApproximateBlipFillImageV1>()
   const paragraphs = new Map(projected.body.blocks.flatMap(block => block.paragraph ? [[block.id, block.paragraph] as const] : []))
   const blockIndex = new Map(projected.body.blocks.map((block, index) => [block.id, index]))
   const rightToLeft = new Set(projectedResolved.paragraphs.flatMap(entry => entry.properties?.bidi === true ? [entry.paragraph_id] : []))
   for (const shape of shapes.items) {
     if (shape.status !== 'supported') continue
     for (const id of shape.diagnostic_ids) removed.add(id)
+    if (shape.blip_fill) {
+      const qualified = qualifyBlipFill(document, shape)
+      if (qualified.ok) blipFills.set(shape.id, qualified.value)
+      else shape.notes = [...(shape.notes ?? []), `blipFill not painted: ${qualified.message}`]
+    }
     if (shape.placement !== 'inline') continue
     const paragraph = paragraphs.get(shape.paragraph_id)
     if (!paragraph) continue
@@ -238,7 +308,7 @@ export function projectNativeDocxApproximateInlineShapesV1(document: NativeDocxD
   }
   const removedDiagnostics = projected.unsupported.filter(entry => removed.has(entry.id))
   projected.unsupported = projected.unsupported.filter(entry => !removed.has(entry.id))
-  return { document: projected, resolved: projectedResolved, inlineRuns, paintedInlineWidths, removedDiagnostics }
+  return { document: projected, resolved: projectedResolved, inlineRuns, paintedInlineWidths, removedDiagnostics, blipFills }
 }
 
 /** Equal-width column extent of the section owning a body block, in EMU. */
@@ -265,6 +335,10 @@ export interface NativeDocxApproximateShapePaintRuntimeV1 {
   resolver: NativeFontResolver
   shaper: NativeTextShaper
   outlineProvider: NativeDocxGlyphOutlineProviderV1
+  /** The raster parts the host read off the package, as supplied to the page
+   * paint compiler. A shape picture fill is transported from here only after it
+   * exact-joins the qualified picture's part, digest and byte length. */
+  mediaAssets?: readonly NativeDocxAuthoritativeMediaAssetV1[]
 }
 
 export interface NativeDocxApproximateTextboxFontSubstitutionV1 { source_family: string; selected_family: string; face_id: string; weight: number; style: string; selected_weight: number; selected_style: string }
@@ -274,6 +348,10 @@ export interface NativeDocxApproximateShapePaintResultV1 {
   omitted: Array<{ id: string; reason: string }>
   substitutions: NativeDocxApproximateTextboxFontSubstitutionV1[]
   reasons: string[]
+  /** Shapes whose picture fill painted. */
+  pictureFills: string[]
+  /** Picture-fill extents moved onto the milli-point lattice, for the envelope's disclosure. */
+  imageExtents: NativeDocxApproximatedImageExtentV1[]
 }
 
 interface PlacedShape {
@@ -293,8 +371,8 @@ function clampCoordinate(value: number, max: number): number { return Math.min(M
 
 /** Append approximate shape paint to already painted approximate pages. The
  * pages are mutated in place; the caller re-validates the whole envelope. */
-export async function paintNativeDocxApproximateDrawingShapesV1(paint: Pick<NativeDocxPagePaintSuccessV1, 'pages'>, shapes: NativeDocxApproximateDrawingShapesV1, projection: NativeDocxApproximateInlineShapeProjectionV1, runtime: NativeDocxApproximateShapePaintRuntimeV1): Promise<NativeDocxApproximateShapePaintResultV1> {
-  const result: NativeDocxApproximateShapePaintResultV1 = { painted: [], omitted: [], substitutions: [], reasons: [] }
+export async function paintNativeDocxApproximateDrawingShapesV1(paint: Pick<NativeDocxPagePaintSuccessV1, 'pages' | 'resources'>, shapes: NativeDocxApproximateDrawingShapesV1, projection: NativeDocxApproximateInlineShapeProjectionV1, runtime: NativeDocxApproximateShapePaintRuntimeV1): Promise<NativeDocxApproximateShapePaintResultV1> {
+  const result: NativeDocxApproximateShapePaintResultV1 = { painted: [], omitted: [], substitutions: [], reasons: [], pictureFills: [], imageExtents: [] }
   const body = { pages: paint.pages } as NativeDocxPagePaintSuccessV1
   const extra = new Map<string, NativeDocxPagePaintCommandV1>()
   const behindByPage = new Map<string, NativeDocxPagePaintCommandV1[]>()
@@ -336,9 +414,23 @@ export async function paintNativeDocxApproximateDrawingShapesV1(paint: Pick<Nati
   }
   placed.sort((left, right) => left.order - right.order)
   const shapeFillsByID = new Map<string, NativeDocxPagePaintCommandV1[]>()
+  const blipsByPage = new Map<string, NativeDocxPaintFloatingImageCommandV1[]>()
   for (const entry of placed) {
     const commands = shapeCommands(entry)
-    if (commands.length === 0 && !entry.shape.textbox) { omit(entry.shape, 'outside-page'); continue }
+    // The picture is a floating image command, so it can only bracket the page
+    // content: behind everything, or in front of everything. A shape that also
+    // carries a text box paints behind so that text stays visible; an inline
+    // shape paints behind like its cell fill would.
+    const blip = projection.blipFills.get(entry.shape.id)
+    const picture = blip ? blipFillCommand(entry, blip, paint.resources, runtime.mediaAssets ?? [], entry.behind || entry.shape.textbox !== undefined || entry.shape.placement === 'inline' ? 'behind' : 'front') : undefined
+    if (picture && !picture.ok) entry.shape.notes = [...(entry.shape.notes ?? []), `blipFill not painted: ${picture.message}`]
+    if (commands.length === 0 && !entry.shape.textbox && !picture?.ok) { omit(entry.shape, picture ? `picture-fill-unpainted: ${picture.message}` : 'outside-page'); continue }
+    if (picture?.ok) {
+      entry.line.command_ids.push(picture.command.id)
+      blipsByPage.set(entry.page.id, [...(blipsByPage.get(entry.page.id) ?? []), picture.command])
+      result.pictureFills.push(entry.shape.id)
+      result.imageExtents.push(...blip!.extents)
+    }
     shapeFillsByID.set(entry.shape.id, commands)
     result.painted.push(entry.shape.id)
   }
@@ -358,7 +450,7 @@ export async function paintNativeDocxApproximateDrawingShapesV1(paint: Pick<Nati
     const bucket = entry.behind ? behindByPage : frontByPage
     bucket.set(entry.page.id, [...(bucket.get(entry.page.id) ?? []), ...commands])
   }
-  for (const page of paint.pages) rebuildCommands(page, behindByPage.get(page.id) ?? [], frontByPage.get(page.id) ?? [], extra, removedIDs, underlay)
+  for (const page of paint.pages) rebuildCommands(page, behindByPage.get(page.id) ?? [], frontByPage.get(page.id) ?? [], extra, removedIDs, underlay, blipsByPage.get(page.id) ?? [])
   result.reasons = buildReasons(shapes, result, textboxResult)
   return result
 }
@@ -496,6 +588,40 @@ function polygonCommands(entry: PlacedShape, points: Array<[number, number]>): N
   }]
 }
 
+/** The floating image command for a shape's qualified picture fill, or why
+ * none paints. The box is the shape's resolved position at the qualified
+ * lattice extent; where it hangs off the page it is clipped by cropping, since
+ * a floating image command must fit its page. The media bytes come from the
+ * host's supplied parts and are accepted only when they reproduce the
+ * qualified picture's identity byte for byte. */
+function blipFillCommand(entry: PlacedShape, blip: NativeDocxApproximateBlipFillImageV1, resources: NativeDocxPagePaintMediaAssetV1[], supplied: readonly NativeDocxAuthoritativeMediaAssetV1[], layer: 'behind' | 'front'): { ok: true; command: NativeDocxPaintFloatingImageCommandV1 } | { ok: false; message: string } {
+  const { image } = blip
+  const { page, line } = entry
+  const x = Math.round(entry.x), y = Math.round(entry.y)
+  const width = image.width_millipoints, height = image.height_millipoints
+  const x0 = Math.max(x, 0), y0 = Math.max(y, 0), x1 = Math.min(x + width, page.width_millipoints), y1 = Math.min(y + height, page.height_millipoints)
+  if (x1 <= x0 || y1 <= y0) return { ok: false, message: 'picture fill lies entirely outside the page' }
+  const crop = { ...image.source_crop }
+  const spanX = 100000 - crop.left - crop.right, spanY = 100000 - crop.top - crop.bottom
+  crop.left += Math.round(spanX * (x0 - x) / width); crop.right += Math.round(spanX * (x + width - x1) / width)
+  crop.top += Math.round(spanY * (y0 - y) / height); crop.bottom += Math.round(spanY * (y + height - y1) / height)
+  if (crop.left + crop.right > 99000 || crop.top + crop.bottom > 99000) return { ok: false, message: 'less than one percent of the picture fill is on the page' }
+  const asset = supplied.find(candidate => candidate.part_name === image.part_name)
+  if (!asset || asset.content_digest !== image.content_digest || asset.bytes.byteLength !== image.byte_length) return { ok: false, message: 'picture fill media part was not supplied with the qualified digest and byte length' }
+  let resource: NativeDocxPagePaintMediaAssetV1
+  try { resource = prepareNativeRasterResourceV1(image.part_name, image.content_type, asset.bytes) } catch (error) { return { ok: false, message: error instanceof Error ? error.message : 'picture fill media is not a supported static raster' } }
+  if (resource.id !== image.asset_id || resource.content_type !== image.content_type || resource.content_digest !== image.content_digest) return { ok: false, message: 'picture fill media bytes do not reproduce the qualified picture identity' }
+  if (resources.reduce((total, current) => total + current.bytes_base64.length, 0) + resource.bytes_base64.length > MAX_ENVELOPE_BYTES / 2) return { ok: false, message: 'picture fill media exceeds the preview media budget' }
+  if (!appendNativeDocxPagePaintResourceV1(resources, resource)) return { ok: false, message: 'picture fill media part conflicts with an already transported resource' }
+  const fragmentID = `${entry.shape.id}:blip`
+  return { ok: true, command: {
+    kind: 'paint_floating_image', id: paintImageCommandID(line.placed_line_id, fragmentID), line_id: line.line_id, fragment_id: fragmentID, source_id: `${entry.shape.id}:blip-run`,
+    drawing_id: image.drawing_id, asset_id: image.asset_id,
+    x_millipoints: x0, y_millipoints: y0, width_millipoints: x1 - x0, height_millipoints: y1 - y0,
+    source_crop: crop, transform: image.transform, layer, stacking_order: entry.order,
+  } }
+}
+
 /** Fill and stroke primitives clipped to the page. Quarter-turn rectangles
  * swap their extent; line presets follow flips and rotation about the center;
  * polygon presets paint one closed default-adjust contour. A gradient fill
@@ -557,15 +683,24 @@ function shapeCommands(entry: PlacedShape): NativeDocxPagePaintCommandV1[] {
  * never disappears under its own fill. Those are cell/border primitives, which
  * the wire excludes from the glyph replay order, so the splice is order-safe.
  * Every original command keeps its category; only shape paint is added. */
-function rebuildCommands(page: NativeDocxPaintPageV1, behind: NativeDocxPagePaintCommandV1[], front: NativeDocxPagePaintCommandV1[], extra: Map<string, NativeDocxPagePaintCommandV1>, removed: Set<string>, underlay: Map<string, NativeDocxPagePaintCommandV1[]> = new Map()): void {
+function rebuildCommands(page: NativeDocxPaintPageV1, behind: NativeDocxPagePaintCommandV1[], front: NativeDocxPagePaintCommandV1[], extra: Map<string, NativeDocxPagePaintCommandV1>, removed: Set<string>, underlay: Map<string, NativeDocxPagePaintCommandV1[]> = new Map(), pictures: NativeDocxPaintFloatingImageCommandV1[] = []): void {
   const byID = new Map<string, NativeDocxPagePaintCommandV1>()
-  const behindFloats: NativeDocxPagePaintCommandV1[] = [], frontFloats: NativeDocxPagePaintCommandV1[] = [], fills: NativeDocxPagePaintCommandV1[] = [], borders: NativeDocxPagePaintCommandV1[] = []
+  const behindFloats: NativeDocxPaintFloatingImageCommandV1[] = [], frontFloats: NativeDocxPaintFloatingImageCommandV1[] = [], fills: NativeDocxPagePaintCommandV1[] = [], borders: NativeDocxPagePaintCommandV1[] = []
   for (const command of page.commands) {
     if (removed.has(command.id)) continue
     if (command.kind === 'paint_floating_image') (command.layer === 'behind' ? behindFloats : frontFloats).push(command)
     else if (command.kind === 'fill_table_cell' || command.kind === 'paint_shape_path') fills.push(command)
     else if (command.kind === 'stroke_table_border') borders.push(command)
     else byID.set(command.id, command)
+  }
+  // Shape picture fills join the floating layers, which the wire replays in
+  // stacking order with ties broken by the order their anchor lines reference them.
+  for (const picture of pictures) (picture.layer === 'behind' ? behindFloats : frontFloats).push(picture)
+  if (pictures.length) {
+    const referenced = new Map<string, number>()
+    for (const line of page.lines) for (const id of line.command_ids) if (!referenced.has(id)) referenced.set(id, referenced.size)
+    const stacking = (left: NativeDocxPaintFloatingImageCommandV1, right: NativeDocxPaintFloatingImageCommandV1) => left.stacking_order - right.stacking_order || (referenced.get(left.id) ?? 0) - (referenced.get(right.id) ?? 0)
+    behindFloats.sort(stacking); frontFloats.sort(stacking)
   }
   for (const [id, command] of extra) byID.set(id, command)
   const ordinary: NativeDocxPagePaintCommandV1[] = []
@@ -757,7 +892,7 @@ function buildReasons(shapes: NativeDocxApproximateDrawingShapesV1, result: Nati
     const notes = new Set<string>()
     for (const shape of shapes.items) if (result.painted.includes(shape.id)) for (const note of shape.notes ?? []) notes.add(note)
     reasons.push(DOCX_APPROXIMATE_DRAWING_SHAPE_WARNING)
-    reasons.push(`${DOCX_APPROXIMATE_DRAWING_SHAPE_CODE}: painted ${result.painted.length} of ${shapes.items.length} refused DrawingML shapes (${shapes.items.filter(shape => result.painted.includes(shape.id)).map(shape => `${shape.id} ${shape.placement} ${shape.preset}${shape.textbox ? ' textbox' : ''} for diagnostics ${shape.diagnostic_ids.join(',')}`).join('; ')})${textboxes.textboxes ? `; ${textboxes.textboxes} text box chains shaped with current InjOffice layout` : ''}${notes.size ? `; approximations: ${[...notes].join('; ')}` : ''}`.slice(0, 8000))
+    reasons.push(`${DOCX_APPROXIMATE_DRAWING_SHAPE_CODE}: painted ${result.painted.length} of ${shapes.items.length} refused DrawingML shapes (${shapes.items.filter(shape => result.painted.includes(shape.id)).map(shape => `${shape.id} ${shape.placement} ${shape.preset}${shape.textbox ? ' textbox' : ''}${result.pictureFills.includes(shape.id) ? ' picture-fill' : ''} for diagnostics ${shape.diagnostic_ids.join(',')}`).join('; ')})${textboxes.textboxes ? `; ${textboxes.textboxes} text box chains shaped with current InjOffice layout` : ''}${notes.size ? `; approximations: ${[...notes].join('; ')}` : ''}`.slice(0, 8000))
   }
   if (result.omitted.length || shapes.omitted_count) reasons.push(`${DOCX_APPROXIMATE_DRAWING_SHAPE_OMITTED_CODE}: ${result.omitted.map(entry => `${entry.id} (${entry.reason})`).join('; ')}${shapes.omitted_count ? `; ${shapes.omitted_count} shapes beyond the ${MAX_SHAPES} shape budget` : ''}`.slice(0, 8000))
   for (const substitution of result.substitutions.slice(0, MAX_REASONS - 4)) reasons.push(`${DOCX_APPROXIMATE_TEXTBOX_FONT_CODE}: ${substitution.source_family} / ${substitution.weight} / ${substitution.style} -> ${substitution.selected_family} / ${substitution.selected_weight} / ${substitution.selected_style} (loaded host face ${substitution.face_id}); text box metrics and layout may differ`)
