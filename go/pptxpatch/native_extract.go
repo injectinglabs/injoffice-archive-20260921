@@ -1539,9 +1539,14 @@ func (extractor *nativeExtractor) extractSlide(part, objectID, relationshipID st
 	if _, err := nativeSingleton(cSld, dialect.presentation, "bg", false); err != nil {
 		return NativeSlide{}, err
 	}
+	var controls *nativeXMLNode
 	for index, child := range cSld.Children {
 		switch child.Name {
 		case xml.Name{Space: dialect.presentation, Local: "spTree"}:
+		case xml.Name{Space: dialect.presentation, Local: "controls"}:
+			// Embedded controls paint above p:spTree, so the fallback picture
+			// each one states is projected after the shape tree is walked.
+			controls = child
 		case xml.Name{Space: dialect.presentation, Local: "bg"}:
 			// The strict path accepts only bgPr/solidFill/srgbClr with no
 			// attributes. Fall back to the inheritance-aware resolver, which also
@@ -1763,6 +1768,28 @@ func (extractor *nativeExtractor) extractSlide(part, objectID, relationshipID st
 			if err := extractor.markSlideUnsupported(&slide, part, unknownObjectID, nativeSHA256(raw), raw, "pptx.unsupported-slide-child", "slide contains content outside the native v1 subset"); err != nil {
 				return NativeSlide{}, err
 			}
+		}
+	}
+	if controls != nil {
+		controlElements, controlErr := extractor.extractNativeControlPictures(controls, part, slideID, usedPictureRelationships, graph.relationships, dialect)
+		if controlErr != nil {
+			return NativeSlide{}, controlErr
+		}
+		for _, element := range controlElements {
+			slide.Elements = append(slide.Elements, element)
+			slide.Compatibility.Status = worseNativeStatus(slide.Compatibility.Status, element.Compatibility.Status)
+			if element.Compatibility.Status != NativeCompatibilityStatusEditable {
+				slide.Compatibility.Diagnostics = append(slide.Compatibility.Diagnostics, element.Compatibility.Diagnostics...)
+			}
+		}
+		// The control markup itself is still outside native v1: only the
+		// picture its fallback states is modeled, so the bytes stay preserved.
+		raw, rawErr := rawNativeNode(payload, controls)
+		if rawErr != nil {
+			return NativeSlide{}, rawErr
+		}
+		if err := extractor.markSlideUnsupported(&slide, part, sourceObjectID+"-controls", nativeSHA256(raw), raw, "pptx.unsupported-embedded-control", "embedded controls are preserved; only the fallback picture each one states is painted"); err != nil {
+			return NativeSlide{}, err
 		}
 	}
 	for _, relationship := range graph.relationships {

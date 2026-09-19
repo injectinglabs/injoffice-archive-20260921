@@ -109,11 +109,16 @@ func ValidateNativePPTX(deck NativePPTXDeck) []NativeContractIssue {
 			v.add(p+".passthrough", "schema.required", "must be an array")
 		}
 		v.sourceState(asset.Source, asset.Passthrough, p)
+		v.assetSourceTransform(asset, p)
 		if asset.Provenance == NativeProvenanceParsed && asset.DataBase64 == nil {
 			readCapability := false
 			if asset.Source != nil {
+				// The capability is bound to the bytes the host reads, which
+				// for a derived asset is the source part rather than the
+				// asset. The two digests are the same whenever no derivation
+				// stands between them.
 				for _, ref := range asset.Passthrough {
-					if ref.OwnerPart == asset.Source.PartName && ref.FingerprintSHA256 == asset.SHA256 {
+					if ref.OwnerPart == asset.Source.PartName && ref.FingerprintSHA256 == asset.Source.FingerprintSHA256 {
 						readCapability = true
 						break
 					}
@@ -776,6 +781,34 @@ func (v *nativeValidator) passthrough(ref NativePassthroughRef, p string) {
 	v.hash(ref.FingerprintSHA256, p+".fingerprintSha256")
 	if ref.Disposition != NativePassthroughDispositionPreserve && ref.Disposition != NativePassthroughDispositionReplaceOnEdit {
 		v.add(p+".disposition", "schema.enum", "has an unsupported passthrough disposition")
+	}
+}
+
+// assetSourceTransform checks the pairing that lets a host derive an asset's
+// bytes from a package part it can read. A derivation is only safe to run when
+// the deck pins both ends of it: the part that goes in and the bytes that must
+// come out.
+func (v *nativeValidator) assetSourceTransform(asset NativeAsset, p string) {
+	if asset.SourceTransform == nil {
+		if asset.SourceByteLength != nil {
+			v.add(p+".sourceByteLength", "native.assetSourceTransform", "must be absent unless sourceTransform states a derivation")
+		}
+		return
+	}
+	if *asset.SourceTransform != NativeAssetSourceTransformWmfRasterV1 {
+		v.add(p+".sourceTransform", "schema.enum", "must be a known asset source transform")
+	} else if asset.ContentType != "image/png" {
+		// wmfRasterV1 produces PNG and nothing else; a transform whose stated
+		// content type disagrees with what it can produce is unservable.
+		v.add(p+".contentType", "native.assetSourceTransform", "must be image/png when sourceTransform is wmfRasterV1")
+	}
+	if asset.Source == nil {
+		v.add(p+".source", "native.assetSourceTransform", "must state the part a derived asset is derived from")
+	}
+	if asset.SourceByteLength == nil {
+		v.add(p+".sourceByteLength", "native.assetSourceTransform", "must state the source part length a derived asset is derived from")
+	} else if *asset.SourceByteLength < 0 || *asset.SourceByteLength > nativeMaxAssetBytes {
+		v.add(p+".sourceByteLength", "schema.range", fmt.Sprintf("must be between 0 and %d", nativeMaxAssetBytes))
 	}
 }
 

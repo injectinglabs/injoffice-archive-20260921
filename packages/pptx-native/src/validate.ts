@@ -9,6 +9,7 @@ import { PPTX_TABLE_BUILTIN_STYLE_PREVIEW_CODE, PPTX_TABLE_NONVISUAL_PRESERVED_C
 import { PPTX_GROUP_LOCKS_PRESERVED_CODE } from './groupLocks'
 import { PPTX_NATIVE_RESOURCE_LIMITS, PPTX_NATIVE_SCHEMA } from './schema.generated'
 import type {
+  NativeAsset,
   NativeCompatibility,
   NativeElement,
   NativeParagraph,
@@ -197,9 +198,13 @@ function validateSemantics(deck: NativePptxDeck, issues: NativeValidationIssue[]
     registerId(asset.id, `${path}.id`, ids, issues)
     validateSourceState(deck, asset.provenance, asset.source, asset.passthrough, path, issues)
     if (asset.provenance === 'parsed' && asset.dataBase64 === undefined) {
-      const hasReadCapability = asset.source !== undefined && asset.passthrough.some((ref) => ref.ownerPart === asset.source?.partName && ref.fingerprintSha256 === asset.sha256)
+      // The capability is bound to the bytes the host reads, which for a
+      // derived asset is the source part rather than the asset. The two
+      // digests are the same whenever no derivation stands between them.
+      const hasReadCapability = asset.source !== undefined && asset.passthrough.some((ref) => ref.ownerPart === asset.source?.partName && ref.fingerprintSha256 === asset.source?.fingerprintSha256)
       if (!hasReadCapability) add(issues, `${path}.passthrough`, 'native.assetReadCapability', 'parsed source-only assets require a capability bound to the source part and asset digest')
     }
+    validateAssetSourceTransform(asset, path, issues)
     if (asset.dataBase64 !== undefined) budget.inlineAssetBase64CodeUnits += asset.dataBase64.length
     if (asset.dataBase64 !== undefined && budget.inlineAssetBase64CodeUnits <= PPTX_NATIVE_RESOURCE_LIMITS.maxTotalInlineAssetBase64CodeUnits && decodedBase64Length(asset.dataBase64) !== asset.byteLength) {
       add(issues, `${path}.dataBase64`, 'native.assetLength', 'decoded length does not match byteLength')
@@ -531,6 +536,22 @@ function validateExactGroupTransform(transform: NativeElement['transform'], chil
   if (scaleX === undefined || scaleY === undefined || !exactTranslation(transform.x, childTransform.x, scaleX) || !exactTranslation(transform.y, childTransform.y, scaleY)) {
     add(issues, path, 'native.groupTransform', 'must compose to exact safe integer-PPM scale and integer-EMU translation')
   }
+}
+
+// The contract only lets a host run a derivation when the deck pins both ends
+// of it, so the two fields that describe one have to travel together.
+function validateAssetSourceTransform(asset: NativeAsset, path: string, issues: NativeValidationIssue[]): void {
+  if (asset.sourceTransform === undefined) {
+    if (asset.sourceByteLength !== undefined) add(issues, `${path}.sourceByteLength`, 'native.assetSourceTransform', 'must be absent unless sourceTransform states a derivation')
+    return
+  }
+  if (asset.sourceTransform !== 'wmfRasterV1') add(issues, `${path}.sourceTransform`, 'schema.enum', 'must be a known asset source transform')
+  // wmfRasterV1 produces PNG and nothing else; a transform whose stated content
+  // type disagrees with what it can produce is unservable.
+  else if (asset.contentType !== 'image/png') add(issues, `${path}.contentType`, 'native.assetSourceTransform', 'must be image/png when sourceTransform is wmfRasterV1')
+  if (asset.source === undefined) add(issues, `${path}.source`, 'native.assetSourceTransform', 'must state the part a derived asset is derived from')
+  if (asset.sourceByteLength === undefined) add(issues, `${path}.sourceByteLength`, 'native.assetSourceTransform', 'must state the source part length a derived asset is derived from')
+  else if (asset.sourceByteLength < 0 || asset.sourceByteLength > PPTX_NATIVE_RESOURCE_LIMITS.maxAssetBytes) add(issues, `${path}.sourceByteLength`, 'schema.range', `must be between 0 and ${PPTX_NATIVE_RESOURCE_LIMITS.maxAssetBytes}`)
 }
 
 function validateSourceState(deck: NativePptxDeck, provenance: 'authored' | 'parsed', source: NativeSourceAnchor | undefined, passthrough: { token: string }[], path: string, issues: NativeValidationIssue[]): void {
