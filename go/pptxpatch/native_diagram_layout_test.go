@@ -1217,3 +1217,120 @@ func TestExtractNativePPTXDiagramLayoutCycleSpacesShapesAroundTheRing(t *testing
 		t.Fatalf("ctrShpMap did not centre the first child: %#v", hub)
 	}
 }
+
+// nativeDiagramElasticCompositeLayoutXML mirrors the hList1/process3 shape
+// the list layouts use: a linear root over a composite holding a title band
+// above a body band. The bands ask the ROOT for a fraction of the frame, both
+// declare their height unbounded (<rule type="h" val="INF"/>), and only the
+// title carries an op="lte" ceiling of its own.
+func nativeDiagramElasticCompositeLayoutXML(diagramNS, compositeHeight, bodyRules string) string {
+	if bodyRules == "" {
+		bodyRules = `<dgm:rule type="h" val="INF" fact="NaN" max="NaN"/>`
+	}
+	return `<dgm:layoutDef xmlns:dgm="` + diagramNS + `" uniqueId="urn:test/elastic"><dgm:title val=""/><dgm:desc val=""/><dgm:catLst><dgm:cat type="list" pri="9000"/></dgm:catLst>` +
+		`<dgm:layoutNode name="frame"><dgm:alg type="lin"/><dgm:shape><dgm:adjLst/></dgm:shape><dgm:presOf/>` +
+		`<dgm:constrLst><dgm:constr type="w" for="ch" forName="composite" refType="w"/>` + compositeHeight +
+		`<dgm:constr type="h" for="des" forName="title" refType="h" fact="0.2"/>` +
+		`<dgm:constr type="h" for="des" forName="body" refType="h" fact="0.2"/>` +
+		`<dgm:constr type="primFontSz" for="des" ptType="node" val="65"/></dgm:constrLst><dgm:ruleLst/>` +
+		`<dgm:layoutNode name="composite"><dgm:alg type="composite"/><dgm:shape><dgm:adjLst/></dgm:shape><dgm:presOf/>` +
+		`<dgm:constrLst><dgm:constr type="l" for="ch" forName="title"/><dgm:constr type="w" for="ch" forName="title" refType="w"/><dgm:constr type="t" for="ch" forName="title"/>` +
+		`<dgm:constr type="l" for="ch" forName="body"/><dgm:constr type="w" for="ch" forName="body" refType="w"/>` +
+		`<dgm:constr type="t" for="ch" forName="body" refType="h" refFor="ch" refForName="title"/></dgm:constrLst>` +
+		`<dgm:ruleLst><dgm:rule type="h" val="INF" fact="NaN" max="NaN"/></dgm:ruleLst>` +
+		`<dgm:layoutNode name="title" styleLbl="node0"><dgm:alg type="tx"/><dgm:shape type="rect"><dgm:adjLst/></dgm:shape><dgm:presOf axis="ch" ptType="node" cnt="1"/>` +
+		`<dgm:constrLst><dgm:constr type="h" refType="w" op="lte" fact="0.3"/><dgm:constr type="h"/></dgm:constrLst>` +
+		`<dgm:ruleLst><dgm:rule type="h" val="INF" fact="NaN" max="NaN"/></dgm:ruleLst></dgm:layoutNode>` +
+		`<dgm:layoutNode name="body" styleLbl="node1"><dgm:alg type="tx"/><dgm:shape type="rect"><dgm:adjLst/></dgm:shape><dgm:presOf/>` +
+		`<dgm:constrLst><dgm:constr type="h"/></dgm:constrLst><dgm:ruleLst>` + bodyRules + `</dgm:ruleLst></dgm:layoutNode>` +
+		`</dgm:layoutNode></dgm:layoutNode></dgm:layoutDef>`
+}
+
+// <rule type="h" val="INF"/> makes a band's height elastic: the leftover
+// height of the composite is shared among the elastic bands in proportion to
+// the height each asked for, no band passes an op="lte" ceiling of its own,
+// and the band below follows the one that grew. Both bands of the list
+// layouts carry the rule and both have their h pinned from the root, so
+// "grow the one with the rule" is not the rule.
+func TestExtractNativePPTXDiagramLayoutSharesLeftoverHeightWithElasticBands(t *testing.T) {
+	t.Parallel()
+	deck, err := ExtractNativePPTX(nativeDiagramLayoutFixture(t, nativeDiagramLayoutFixtureOptions{
+		omitDrawingPart: true, layout: nativeDiagramElasticCompositeLayoutXML(nativeDiagramURITransitional, `<dgm:constr type="h" for="ch" forName="composite" refType="h"/>`, ""),
+	}), nativeDiagramLayoutApproximateOptions())
+	if err != nil {
+		t.Fatalf("extract elastic composite: %v", err)
+	}
+	group := nativeFixtureDiagramGroup(t, deck.Slides[0])
+	if len(group.Children) != 2 {
+		t.Fatalf("expected a title band over a body band: %d children", len(group.Children))
+	}
+	frameW, frameH := *group.Transform.Cx, *group.Transform.Cy
+	// Each band asked for 0.2 of the frame, so each is offered 2.5x what it
+	// asked for. The title stops at its own ceiling of 0.3 x w; the body has
+	// no ceiling and keeps its whole share.
+	ceiling := int64(float64(frameW) * 0.3)
+	share := int64(float64(frameH) * 0.5)
+	title, body := group.Children[0].Transform, group.Children[1].Transform
+	if *title.Cy != ceiling {
+		t.Fatalf("title band did not stop at its lte ceiling %d: y=%d h=%d", ceiling, *title.Y, *title.Cy)
+	}
+	if *body.Cy != share {
+		t.Fatalf("body band did not take its share %d of the leftover: h=%d", share, *body.Cy)
+	}
+	if *body.Y != *title.Y+ceiling {
+		t.Fatalf("body band did not follow the band that grew above it: y=%d", *body.Y)
+	}
+}
+
+// Without the rule the same bands keep exactly the height their constraints
+// asked for, so the elasticity comes from the ruleLst and nothing else.
+func TestExtractNativePPTXDiagramLayoutPinnedBandsDoNotGrow(t *testing.T) {
+	t.Parallel()
+	layout := strings.ReplaceAll(nativeDiagramElasticCompositeLayoutXML(nativeDiagramURITransitional, `<dgm:constr type="h" for="ch" forName="composite" refType="h"/>`, ""),
+		`<dgm:ruleLst><dgm:rule type="h" val="INF" fact="NaN" max="NaN"/></dgm:ruleLst>`, `<dgm:ruleLst/>`)
+	deck, err := ExtractNativePPTX(nativeDiagramLayoutFixture(t, nativeDiagramLayoutFixtureOptions{
+		omitDrawingPart: true, layout: layout,
+	}), nativeDiagramLayoutApproximateOptions())
+	if err != nil {
+		t.Fatalf("extract pinned composite: %v", err)
+	}
+	group := nativeFixtureDiagramGroup(t, deck.Slides[0])
+	frameH := *group.Transform.Cy
+	for index, child := range group.Children {
+		if *child.Transform.Cy != int64(float64(frameH)*0.2) {
+			t.Fatalf("band %d grew without an extent rule: h=%d", index, *child.Transform.Cy)
+		}
+	}
+}
+
+// A composite whose OWN height is elastic is not a block a thousand frames
+// tall: process3 writes h = 1000 x w on the composite it means to be content
+// sized and leaves the INF rule to settle it. The height is clamped to what
+// the parent has to give, and the composite then closes on the content it
+// ends up holding, which is what centres the diagram in its frame.
+func TestExtractNativePPTXDiagramLayoutElasticCompositeClosesOnItsContent(t *testing.T) {
+	t.Parallel()
+	layout := nativeDiagramElasticCompositeLayoutXML(nativeDiagramURITransitional, "", `<dgm:rule type="primFontSz" val="5" fact="NaN" max="NaN"/>`)
+	layout = strings.Replace(layout, `<dgm:alg type="composite"/>`, `<dgm:alg type="composite"/><!--elastic-->`, 1)
+	layout = strings.Replace(layout, `<dgm:constrLst><dgm:constr type="l" for="ch" forName="title"/>`,
+		`<dgm:constrLst><dgm:constr type="h" refType="w" fact="1000"/><dgm:constr type="l" for="ch" forName="title"/>`, 1)
+	deck, err := ExtractNativePPTX(nativeDiagramLayoutFixture(t, nativeDiagramLayoutFixtureOptions{
+		omitDrawingPart: true, layout: layout,
+	}), nativeDiagramLayoutApproximateOptions())
+	if err != nil {
+		t.Fatalf("extract self-elastic composite: %v", err)
+	}
+	group := nativeFixtureDiagramGroup(t, deck.Slides[0])
+	frameW, frameH := *group.Transform.Cx, *group.Transform.Cy
+	title, body := group.Children[0].Transform, group.Children[1].Transform
+	if *title.Cy != int64(float64(frameW)*0.3) {
+		t.Fatalf("title band did not stop at its ceiling inside the clamped composite: y=%d h=%d", *title.Y, *title.Cy)
+	}
+	content := *body.Y + *body.Cy - *title.Y
+	if content >= frameH {
+		t.Fatalf("elastic composite did not close on its content: %d of %d", content, frameH)
+	}
+	if *title.Y != (frameH-content)/2 {
+		t.Fatalf("the closed composite was not centred in the frame: y=%d content=%d of %d", *title.Y, content, frameH)
+	}
+}

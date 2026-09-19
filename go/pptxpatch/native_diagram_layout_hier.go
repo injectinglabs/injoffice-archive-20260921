@@ -74,8 +74,8 @@ func (node *nativeDiagramPresNode) isConnector() bool { return node.alg == "conn
 // layoutSubtree computes node.rect and its descendants relative to the block
 // origin (0,0), plus blockW/blockH/anchorX/rootLeft/rootRight.
 func (node *nativeDiagramPresNode) layoutSubtree(parentW, parentH float64) error {
-	width := node.value("w", parentW)
-	height := node.value("h", parentH)
+	width := node.elasticExtent("w", node.value("w", parentW), parentW)
+	height := node.elasticExtent("h", node.value("h", parentH), parentH)
 	// A pure spacer may be constrained to a negative extent: that is how the
 	// linear layouts overlap consecutive shapes (chevron1's space node asks
 	// for w = -0.1 x the shape width). Spacers never paint, so the negative
@@ -113,10 +113,63 @@ func (node *nativeDiagramPresNode) layoutSubtree(parentW, parentH float64) error
 
 // layoutComposite positions children by explicit constraints (§21.4.7.1
 // composite). Missing offsets default to 0; missing sizes to the composite.
+// A child whose extent carries an INF extent rule then grows into whatever
+// the composite has left over, and a composite whose own extent is elastic
+// closes on the content it ends up holding.
 func (node *nativeDiagramPresNode) layoutComposite(width, height float64) error {
 	node.rect = nativeDiagramRect{0, 0, width, height}
 	node.blockW, node.blockH, node.anchorX = width, height, width/2
 	node.rootLeft, node.rootRight = 0, width
+	// Growth from an earlier solve is rolled back first: a linear parent
+	// re-solves its children against a relaxed extent, and growth that
+	// compounded across those passes would not be the share the constraint
+	// system states.
+	if node.resetElasticChildren() && node.evaluator != nil {
+		if err := node.evaluator.applyConstraints(node, false); err != nil {
+			return err
+		}
+	}
+	if err := node.placeCompositeChildren(width, height); err != nil {
+		return err
+	}
+	grownW := node.growCompositeChildren("w", width)
+	grownH := node.growCompositeChildren("h", height)
+	if grownW || grownH {
+		// The offsets a composite derives from a child extent -- the band
+		// below the title sits at the title's own h -- have to follow the
+		// extent the algorithm just changed, so this node's own constraint
+		// list is solved again before the children are placed again.
+		if node.evaluator != nil {
+			if err := node.evaluator.applyConstraints(node, false); err != nil {
+				return err
+			}
+		}
+		// The re-solve is there to move the offsets, not to undo the growth,
+		// so an extent this composite also assigns is restored afterwards.
+		for _, child := range node.children {
+			for typ, value := range child.grown {
+				child.vals[typ] = value
+			}
+		}
+		if err := node.placeCompositeChildren(width, height); err != nil {
+			return err
+		}
+	}
+	if node.isElastic("w") {
+		node.blockW = node.compositeContent("w")
+		node.rect.w, node.anchorX, node.rootRight = node.blockW, node.blockW/2, node.blockW
+	}
+	if node.isElastic("h") {
+		node.blockH = node.compositeContent("h")
+		node.rect.h = node.blockH
+	}
+	return nil
+}
+
+// placeCompositeChildren lays out and positions every child from the current
+// constraint values. It is idempotent, so a composite can solve, grow and
+// place again.
+func (node *nativeDiagramPresNode) placeCompositeChildren(width, height float64) error {
 	for _, child := range node.children {
 		if child.isConnector() {
 			return nativeDiagramLayoutRefuse(nativeDiagramLayoutAlgorithmCode, "diagram connectors inside composite nodes are not modeled")
@@ -150,6 +203,124 @@ func (node *nativeDiagramPresNode) layoutComposite(width, height float64) error 
 		child.translate(left, top)
 	}
 	return nil
+}
+
+// compositeContent measures how far the placed children reach along one axis.
+func (node *nativeDiagramPresNode) compositeContent(typ string) float64 {
+	content := 0.0
+	for _, child := range node.children {
+		reach := child.rect.y + child.blockH
+		if typ == "w" {
+			reach = child.rect.x + child.blockW
+		}
+		if reach > content {
+			content = reach
+		}
+	}
+	return content
+}
+
+// growCompositeChildren shares the extent a composite has left over among the
+// children whose own ruleLst declares that extent unbounded (§21.4.2.24
+// val="INF"). The share is proportional to the extent each child asked for,
+// because that is the only ordering the constraint system states, and no
+// child passes an op="lte" bound of its own -- the title band of the list
+// layouts is exactly such a capped child, and PowerPoint stops it at its
+// bound and gives the rest to the body band. A capped child's unused share is
+// NOT redistributed: the composite closes on the content instead.
+func (node *nativeDiagramPresNode) growCompositeChildren(typ string, extent float64) bool {
+	if extent <= 0 {
+		return false
+	}
+	elastic := []*nativeDiagramPresNode{}
+	base := 0.0
+	for _, child := range node.children {
+		if !child.isElastic(typ) || child.isConnector() {
+			continue
+		}
+		elastic = append(elastic, child)
+		base += child.recordElasticBase(typ)
+	}
+	if len(elastic) == 0 || base <= 0 {
+		return false
+	}
+	slack := extent - node.compositeContent(typ)
+	if slack <= 0 {
+		return false
+	}
+	grown := false
+	for _, child := range elastic {
+		current := child.elasticBase[typ]
+		want := current * (1 + slack/base)
+		if bound, ok := child.upper[typ]; ok && want > bound {
+			want = bound
+		}
+		if want > current+1 {
+			if child.grown == nil {
+				child.grown = map[string]float64{}
+			}
+			child.vals[typ], child.grown[typ] = want, want
+			grown = true
+		}
+	}
+	return grown
+}
+
+// resetElasticChildren restores every extent a previous solve grew.
+func (node *nativeDiagramPresNode) resetElasticChildren() bool {
+	reset := false
+	for _, child := range node.children {
+		for typ, recorded := range child.elasticBase {
+			delete(child.grown, typ)
+			if child.vals[typ] != recorded {
+				child.vals[typ] = recorded
+				reset = true
+			}
+		}
+	}
+	return reset
+}
+
+// recordElasticBase returns the extent a node asked for before any growth,
+// remembering it the first time so later solves grow from the constraint.
+func (node *nativeDiagramPresNode) recordElasticBase(typ string) float64 {
+	if recorded, ok := node.elasticBase[typ]; ok {
+		return recorded
+	}
+	current, ok := node.vals[typ]
+	if !ok {
+		if typ == "w" {
+			current = node.blockW
+		} else {
+			current = node.blockH
+		}
+	}
+	if node.elasticBase == nil {
+		node.elasticBase = map[string]float64{}
+	}
+	node.elasticBase[typ] = current
+	return current
+}
+
+// isElastic reports whether an extent rule made this node's w or h unbounded.
+func (node *nativeDiagramPresNode) isElastic(typ string) bool {
+	for _, rule := range node.appliedRules {
+		if rule.typ == typ && rule.unbounded {
+			return true
+		}
+	}
+	return false
+}
+
+// elasticExtent clamps an unbounded extent to what the parent has to give.
+// The linear list layouts write h = 1000 x w on a composite they mean to be
+// content-sized and leave the INF rule to settle it; read literally that is a
+// block a thousand frames tall, and the whole diagram scales to a hairline.
+func (node *nativeDiagramPresNode) elasticExtent(typ string, value, available float64) float64 {
+	if value > available && available > 0 && node.isElastic(typ) {
+		return available
+	}
+	return value
 }
 
 // layoutHierRoot: root shape on top, then assistant blocks, then the other
@@ -802,6 +973,12 @@ func (node *nativeDiagramPresNode) scaleConstraints(keys []string, factor float6
 	for _, key := range keys {
 		if value, ok := node.vals[key]; ok {
 			node.vals[key] = value * factor
+		}
+		if value, ok := node.elasticBase[key]; ok {
+			node.elasticBase[key] = value * factor
+		}
+		if value, ok := node.upper[key]; ok {
+			node.upper[key] = value * factor
 		}
 	}
 	for _, child := range node.children {
