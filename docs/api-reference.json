@@ -12127,6 +12127,11 @@
               "signature": "export declare const placeholderTypeValues: readonly [\"title\", \"ctrTitle\", \"subTitle\", \"body\"]"
             },
             {
+              "name": "PPTX_GROUP_LOCKS_PRESERVED_CODE",
+              "kind": "const",
+              "signature": "export declare const PPTX_GROUP_LOCKS_PRESERVED_CODE = \"pptx.group-locks-preserved\""
+            },
+            {
               "name": "PPTX_NATIVE_CONTRACT_VERSION",
               "kind": "const",
               "signature": "export declare const PPTX_NATIVE_CONTRACT_VERSION: \"pptx-native/v1\""
