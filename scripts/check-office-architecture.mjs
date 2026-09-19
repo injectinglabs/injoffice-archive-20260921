@@ -6,7 +6,62 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const failures = []
 const productionExtensions = /\.(?:go|[cm]?[jt]sx?)$/
 const ignored = /(?:^|\/)(?:node_modules|dist|coverage)(?:\/|$)|(?:^|\/)[^/]+(?:_test\.go|\.test\.[^/]+)$/
-const forbiddenDependency = /^(?:electron|mammoth)$/
+const dependencyGroups = ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies']
+// Electron is the desktop host runtime only. packages/*, go/, and production
+// /src/ (renderer) must not depend on it; Mammoth stays forbidden everywhere.
+const desktopElectronGroups = new Set(['dependencies', 'devDependencies'])
+const desktopHostManifest = 'apps/desktop/package.json'
+const desktopHostLockPaths = new Set(['apps/desktop', 'node_modules/@injoffice/desktop'])
+const allowedElectronInstalls = new Set(['node_modules/electron', 'apps/desktop/node_modules/electron'])
+const forbiddenAlias = /(?:^|npm:)(electron|mammoth)(?:\/|@|$)/
+
+function posixName(path) {
+  return relative(root, path).replaceAll('\\', '/')
+}
+
+function posixLockPath(lockPath) {
+  return lockPath.replaceAll('\\', '/')
+}
+
+function forbiddenTarget(name, requested) {
+  if (name === 'mammoth') return 'mammoth'
+  if (name === 'electron') return 'electron'
+  if (typeof requested === 'string') {
+    const match = requested.match(forbiddenAlias)
+    if (match) return match[1]
+  }
+  return null
+}
+
+function isDesktopHostManifest(relativePath) {
+  return relativePath === desktopHostManifest
+}
+
+function isDesktopHostLockEntry(lockPath) {
+  return desktopHostLockPaths.has(posixLockPath(lockPath))
+}
+
+function pathDerivedPackageName(lockPath) {
+  const path = posixLockPath(lockPath)
+  const marker = 'node_modules/'
+  const offset = path.lastIndexOf(marker)
+  if (offset === -1) return ''
+  const suffix = path.slice(offset + marker.length)
+  const parts = suffix.split('/')
+  return parts[0]?.startsWith('@') ? parts.slice(0, 2).join('/') : (parts[0] ?? '')
+}
+
+function lockIdentityNames(lockPath, entry = {}) {
+  const names = new Set()
+  const fromPath = pathDerivedPackageName(lockPath)
+  if (fromPath) names.add(fromPath)
+  if (typeof entry.name === 'string' && entry.name.length > 0) names.add(entry.name)
+  return names
+}
+
+function electronInstallAllowed(lockPath) {
+  return allowedElectronInstalls.has(posixLockPath(lockPath))
+}
 
 function moduleSpecifiers(source) {
   const specifiers = []
@@ -27,12 +82,12 @@ function walk(directory, output = []) {
 
 const roots = [resolve(root, 'packages'), resolve(root, 'apps'), resolve(root, 'go')]
 const files = roots.flatMap((directory) => walk(directory)).filter((path) => {
-  const name = relative(root, path).replaceAll('\\', '/')
+  const name = posixName(path)
   return !ignored.test(name) && (name.includes('/src/') || name.startsWith('go/'))
 })
 
 for (const path of files) {
-  const name = relative(root, path).replaceAll('\\', '/')
+  const name = posixName(path)
   const source = readFileSync(path, 'utf8')
   const imports = moduleSpecifiers(source)
   for (const specifier of imports) {
@@ -72,19 +127,47 @@ const manifestPaths = [
 ]
 for (const manifestPath of manifestPaths) {
   if (!existsSync(manifestPath)) continue
+  const name = posixName(manifestPath)
   const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
-  for (const group of ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies']) {
+  for (const group of dependencyGroups) {
     for (const [dependency, requested] of Object.entries(manifest[group] ?? {})) {
-      if (forbiddenDependency.test(dependency) || typeof requested === 'string' && /(?:^|npm:)(?:electron|mammoth)(?:\/|@|$)/.test(requested)) failures.push(`${relative(root, manifestPath)}: forbidden ${group} entry ${dependency}@${requested}`)
+      const target = forbiddenTarget(dependency, requested)
+      if (target === 'mammoth') failures.push(`${name}: forbidden ${group} entry ${dependency}@${requested}`)
+      else if (target === 'electron' && !(isDesktopHostManifest(name) && desktopElectronGroups.has(group))) {
+        failures.push(`${name}: forbidden ${group} entry ${dependency}@${requested}`)
+      }
     }
   }
 }
 
-const lockSource = readFileSync(resolve(root, 'package-lock.json'), 'utf8')
-if (/node_modules\/(?:electron|mammoth)(?:\/|")|npm:(?:electron|mammoth)\//.test(lockSource)) failures.push('package-lock.json: forbidden Electron/Mammoth package or npm alias')
+const lock = JSON.parse(readFileSync(resolve(root, 'package-lock.json'), 'utf8'))
+let desktopPullsElectron = false
+const electronInstalls = []
+for (const [lockPath, entry] of Object.entries(lock.packages ?? {})) {
+  const path = posixLockPath(lockPath)
+  const identities = lockIdentityNames(path, entry)
+  if (identities.has('mammoth')) failures.push(`package-lock.json: forbidden Mammoth package at ${path || 'root'}`)
+  if (identities.has('electron')) {
+    electronInstalls.push(path || 'root')
+    if (!electronInstallAllowed(path)) failures.push(`package-lock.json: Electron at ${path || 'root'} is not owned by @injoffice/desktop`)
+  }
+  for (const group of dependencyGroups) {
+    for (const [dependency, requested] of Object.entries(entry[group] ?? {})) {
+      const target = forbiddenTarget(dependency, requested)
+      if (target === 'mammoth') failures.push(`package-lock.json: ${path || 'root'} forbidden ${group} entry ${dependency}@${requested}`)
+      else if (target === 'electron') {
+        if (isDesktopHostLockEntry(path)) desktopPullsElectron = true
+        else failures.push(`package-lock.json: ${path || 'root'} forbidden ${group} entry ${dependency}@${requested}`)
+      }
+    }
+  }
+}
+if (electronInstalls.length > 0 && !desktopPullsElectron) {
+  failures.push('package-lock.json: Electron is present but not pulled by @injoffice/desktop')
+}
 
 if (failures.length > 0) {
   console.error(failures.map((failure) => `- ${failure}`).join('\n'))
   process.exit(1)
 }
-console.log(`Validated ${files.length} production files: no Electron dependency, Mammoth native authority, or DOM slide authority regression.`)
+console.log(`Validated ${files.length} production files: Electron only as desktop host, no Mammoth native authority, or DOM slide authority regression.`)
