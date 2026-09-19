@@ -520,12 +520,12 @@ func assertNativeDiagramLayoutRefused(t *testing.T, options nativeDiagramLayoutF
 func TestExtractNativePPTXDiagramLayoutRefusesOutsideTheSubset(t *testing.T) {
 	t.Parallel()
 	layout := nativeDiagramLayoutLayoutXML(nativeDiagramURITransitional)
-	// Algorithms other than the hierarchy subset never produce a partial chart.
-	cycle := strings.Replace(layout, `<dgm:alg type="hierChild"><dgm:param type="linDir" val="fromL"/></dgm:alg>`, `<dgm:alg type="cycle"/>`, 1)
-	if cycle == layout {
+	// Algorithms outside the modeled subset never produce a partial chart.
+	pyramid := strings.Replace(layout, `<dgm:alg type="hierChild"><dgm:param type="linDir" val="fromL"/></dgm:alg>`, `<dgm:alg type="pyra"/>`, 1)
+	if pyramid == layout {
 		t.Fatal("layout fixture drifted")
 	}
-	assertNativeDiagramLayoutRefused(t, nativeDiagramLayoutFixtureOptions{layout: cycle}, nativeDiagramLayoutAlgorithmCode)
+	assertNativeDiagramLayoutRefused(t, nativeDiagramLayoutFixtureOptions{layout: pyramid}, nativeDiagramLayoutAlgorithmCode)
 	// Unknown constraint operators and malformed values.
 	sibSp := `<dgm:constr type="sibSp" refType="w" refFor="des" refForName="rootComposite1" fact="0.21"/>`
 	if !strings.Contains(layout, sibSp) || !strings.Contains(layout, `<dgm:constr type="primFontSz" val="65"/>`) {
@@ -1146,5 +1146,74 @@ func TestExtractNativePPTXDiagramLayoutPaintsTheDiagramBackground(t *testing.T) 
 	}
 	if len(nativeFixtureDiagramGroup(t, plain.Slides[0]).Children) != len(group.Children)-1 {
 		t.Fatal("an empty dgm:bg still painted a backdrop")
+	}
+}
+
+// nativeDiagramCycleLayoutXML gives every shape the whole diagram extent and
+// leaves the ring to the algorithm, the way the cycle layouts do.
+func nativeDiagramCycleLayoutXML(diagramNS, params string) string {
+	return `<dgm:layoutDef xmlns:dgm="` + diagramNS + `" uniqueId="urn:test/cycle"><dgm:title val=""/><dgm:desc val=""/><dgm:catLst><dgm:cat type="cycle" pri="9000"/></dgm:catLst>` +
+		`<dgm:layoutNode name="ring"><dgm:alg type="cycle">` + params + `</dgm:alg><dgm:shape><dgm:adjLst/></dgm:shape><dgm:presOf/>` +
+		`<dgm:constrLst><dgm:constr type="w" for="ch" forName="spoke" refType="w"/>` +
+		`<dgm:constr type="h" for="ch" forName="spoke" refType="w" refFor="ch" refForName="spoke"/>` +
+		`<dgm:constr type="primFontSz" for="ch" forName="spoke" op="equ" val="65"/></dgm:constrLst><dgm:ruleLst/>` +
+		`<dgm:forEach name="cycleLoop" axis="ch" ptType="node">` +
+		`<dgm:layoutNode name="spoke" styleLbl="node0"><dgm:alg type="tx"/><dgm:shape type="ellipse"><dgm:adjLst/></dgm:shape><dgm:presOf axis="self" ptType="node"/>` +
+		`<dgm:constrLst/><dgm:ruleLst><dgm:rule type="primFontSz" val="5" fact="NaN" max="NaN"/></dgm:ruleLst></dgm:layoutNode>` +
+		`</dgm:forEach></dgm:layoutNode></dgm:layoutDef>`
+}
+
+// A full turn from twelve o'clock puts the first shape at the top of the
+// frame and spaces the rest clockwise, each shrunk until neighbours clear.
+func TestExtractNativePPTXDiagramLayoutCycleSpacesShapesAroundTheRing(t *testing.T) {
+	t.Parallel()
+	data := nativeDiagramLayoutDataXML(nativeDiagramURITransitional, nsDrawingTransitional, "",
+		nativeDiagramLayoutPointXML("{T3}", "", "Third")+nativeDiagramLayoutPointXML("{T4}", "", "Fourth"),
+		`<dgm:cxn modelId="{CT3}" srcId="{DOC}" destId="{T3}" srcOrd="2" destOrd="0"/><dgm:cxn modelId="{CT4}" srcId="{DOC}" destId="{T4}" srcOrd="3" destOrd="0"/>`)
+	ring := func(params string) []NativeElement {
+		t.Helper()
+		deck, err := ExtractNativePPTX(nativeDiagramLayoutFixture(t, nativeDiagramLayoutFixtureOptions{
+			omitDrawingPart: true, dataXML: data, layout: nativeDiagramCycleLayoutXML(nativeDiagramURITransitional, params),
+		}), nativeDiagramLayoutApproximateOptions())
+		if err != nil {
+			t.Fatalf("extract cycle diagram: %v", err)
+		}
+		if issues := ValidateNativePPTX(deck); len(issues) != 0 {
+			t.Fatalf("invalid cycle deck: %#v", issues)
+		}
+		return nativeFixtureDiagramGroup(t, deck.Slides[0]).Children
+	}
+	spokes := ring("")
+	if len(spokes) != 4 {
+		t.Fatalf("expected four spokes: %d", len(spokes))
+	}
+	frameW := 6_096_000.0
+	for index, spoke := range spokes {
+		if *spoke.Transform.Cx <= 0 || *spoke.Transform.Cx >= int64(frameW)/2 {
+			t.Fatalf("spoke %d was not shrunk onto the ring: %d wide", index, *spoke.Transform.Cx)
+		}
+		if spoke.Transform.RotationAngle != nil {
+			t.Fatalf("spoke %d turned without rotPath: %#v", index, spoke.Transform)
+		}
+	}
+	// Twelve o'clock, then clockwise: the first is centred at the top and
+	// the third is centred at the bottom, mirrored about the centre.
+	first, third := spokes[0].Transform, spokes[2].Transform
+	if *first.X != *third.X || *first.Y >= *third.Y {
+		t.Fatalf("a full turn did not place the first and third shapes opposite: %#v vs %#v", first, third)
+	}
+	if *spokes[1].Transform.X <= *spokes[3].Transform.X {
+		t.Fatalf("the turn did not run clockwise: %d vs %d", *spokes[1].Transform.X, *spokes[3].Transform.X)
+	}
+	// rotPath turns each shape to face along the ring; ctrShpMap hubs the
+	// first child at the centre instead of putting it on the ring.
+	turned := ring(`<dgm:param type="rotPath" val="alongPath"/>`)
+	if turned[1].Transform.RotationAngle == nil || *turned[1].Transform.RotationAngle != 5_400_000 {
+		t.Fatalf("rotPath did not turn the quarter-way shape to 90 degrees: %#v", turned[1].Transform)
+	}
+	hubbed := ring(`<dgm:param type="ctrShpMap" val="fNode"/>`)
+	hub := hubbed[0].Transform
+	if *hub.X+*hub.Cx/2 != int64(frameW)/2 {
+		t.Fatalf("ctrShpMap did not centre the first child: %#v", hub)
 	}
 }

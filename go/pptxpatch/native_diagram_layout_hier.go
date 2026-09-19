@@ -22,6 +22,7 @@ import (
 //   - lin packs its children end to end along linDir and shrinks the row
 //     uniformly when it overruns the node's own extent;
 //   - snake wraps those children into a grid of whole lines;
+//   - cycle spaces them around an ellipse from stAng across spanAng;
 //   - hierChild lays out its child subtrees along linDir separated by sibSp,
 //     packing horizontal siblings against each other's painted contours
 //     rather than their whole envelopes, or in two hanging columns around a
@@ -32,7 +33,7 @@ import (
 //   - tx fits the primary font size between primFontSz and its rule minimum
 //     using an average-advance glyph model.
 //
-// Nothing outside this subset is laid out: cycle and pyra refuse.
+// Nothing outside this subset is laid out: pyra refuses.
 const (
 	nativeDiagramLayoutAlgorithmCode = "pptx.diagram-layout-algorithm-unavailable"
 	nativeDiagramLayoutGeometryCode  = "pptx.diagram-layout-geometry-unavailable"
@@ -102,10 +103,12 @@ func (node *nativeDiagramPresNode) layoutSubtree(parentW, parentH float64) error
 		return node.layoutLin(width, height)
 	case "snake":
 		return node.layoutSnake(width, height)
+	case "cycle":
+		return node.layoutCycle(width, height)
 	case "conn":
 		return nil
 	}
-	return nativeDiagramLayoutRefuse(nativeDiagramLayoutAlgorithmCode, "diagram layout algorithm "+node.alg+" is not implemented; only composite, lin, snake, hierRoot, hierChild, sp, tx and conn are approximated")
+	return nativeDiagramLayoutRefuse(nativeDiagramLayoutAlgorithmCode, "diagram layout algorithm "+node.alg+" is not implemented; only composite, lin, snake, cycle, hierRoot, hierChild, sp, tx and conn are approximated")
 }
 
 // layoutComposite positions children by explicit constraints (§21.4.7.1
@@ -952,4 +955,142 @@ func nativeDiagramSnakeLineLength(count int, cellW, cellH, gap, lineGap, width, 
 		}
 	}
 	return best
+}
+
+// layoutCycle spaces the children around an ellipse inscribed in the node
+// (§21.4.7.1 cycle, §21.4.7.53 stAng, §21.4.7.52 spanAng, §21.4.7.22
+// ctrShpMap, §21.4.7.50 rotPath). Angles are degrees clockwise from twelve
+// o'clock; a negative span runs anticlockwise. With ctrShpMap="fNode" the
+// first child is the hub and sits at the centre instead of on the ring.
+// rotPath="alongPath" turns each shape to face along the ring.
+func (node *nativeDiagramPresNode) layoutCycle(width, height float64) error {
+	items := []*nativeDiagramPresNode{}
+	for _, child := range node.children {
+		if child.isConnector() {
+			return nativeDiagramLayoutRefuse(nativeDiagramLayoutAlgorithmCode, "diagram connectors inside cycle nodes are not modeled")
+		}
+		if err := child.layoutSubtree(width, height); err != nil {
+			return err
+		}
+		if child.alg == "sp" {
+			continue
+		}
+		items = append(items, child)
+	}
+	node.rect = nativeDiagramRect{0, 0, width, height}
+	node.blockW, node.blockH, node.anchorX = width, height, width/2
+	node.rootLeft, node.rootRight = 0, width
+	if len(items) == 0 {
+		return nil
+	}
+	start, err := nativeDiagramAngleParam(node, "stAng", 0)
+	if err != nil {
+		return err
+	}
+	span, err := nativeDiagramAngleParam(node, "spanAng", 360)
+	if err != nil {
+		return err
+	}
+	switch node.param("rotPath", "none") {
+	case "none", "alongPath":
+	default:
+		return nativeDiagramLayoutRefuse(nativeDiagramLayoutAlgorithmCode, "diagram cycle path rotation "+node.param("rotPath", "none")+" is not modeled")
+	}
+	alongPath := node.param("rotPath", "none") == "alongPath"
+	var hub *nativeDiagramPresNode
+	switch node.param("ctrShpMap", "none") {
+	case "none":
+	case "fNode":
+		hub, items = items[0], items[1:]
+	default:
+		return nativeDiagramLayoutRefuse(nativeDiagramLayoutAlgorithmCode, "diagram cycle centre mapping "+node.param("ctrShpMap", "none")+" is not modeled")
+	}
+	if hub != nil {
+		hub.translate((width-hub.blockW)/2, (height-hub.blockH)/2)
+	}
+	if len(items) == 0 {
+		return nil
+	}
+	cellW, cellH := 0.0, 0.0
+	for _, item := range items {
+		cellW, cellH = math.Max(cellW, item.blockW), math.Max(cellH, item.blockH)
+	}
+	// A full turn puts the last shape back on the first, so the step divides
+	// the span by the count; a partial arc reaches its far end instead.
+	steps := float64(len(items))
+	if math.Abs(span) < 360 && len(items) > 1 {
+		steps = float64(len(items) - 1)
+	}
+	// The cycle layouts give every shape the whole diagram extent and leave
+	// the ring to the algorithm, the same way the linear ones do. Shrink
+	// until neighbours clear each other on the ring: two shapes a step apart
+	// on an ellipse of radius r are 2 r sin(step/2) apart, and the ring plus
+	// one shape has to fit the node.
+	factor := 1.0
+	if half := math.Abs(span) * math.Pi / (360 * steps); half > 0 && half < math.Pi/2 {
+		clearance := math.Sin(half)
+		if cellW > 0 && width > 0 {
+			factor = math.Min(factor, width*clearance/(cellW*(1+clearance)))
+		}
+		if cellH > 0 && height > 0 {
+			factor = math.Min(factor, height*clearance/(cellH*(1+clearance)))
+		}
+	}
+	if cellW > 0 && width > 0 {
+		factor = math.Min(factor, width/cellW)
+	}
+	if cellH > 0 && height > 0 {
+		factor = math.Min(factor, height/cellH)
+	}
+	if factor < 1 {
+		for _, item := range items {
+			if err := item.relaxAlong(nativeDiagramHorizontalConstraints, item.blockW*factor, factor, width, height); err != nil {
+				return err
+			}
+			if err := item.relaxAlong(nativeDiagramVerticalConstraints, item.blockH*factor, factor, width, height); err != nil {
+				return err
+			}
+		}
+		cellW, cellH = cellW*factor, cellH*factor
+	}
+	// The ring is the largest ellipse that keeps every shape inside the node.
+	radiusX, radiusY := math.Max((width-cellW)/2, 0), math.Max((height-cellH)/2, 0)
+	for index, item := range items {
+		degrees := start + span*float64(index)/steps
+		radians := degrees * math.Pi / 180
+		centerX := width/2 + radiusX*math.Sin(radians)
+		centerY := height/2 - radiusY*math.Cos(radians)
+		item.translate(centerX-item.blockW/2, centerY-item.blockH/2)
+		if alongPath {
+			item.setPathRotation(degrees)
+		}
+	}
+	return nil
+}
+
+// setPathRotation turns a laid-out shape to face along the ring. Only the
+// shape itself turns; its descendants keep the rotation they were authored
+// with, because the contract carries one rotation per element.
+func (node *nativeDiagramPresNode) setPathRotation(degrees float64) {
+	units := int64(math.Round(degrees*60000)) % 21600000
+	if units < 0 {
+		units += 21600000
+	}
+	node.rotation60000 = units
+	for _, child := range node.children {
+		child.setPathRotation(degrees)
+	}
+}
+
+// nativeDiagramAngleParam reads a degree-valued algorithm parameter.
+func nativeDiagramAngleParam(node *nativeDiagramPresNode, name string, fallback float64) (float64, error) {
+	raw := node.param(name, "")
+	if raw == "" {
+		return fallback, nil
+	}
+	degrees, err := nativeDiagramParseFloat(raw)
+	if err != nil || math.Abs(degrees) > 3600 {
+		return 0, nativeDiagramLayoutRefuse(nativeDiagramLayoutAlgorithmCode, "diagram cycle angle "+name+"="+raw+" is outside the modeled range")
+	}
+	return degrees, nil
 }
