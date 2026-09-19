@@ -92,7 +92,8 @@ func (extractor *nativeExtractor) extractPicture(node *nativeXMLNode, slidePart,
 		return NativeElement{}, err
 	}
 	var crop *NativePictureCrop
-	relationshipID, linkRelationshipID, err := validateNativePictureBlipFill(blipFill, dialect, &gaps, &crop)
+	var outsetCrop *[4]int64
+	relationshipID, linkRelationshipID, err := validateNativePictureBlipFill(blipFill, dialect, &gaps, &crop, &outsetCrop)
 	if err != nil {
 		return NativeElement{}, err
 	}
@@ -110,6 +111,18 @@ func (extractor *nativeExtractor) extractPicture(node *nativeXMLNode, slidePart,
 	transform, err := validateNativePictureShapeProperties(shapeProperties, dialect, &gaps, &clip, &geometry)
 	if err != nil {
 		return NativeElement{}, err
+	}
+	if outsetCrop != nil {
+		cx, cy := int64(0), int64(0)
+		if transform.Cx != nil && transform.Cy != nil {
+			cx, cy = *transform.Cx, *transform.Cy
+		}
+		if projected, ok := projectNativeApproximatePictureCrop(*outsetCrop, cx, cy); ok {
+			crop = projected
+			gaps.add(nativePictureCropCode, nativeApproximatePictureCropMessage(*outsetCrop, projected))
+		} else {
+			gaps.add("pptx.picture-crop-unavailable", "outset or degenerate picture crops are preserved but not modeled")
+		}
 	}
 
 	relationship, err := exactNativePictureRelationship(relationships, relationshipID, dialect)
@@ -218,7 +231,7 @@ func validateNativePictureNonVisual(node *nativeXMLNode, dialect nativeExtractDi
 	return "cNvPr-" + nativeID, name, nil
 }
 
-func validateNativePictureBlipFill(node *nativeXMLNode, dialect nativeExtractDialect, gaps *nativePictureGapSet, crop **NativePictureCrop) (string, string, error) {
+func validateNativePictureBlipFill(node *nativeXMLNode, dialect nativeExtractDialect, gaps *nativePictureGapSet, crop **NativePictureCrop, outset **[4]int64) (string, string, error) {
 	if err := requireOnlyNativeAttrs(node); err != nil {
 		gaps.add("pptx.picture-fill-unavailable", "picture fill attributes are not modeled in native PPTX v1")
 	}
@@ -280,7 +293,9 @@ func validateNativePictureBlipFill(node *nativeXMLNode, dialect nativeExtractDia
 			return "", "", rectErr
 		}
 		if insets[0] < 0 || insets[1] < 0 || insets[2] < 0 || insets[3] < 0 || insets[0]+insets[2] >= 100_000 || insets[1]+insets[3] >= 100_000 {
-			gaps.add("pptx.picture-crop-unavailable", "outset or degenerate picture crops are preserved but not modeled")
+			// The painted extent decides whether this is a crumb or a frame,
+			// and it is not known until the transform is qualified.
+			*outset = &insets
 		} else if insets != [4]int64{} {
 			*crop = &NativePictureCrop{Left: &insets[0], Top: &insets[1], Right: &insets[2], Bottom: &insets[3]}
 		}
