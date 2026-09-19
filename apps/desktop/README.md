@@ -45,6 +45,7 @@ Local spreadsheet calculation projects source values into a worker host and writ
 PresentationEditor is the PPTX canvas, inspector, and Present control that launches PresentationPlayer.
 PdfEditor is the PDF page and annotation workspace; it applies through pdf-commands and does not import OfficeEditor.
 SpreadsheetCharts is the worksheet chart sidebar; empty selections disable insert and a valid range emits chart.insert.
+SpreadsheetEditor is the worksheet grid, formula bar, and native XLSX apply path; it does not import OfficeEditor.
 The rest of the renderer, GitHub provider, and packaging workflows land
 in follow-up changes. Preview builds never load an updater.
 
