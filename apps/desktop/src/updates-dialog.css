@@ -1,0 +1,25 @@
+.updates-dialog { width: min(460px, calc(100vw - 48px)); max-height: calc(100vh - 64px); padding: 28px; border: 1px solid #dce1e8; border-radius: 16px; color: #253044; background: #fff; box-shadow: 0 24px 80px #18294233; }
+.updates-dialog::backdrop { background: #17253955; }
+.updates-heading { display: flex; align-items: center; gap: 14px; }
+.updates-heading img { width: 42px; height: 42px; object-fit: contain; }
+.updates-heading h2 { margin: 0; font-size: 20px; font-weight: 650; }
+.updates-heading p { margin: 4px 0 0; color: #637084; font-size: 13px; }
+.updates-dialog button { cursor: pointer; padding: 9px 14px; border: 1px solid #d5dce5; border-radius: 7px; background: #fff; color: #27374e; font: inherit; font-size: 13px; }
+.updates-dialog button:disabled { cursor: default; opacity: .55; }
+.updates-dialog button:focus-visible, .updates-dialog input:focus-visible { outline: 2px solid #3566b2; outline-offset: 3px; }
+.updates-dialog .updates-close { margin-left: auto; padding: 4px 9px; border-color: transparent; font-size: 22px; }
+.updates-summary { margin: 24px 0; padding: 18px; border-radius: 10px; background: #f4f7fb; }
+.updates-summary h3, .updates-notes h3 { margin: 0; font-size: 15px; font-weight: 600; }
+.updates-summary p { margin: 8px 0 0; font-size: 13px; line-height: 1.6; color: #526179; overflow-wrap: anywhere; }
+.updates-progress { display: flex; align-items: center; gap: 12px; margin-top: 14px; font-size: 12px; }
+.updates-progress progress { width: 100%; height: 7px; accent-color: #3566b2; }
+.updates-notes { max-height: 180px; overflow: auto; margin: 0 0 22px; }
+.updates-notes p { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; line-height: 1.65; color: #526179; }
+.updates-error { color: #a52e36; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.updates-automatic { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.updates-automatic input { accent-color: #3566b2; }
+.updates-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 24px; }
+.updates-dialog .primary-button { color: #fff; background: #285ba7; border-color: #285ba7; }
+.update-notice { position: fixed; right: 24px; bottom: 48px; z-index: 20; display: flex; align-items: center; gap: 14px; padding: 12px 16px; max-width: calc(100vw - 48px); border: 1px solid #d5dce5; border-radius: 10px; background: #fff; box-shadow: 0 6px 24px #18294220; color: #253044; font-size: 13px; }
+.update-notice button { border: 0; background: transparent; color: #285ba7; font: inherit; cursor: pointer; white-space: nowrap; }
+.update-notice button:focus-visible { outline: 2px solid #3566b2; outline-offset: 3px; }
