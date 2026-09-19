@@ -23,7 +23,8 @@ is an 80ms debounce that skips IME composition; OfficeEditor wiring follows.
 CSV/TSV parse and encode keep fields as literal UTF-8 text. Word/character
 counts are per paragraph so a keystroke does not recount the document. PDF
 find-in-document is sequential with page and hit caps. PDF recovery drafts
-are data, never commands; unknown fields fail closed.
+are data, never commands; unknown fields fail closed. Worksheet add/delete
+reasons are predicted before a destructive native mutation.
 The rest of the renderer,
 the real Electron dependency, GitHub provider, and packaging workflows land
 in follow-up changes. Preview builds never load an updater.
