@@ -62,9 +62,15 @@ size=$(wc -c < "$output_dir/docxnative.wasm" | tr -d ' ')
 # commits: +5,401, +5,395 and +5,436 bytes. An earlier note in this file put
 # that gap at ~28 KiB; that figure was never reproduced and is wrong. Measure,
 # do not assume.
-max_size=$((13 * 1024 * 1024 / 2 + 288 * 1024))
+#
+# A further 64 KiB covers the conditional table-style cascade (w:tblStylePr
+# regions selected by w:tblLook, resolved per cell into fills and the
+# paragraph/run layers). Measured locally: 7,089,634 -> 7,138,716 bytes
+# (+49,082) against a 7,110,656 ceiling, so the previous gate was already
+# 27.4 KiB short before the CI toolchain's own margin.
+max_size=$((13 * 1024 * 1024 / 2 + 352 * 1024))
 if (( size > max_size )); then
-  echo "docxnative.wasm $size bytes exceeds the 6.5 MiB + 288 KiB size ceiling ($max_size bytes)" >&2
+  echo "docxnative.wasm $size bytes exceeds the 6.5 MiB + 352 KiB size ceiling ($max_size bytes)" >&2
   exit 1
 fi
 echo "docxnative.wasm $size bytes" >&2

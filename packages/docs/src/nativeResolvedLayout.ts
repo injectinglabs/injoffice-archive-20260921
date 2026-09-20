@@ -147,11 +147,20 @@ export interface NativeDocxResolvedTableGeometryV1 {
   cell_margins: { top_twips: number; right_twips: number; bottom_twips: number; left_twips: number }
 }
 
+/** The fill the conditional table-style cascade (ECMA-376 17.7.6.6 w:tblStylePr,
+ * selected by w:tblLook) resolves for one cell, after the table-level fill and
+ * every region the cell belongs to have applied in precedence order. */
+export interface NativeDocxResolvedTableCellShadingV1 {
+  cell_id: string
+  shading_rgb: string
+}
+
 export interface NativeDocxResolvedTableV1 {
   table_id: string
   style_id?: string
   borders?: NativeDocxTableBordersV1
   cell_shading_rgb?: string
+  conditional_cell_shading?: NativeDocxResolvedTableCellShadingV1[]
   geometry?: NativeDocxResolvedTableGeometryV1
   automatic_border_preview?: NativeDocxAutomaticBorderEvidenceV1
 }
@@ -201,7 +210,8 @@ export const DOCX_RESOLVED_LAYOUT_V1_BINDING_FIELDS = {
   RunV1: ['run_id', 'paragraph_id', 'character_style_id', 'applied_paragraph_styles', 'applied_character_styles', 'properties'],
   TableBorderV1: ['style', 'size_eighth_points', 'color_rgb'],
   TableBordersV1: ['top', 'right', 'bottom', 'left', 'inside_horizontal', 'inside_vertical'],
-  TableV1: ['table_id', 'style_id', 'borders', 'cell_shading_rgb', 'geometry', 'automatic_border_preview'],
+  TableV1: ['table_id', 'style_id', 'borders', 'cell_shading_rgb', 'conditional_cell_shading', 'geometry', 'automatic_border_preview'],
+  TableCellShadingV1: ['cell_id', 'shading_rgb'],
   FontV1: ['name', 'alt_name'],
   DiagnosticV1: ['code', 'severity', 'scope_id', 'part_name', 'path', 'preservation', 'message'],
   LayoutInputV1: ['protocol', 'version', 'document_id', 'revision', 'source_parts', 'numbering_source', 'paragraphs', 'runs', 'tables', 'fonts', 'diagnostics'],
@@ -660,6 +670,18 @@ export function decodeNativeDocxResolvedLayout(value: unknown): DecodeNativeDocx
     if (id) tableIDs.add(id)
     optionalString(entry.style_id, `${path}/style_id`, issues)
     optionalString(entry.cell_shading_rgb, `${path}/cell_shading_rgb`, issues, COLOR, 6)
+    if (entry.conditional_cell_shading !== undefined) {
+      const cellIDs = new Set<string>()
+      array(entry.conditional_cell_shading, `${path}/conditional_cell_shading`, issues).forEach((value, cellIndex) => {
+        const cellPath = `${path}/conditional_cell_shading/${cellIndex}`
+        const cell = object(value, cellPath, DOCX_RESOLVED_LAYOUT_V1_BINDING_FIELDS.TableCellShadingV1, issues)
+        if (!cell) return
+        const cellID = stringValue(cell.cell_id, `${cellPath}/cell_id`, issues)
+        if (cellID && cellIDs.has(cellID)) add(issues, 'DUPLICATE_ID', `${cellPath}/cell_id`, 'conditional cell shading repeats a cell id')
+        if (cellID) cellIDs.add(cellID)
+        stringValue(cell.shading_rgb, `${cellPath}/shading_rgb`, issues, COLOR, 6)
+      })
+    }
     if (entry.automatic_border_preview !== undefined && !validNativeDocxAutomaticBorderEvidenceV1(entry.automatic_border_preview)) add(issues, 'INVALID_VALUE', `${path}/automatic_border_preview`, 'Invalid bounded automatic-border evidence')
     if (entry.geometry !== undefined) {
       const geometryPath = `${path}/geometry`

@@ -88,6 +88,7 @@ type NativeResolvedTableV1 struct {
 	StyleID                *string                              `json:"style_id,omitempty"`
 	Borders                *NativeTableBordersV1                `json:"borders,omitempty"`
 	CellShadingRGB         *string                              `json:"cell_shading_rgb,omitempty"`
+	ConditionalCellShading []NativeResolvedTableCellShadingV1   `json:"conditional_cell_shading,omitempty"`
 }
 
 type NativeResolvedParagraphPropertiesV1 struct {
@@ -1412,13 +1413,17 @@ func (resolver *nativeLayoutResolver) resolveBlock(block *NativeBlockV1, result 
 		return
 	}
 	table := block.Table
-	resolvedTable, tableStyles := resolver.resolveTableStyle(table)
+	resolvedTable, tableStyles, cellStyles := resolver.resolveTableStyle(table)
 	resolvedTable.Geometry = resolver.resolveTableGeometry(table)
 	result.Tables = append(result.Tables, resolvedTable)
 	for rowIndex := range table.Rows {
 		for cellIndex := range table.Rows[rowIndex].Cells {
+			layers := tableStyles
+			if conditional, ok := cellStyles[table.Rows[rowIndex].Cells[cellIndex].ID]; ok {
+				layers = conditional
+			}
 			for paragraphIndex := range table.Rows[rowIndex].Cells[cellIndex].Paragraphs {
-				resolver.resolveParagraph(&table.Rows[rowIndex].Cells[cellIndex].Paragraphs[paragraphIndex], result, numberingState, tableStyles)
+				resolver.resolveParagraph(&table.Rows[rowIndex].Cells[cellIndex].Paragraphs[paragraphIndex], result, numberingState, layers)
 			}
 		}
 	}
@@ -1482,8 +1487,9 @@ func (resolver *nativeLayoutResolver) parseSimpleTableStyleBorders(node *nativeX
 				return nil, false
 			}
 			borders = parsed
-		case "tblW", "tblLayout", "jc", "tblInd", "tblCellMar", "tblLook", "shd":
-			// Geometry and look metadata do not map onto the existing border/fill commands.
+		case "tblW", "tblLayout", "jc", "tblInd", "tblCellMar", "tblLook", "shd", "tblStyleRowBandSize", "tblStyleColBandSize":
+			// Geometry, look and banding metadata do not map onto the existing
+			// border/fill commands; the band sizes are read by the region cascade.
 		default:
 			return nil, false
 		}
@@ -1515,19 +1521,33 @@ func (resolver *nativeLayoutResolver) parseSimpleTableStyleCellFill(node *native
 	return fill, true
 }
 
-func (resolver *nativeLayoutResolver) resolveTableStyle(table *NativeTableV1) (NativeResolvedTableV1, []*nativeStyleDefinition) {
+func (resolver *nativeLayoutResolver) resolveTableStyle(table *NativeTableV1) (NativeResolvedTableV1, []*nativeStyleDefinition, map[string][]*nativeStyleDefinition) {
 	resolved := NativeResolvedTableV1{TableID: table.ID, StyleID: table.TableStyleID}
 	if table.TableStyleID == nil {
-		return resolved, nil
+		return resolved, nil, nil
 	}
 	definition := resolver.styles["table\x00"+*table.TableStyleID]
 	if definition == nil {
 		resolver.addDiagnostic("MISSING_TABLE_STYLE", table.ID, resolver.partsValue(resolver.parts.StylesPart), nil, "The referenced table style is missing and was not guessed")
-		return resolved, nil
+		return resolved, nil, nil
 	}
 	chain := resolver.styleChain("table", *table.TableStyleID, table.ID)
 	if len(chain) == 0 {
-		return resolved, nil
+		return resolved, nil, nil
+	}
+	// A chain that declares conditional regions is resolved per cell when its
+	// w:tblLook selection and every region's structure read exactly
+	// (native_table_conditional.go). Otherwise the regions stay unmodeled and
+	// the style's whole cascade is refused, as before.
+	var conditional *nativeConditionalTableStyle
+	declaresRegions := false
+	for _, layer := range chain {
+		if firstDirectNativeChild(layer.node, resolver.wordNS, "tblStylePr") != nil {
+			declaresRegions = true
+		}
+	}
+	if declaresRegions {
+		conditional, _ = resolver.resolveConditionalTableStyle(table, chain)
 	}
 	// Two independent questions. `simple` asks whether the table-level border and
 	// fill subset was fully parsable; `regionDependent` asks whether the style
@@ -1538,8 +1558,9 @@ func (resolver *nativeLayoutResolver) resolveTableStyle(table *NativeTableV1) (N
 	// formatting that has no table-level component at all.
 	simple := true
 	regionDependent := false
+	var baseFill *string
 	for _, layer := range chain {
-		if firstDirectNativeChild(layer.node, resolver.wordNS, "tblStylePr") != nil {
+		if conditional == nil && firstDirectNativeChild(layer.node, resolver.wordNS, "tblStylePr") != nil {
 			resolver.addDiagnostic("CONDITIONAL_TABLE_STYLE_PRESERVED", table.ID, layer.partName, layer.node, "Conditional table-style semantics require table-region evaluation and are not guessed")
 			resolver.addDiagnostic("TABLE_STYLE_EFFECTS_PRESERVED", table.ID, layer.partName, layer.node, "Table-style effects are preserved until table-region cascade support is implemented")
 			simple = false
@@ -1567,6 +1588,9 @@ func (resolver *nativeLayoutResolver) resolveTableStyle(table *NativeTableV1) (N
 					simple = false
 					continue
 				}
+				if fill != nil {
+					baseFill = fill
+				}
 				if simple && fill != nil {
 					resolved.CellShadingRGB = fill
 				}
@@ -1590,17 +1614,31 @@ func (resolver *nativeLayoutResolver) resolveTableStyle(table *NativeTableV1) (N
 			}
 		}
 	}
+	var cellStyles map[string][]*nativeStyleDefinition
+	if conditional != nil && !regionDependent {
+		layers, fills, ok := conditional.cellCascade(table, chain, baseFill)
+		if ok {
+			cellStyles = layers
+			if len(fills) > 0 {
+				resolved.ConditionalCellShading = fills
+			}
+		} else {
+			resolver.addDiagnostic("CONDITIONAL_TABLE_STYLE_PRESERVED", table.ID, chain[len(chain)-1].partName, chain[len(chain)-1].node, "Conditional table-style regions could not be resolved against this table's grid and are not guessed")
+			simple = false
+			regionDependent = true
+		}
+	}
 	if !simple {
 		resolved.Borders = nil
 		resolved.CellShadingRGB = nil
 		resolved.AutomaticBorderPreview = resolver.automaticTableBorderPreview(table, chain)
 		if regionDependent {
-			return resolved, nil
+			return resolved, nil, nil
 		}
-		return resolved, chain
+		return resolved, chain, cellStyles
 	}
 	resolved.AutomaticBorderPreview = resolver.automaticTableBorderPreview(table, chain)
-	return resolved, chain
+	return resolved, chain, cellStyles
 }
 
 func (resolver *nativeLayoutResolver) resolveParagraph(paragraph *NativeParagraphV1, result *NativeResolvedLayoutInputV1, numberingState *nativeNumberingState, tableStyles []*nativeStyleDefinition) {

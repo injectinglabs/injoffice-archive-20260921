@@ -1073,4 +1073,51 @@ describe('bounded native DOCX table page-paint geometry', () => {
     expect(isRenderNeutralLayoutDiagnostic(missingStyle, shaded)).toBe(false)
     expect(isRenderNeutralLayoutDiagnostic(missingAncestor, shaded)).toBe(false)
   })
+
+  // The conditional table-style cascade (w:tblStylePr selected by w:tblLook) is
+  // resolved per cell by the Go resolver and carried as conditional_cell_shading.
+  // A cell's own w:shd still wins; the style's whole-table fill sits below.
+  it('paints the fill the conditional table-style cascade resolved for a cell', () => {
+    const request = fixture()
+    request.resolved_layout.tables[0]!.cell_shading_rgb = 'FFFF00'
+    request.resolved_layout.tables[0]!.conditional_cell_shading = [{ cell_id: 'cell:2', shading_rgb: '833C0B' }, { cell_id: 'cell:1', shading_rgb: '7F7F7F' }]
+    expect(decodeNativeDocxResolvedLayout(request.resolved_layout).ok).toBe(true)
+    const qualified = qualifyNativeDocxTablesV1(request.document, request.resolved_layout)
+    if (qualified.status !== 'qualified') throw new Error(`fixture must qualify: ${JSON.stringify(qualified)}`)
+    expect(qualified.tables[0]!.rows.map((row) => row.cells[0]!.cell.shading_rgb)).toEqual(['DDEEFF', '833C0B'])
+    const geometry = layoutNativeDocxTableRowsV1(qualified.tables[0]!, request.shaped_lines)
+    expect(geometry?.map((row) => row.cells[0]!.shading_rgb)).toEqual(['DDEEFF', '833C0B'])
+    // A cell the cascade leaves unfilled still takes the whole-table fill.
+    const unfilled = fixture()
+    unfilled.resolved_layout.tables[0]!.cell_shading_rgb = 'FFFF00'
+    unfilled.resolved_layout.tables[0]!.conditional_cell_shading = [{ cell_id: 'cell:1', shading_rgb: '7F7F7F' }]
+    const fallback = qualifyNativeDocxTablesV1(unfilled.document, unfilled.resolved_layout)
+    expect(fallback.status === 'qualified' ? fallback.tables[0]!.rows[1]!.cells[0]!.cell.shading_rgb : undefined).toBe('FFFF00')
+  })
+
+  it('validates conditional cell shading as bounded exact-key entries with unique cell ids and RGB fills', () => {
+    for (const [entries, ok] of [
+      [[{ cell_id: 'cell:1', shading_rgb: '833C0B' }], true],
+      [[], true],
+      [[{ cell_id: 'cell:1', shading_rgb: '833C0B' }, { cell_id: 'cell:1', shading_rgb: 'FF0000' }], false],
+      [[{ cell_id: 'cell:1', shading_rgb: '833c0b' }], false],
+      [[{ cell_id: 'cell:1', shading_rgb: '833C0B', extra: true }], false],
+      [[{ cell_id: 'cell:1' }], false],
+      [[{ shading_rgb: '833C0B' }], false],
+      ['833C0B', false],
+    ] as const) {
+      const resolved = structuredClone(fixture().resolved_layout) as NativeDocxResolvedLayoutInputV1
+      ;(resolved.tables[0] as unknown as Record<string, unknown>).conditional_cell_shading = structuredClone(entries)
+      expect(decodeNativeDocxResolvedLayout(resolved).ok, JSON.stringify(entries)).toBe(ok)
+    }
+    // A resolved conditional fill is a style effect, so a dangling-style
+    // exemption that requires the style to have contributed nothing no longer holds.
+    const resolved = fixture().resolved_layout
+    resolved.source_parts.styles_part = 'word/styles.xml'
+    resolved.tables[0]!.style_id = 'Tabellengitternetz'
+    resolved.tables[0]!.conditional_cell_shading = [{ cell_id: 'cell:1', shading_rgb: '7F7F7F' }]
+    const missingStyle = { code: 'MISSING_TABLE_STYLE', severity: 'unsupported' as const, scope_id: 'table:1', part_name: 'word/styles.xml', preservation: 'preserve-verbatim' as const, message: 'The referenced table style is missing and was not guessed' }
+    resolved.diagnostics.push(missingStyle)
+    expect(isRenderNeutralLayoutDiagnostic(missingStyle, resolved)).toBe(false)
+  })
 })

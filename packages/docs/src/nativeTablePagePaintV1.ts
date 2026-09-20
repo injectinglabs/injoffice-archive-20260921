@@ -458,6 +458,9 @@ export function qualifyNativeDocxTablesV1(document: NativeDocxDocumentV1, resolv
     rows += table.rows.length
     if (rows > DOCX_TABLE_PAGE_PAINT_LIMITS.maxRows) return { status: 'refused', tables: [], paragraph_widths: new Map(), diagnostics: [{ code: 'table-resource-limit', scope_id: table.id, message: `Rows exceed ${DOCX_TABLE_PAGE_PAINT_LIMITS.maxRows}` }] }
     const openMerge: Array<{ cellID: string; span: number } | undefined> = Array.from({ length: grid.length })
+    // A cell's fill is its own w:shd, else what the conditional table-style
+    // cascade resolved for it, else the style's whole-table fill.
+    const conditionalShading = new Map((resolvedTable.conditional_cell_shading ?? []).map((entry) => [entry.cell_id, entry.shading_rgb]))
     let bodyStarted = false
     const repeating = table.rows.some((row) => row.repeat_header)
     const splitting = table.rows.some((row) => row.cant_split !== true)
@@ -489,7 +492,7 @@ export function qualifyNativeDocxTablesV1(document: NativeDocxDocumentV1, resolv
         }
         if (!nativeDocxCellWidthAgreesWithGridV1(cell, widthTwips)) return fail(cell.id, 'Cell width must exactly equal the sum of its fixed grid columns, or state no absolute preference')
         if (cell.borders) return fail(cell.id, 'Cell border conflict resolution is outside v1; use unambiguous table-level borders')
-        const shading = cell.shading_rgb ?? resolvedTable.cell_shading_rgb
+        const shading = cell.shading_rgb ?? conditionalShading.get(cell.id) ?? resolvedTable.cell_shading_rgb
         if (shading !== undefined && !/^[0-9A-F]{6}$/.test(shading)) return fail(cell.id, 'Cell shading must be an explicit RGB clear fill')
         if (!cellRunsSupported(cell)) return fail(cell.id, 'Cells must contain direct paragraphs with text, tab, or line-break runs only')
         if (cell.vertical_merge === 'continue' && cellHasVisibleContent(cell)) return fail(cell.id, 'Vertical-merge continue cells cannot carry independent visible content')

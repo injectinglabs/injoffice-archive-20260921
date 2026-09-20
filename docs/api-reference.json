@@ -5224,6 +5224,11 @@
               "signature": "export interface NativeDocxResolvedSourcePartsV1"
             },
             {
+              "name": "NativeDocxResolvedTableCellShadingV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxResolvedTableCellShadingV1"
+            },
+            {
               "name": "NativeDocxResolvedTableGeometryV1",
               "kind": "interface",
               "signature": "export interface NativeDocxResolvedTableGeometryV1"
