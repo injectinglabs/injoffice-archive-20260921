@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import type { PptxNativeExactParagraphV1, PptxNativeExactTextRunV1 } from '@injoffice/pptx-wasm';
-import FormattingToolbar, { type FormattingPatch, type FormattingValues } from './FormattingToolbar';
+import FormattingToolbar, { type FormattingPatch, type FormattingSection, type FormattingValues } from './FormattingToolbar';
+import { RibbonButton } from './Ribbon';
 
 /** Run fields the native PPTX `text.replace` transaction accepts (packages/pptx-wasm validateParagraph). */
 export type PresentationRunPatch = Partial<Pick<PptxNativeExactTextRunV1, 'fontFamily' | 'fontSizeHundredthPt' | 'bold' | 'italic' | 'color'>>;
@@ -27,18 +28,25 @@ export function presentationTextPatch(patch: FormattingPatch): { run?: Presentat
   return { ...(Object.keys(run).length ? { run } : {}), ...(align ? { align } : {}) };
 }
 
-export default function PresentationTextToolbar({ run, align, disabled, onRunChange, onAlignChange, children }: {
+/**
+ * Slide text formatting over the shared FormattingToolbar. `section="font"` and
+ * `section="paragraph"` render one ribbon group each (Home › Font, Home › Paragraph);
+ * the default renders the whole toolbar. Unsupported Office controls stay disabled
+ * with their reason: Underline sits with the font controls, Bullets with paragraph.
+ */
+export default function PresentationTextToolbar({ run, align, disabled, onRunChange, onAlignChange, children, section = 'all' }: {
   /** The selected text segment (a draft run when one is pending). Undefined when no editable text is selected. */
   run?: PptxNativeExactTextRunV1; align?: PresentationAlignment; disabled: boolean;
-  onRunChange(patch: PresentationRunPatch): void; onAlignChange(align: PresentationAlignment): void; children?: ReactNode;
+  onRunChange(patch: PresentationRunPatch): void; onAlignChange(align: PresentationAlignment): void; children?: ReactNode; section?: FormattingSection;
 }) {
   const values = presentationTextValues(run, align);
-  return <div className="presentation-text-toolbar" aria-label="Slide text formatting">
-    <FormattingToolbar kind="pptx" disabled={disabled} values={values} onChange={patch => { const next = presentationTextPatch(patch); if (next.run) onRunChange(next.run); if (next.align) onAlignChange(next.align); }}>
-      <div className="formatting-group">
-        <button aria-label="Underline" title={PRESENTATION_TEXT_UNSUPPORTED.underline} disabled aria-pressed={false}><u>U</u></button>
-        <button aria-label="Bullets" title={PRESENTATION_TEXT_UNSUPPORTED.bullets} disabled aria-pressed={false}>Bullets</button>
-      </div>
+  const underline = <RibbonButton icon="underline" label="Underline" labelHidden title={PRESENTATION_TEXT_UNSUPPORTED.underline} disabled aria-pressed={false} />;
+  const bullets = <RibbonButton icon="list" label="Bullets" aria-label="Bullets" title={PRESENTATION_TEXT_UNSUPPORTED.bullets} disabled aria-pressed={false} />;
+  return <div className={`presentation-text-toolbar presentation-text-toolbar-${section}`} aria-label={section === 'font' ? 'Slide font' : section === 'paragraph' ? 'Slide paragraph' : 'Slide text formatting'}>
+    <FormattingToolbar kind="pptx" section={section} disabled={disabled} values={values} onChange={patch => { const next = presentationTextPatch(patch); if (next.run) onRunChange(next.run); if (next.align) onAlignChange(next.align); }}>
+      {section === 'all' && <div className="formatting-group">{underline}{bullets}</div>}
+      {section === 'font' && underline}
+      {section === 'paragraph' && bullets}
       {children}
     </FormattingToolbar>
   </div>;

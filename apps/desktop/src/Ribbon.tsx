@@ -1,4 +1,4 @@
-import { Children, useId, type ButtonHTMLAttributes, type KeyboardEvent, type ReactNode } from 'react'
+import { Children, useId, type ButtonHTMLAttributes, type KeyboardEvent, type ReactNode, type Ref } from 'react'
 import RibbonIcon, { type RibbonIconName } from './RibbonIcons'
 import { shortcutKeys, shortcutTooltip, type ShortcutId } from './shortcuts'
 // ribbon.css is imported by each editor next to its own stylesheet so that
@@ -65,6 +65,8 @@ export default function Ribbon({ label, tabs, active, onChange, quickAccess, tra
 }
 
 export interface RibbonButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'title'> {
+  /** Forwarded to the host button (React 19 passes ref as a prop). */
+  ref?: Ref<HTMLButtonElement>
   icon: RibbonIconName
   /** Short visible label. Also the tooltip unless `title` is given. */
   label: string
