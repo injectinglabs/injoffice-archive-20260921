@@ -2,9 +2,10 @@
 .office-toolbar, .office-editbar, .office-paging, .office-sheet-tabs { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .office-toolbar, .office-editbar { padding: 8px 20px; border-bottom: 1px solid var(--border); background: var(--surface); flex-shrink: 0; }
 .office-toolbar span { font-size: 11px; color: var(--text-muted); margin-left: auto; }
-.office-editor button { font: inherit; font-size: 12px; cursor: pointer; padding: 6px 11px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: inherit; }
-.office-editor button:hover:not(:disabled) { background: var(--hover); }
-.office-editor button:disabled { opacity: .45; cursor: default; }
+.office-toolbar:empty { display: none; }
+.office-editor button:not(.ribbon-button, [role="tab"]) { font: inherit; font-size: 12px; cursor: pointer; padding: 6px 11px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: inherit; }
+.office-editor button:not(.ribbon-button, [role="tab"]):hover:not(:disabled) { background: var(--hover); }
+.office-editor button:not(.ribbon-button, [role="tab"]):disabled { opacity: .45; cursor: default; }
 .office-editor button:focus-visible, .office-editor select:focus-visible, .office-editor textarea:focus-visible, .office-text-run:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .office-editor button.office-apply { background: var(--accent-fill); color: var(--accent-text); border-color: var(--accent-fill); }
 .office-editor button.office-apply:hover:not(:disabled) { background: var(--accent-hover); }
@@ -95,9 +96,8 @@
 
 .office-inline-image{position:relative;display:inline-block;max-width:100%;vertical-align:middle}.office-image-actions{position:absolute;right:4px;top:4px;display:flex;gap:4px;white-space:nowrap;opacity:0}.office-image-actions button{padding:4px 8px;border:1px solid var(--border-strong);border-radius:4px;background:var(--surface-raised);color:var(--text);font:11px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}.office-inline-image:hover .office-image-actions,.office-inline-image:focus-within .office-image-actions{opacity:1}.office-image-actions button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
-.office-ribbon{flex-shrink:0;background:var(--surface);border-bottom:1px solid var(--border)}.office-ribbon-tabs{display:flex;gap:3px;align-items:center;padding:0 14px;background:var(--surface-muted);border-bottom:1px solid var(--border-subtle)}.office-ribbon-tabs [role=tab]{padding:9px 15px;border:0;border-bottom:3px solid transparent;background:transparent;color:var(--text-secondary);font:500 12px/1.2 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;cursor:pointer}.office-ribbon-tabs [aria-selected=true]{border-bottom-color:var(--accent);color:var(--accent);background:var(--surface)}.office-ribbon-tabs button:focus-visible{outline:2px solid var(--accent);outline-offset:-4px}.office-ribbon-panel{min-height:74px}.office-ribbon-panel[hidden]{display:none}.office-ribbon-insert{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:12px 18px;box-sizing:border-box}.office-ribbon-insert button{font:inherit;font-size:12px;padding:7px 10px;border:1px solid var(--border);border-radius:5px;background:var(--surface);color:var(--text-secondary);cursor:pointer}.office-ribbon-insert button:hover:not(:disabled){background:var(--accent-soft);border-color:var(--accent-border)}.office-ribbon-insert button:disabled{opacity:.45;cursor:default}.office-ribbon-insert p{font-size:12px;color:var(--text-muted)}.office-ribbon .formatting-toolbar,.office-ribbon .paragraph-toolbar{border-bottom:0}.office-ribbon .paragraph-toolbar{padding-top:7px;padding-bottom:9px;}
 
-.office-ribbon .office-page-layout{background:var(--surface-muted);border-bottom:1px solid var(--border-subtle)}.office-page-layout-note{margin:0;padding:12px 18px;color:var(--text-muted);font-size:12px;}
+.office-page-layout-note{margin:0;padding:12px 18px;color:var(--text-muted);font-size:12px;}
 
 .office-link-control form{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px;background:var(--surface-muted);border:1px solid var(--border);border-radius:8px}.office-link-control label{display:grid;gap:4px;font-size:12px}.office-link-control input{min-width:260px;padding:6px;border:1px solid var(--border-strong);border-radius:4px}.office-link-control small{max-width:220px;color:var(--text-muted)}
 
