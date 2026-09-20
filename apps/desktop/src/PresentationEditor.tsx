@@ -1,4 +1,5 @@
 import SlideArrangePanel from './SlideArrangePanel';
+import ContextMenu, { presentationContextMenu, selectObjectAt, useContextMenu } from './ContextMenu';
 import { arrangeCommand, arrangeTargets, toggleArrangeSelection, type ArrangeAction } from './presentationArrange';
 import ShapeArt from './ShapeArt';
 import PresentationTextToolbar from './PresentationTextToolbar';
@@ -49,6 +50,7 @@ export default function PresentationEditor({ name, bytes, onChange, onBusyChange
   const undoRef = useRef<Snapshot[]>([]); const redoRef = useRef<Snapshot[]>([]);
   const mounted = useRef(false);
   const workspace = useRef<HTMLDivElement>(null); const [workspaceWidth, setWorkspaceWidth] = useState(740);
+  const menu = useContextMenu();
   function markBusy(value: boolean) { busyRef.current = value; setBusy(value); callbacks.current.onBusyChange?.(value); }
   function updateDraft(value: Draft | undefined) { if (!value) setCellTextEdit(undefined); draftRef.current = value; setDraft(value); callbacks.current.onDraftChange?.(!!value); callbacks.current.onBusyChange?.(busyRef.current);
     try { callbacks.current.onRecoveryDraftChange?.(value && current.current ? recoveryDraft(current.current.deck, selected, value) : null); }
@@ -257,7 +259,7 @@ export default function PresentationEditor({ name, bytes, onChange, onBusyChange
     {error && <div className="presentation-error" role="alert"><span>{error}</span><button aria-label="Dismiss presentation error" onClick={() => setError('')}>×</button></div>}
     {!snapshot ? <div className="presentation-loading" role="status">{busy ? 'Opening presentation…' : 'This presentation could not be opened.'}</div> : <div className="presentation-layout">
       {!viewOptions?.focus && <nav className="presentation-thumbnails" aria-label="Slides"><div className="presentation-rail-title">Slides <span>{snapshot.deck.slides.length}</span></div>{snapshot.deck.slides.map((item, i) => <button key={item.id} className="presentation-thumbnail" disabled={blocked} aria-label={`Show slide ${i + 1}`} aria-current={index === i ? 'page' : undefined} onClick={() => selectSlide(i)}><span className="presentation-slide-number">{i + 1}</span><div className="presentation-thumb-stage"><SlideCanvas deck={snapshot.deck} slide={item} scale={148 / (snapshot.deck.size.cx / EMU_PER_PIXEL)} thumbnail /></div></button>)}</nav>}
-      <div className="presentation-workspace" ref={workspace}>
+      <div className="presentation-workspace" ref={workspace} onContextMenu={event => { selectObjectAt(event); menu.open(event); }}>
         <div className="presentation-canvas-label"><strong>Slide {index + 1}</strong><span>Positioned preview · text wrapping may differ in PowerPoint</span></div>
         <div className="presentation-canvas-scroll">{slide && <SlideCanvas deck={snapshot.deck} slide={slide} scale={scale} selected={selected} selectedKeys={arrangeKeys} onSelect={choose} disabled={blocked} draft={draft} onGeometry={geometryPatch} selectedCell={cellSelection} onCellSelect={chooseCell} onGestureChange={value => { dragging.current = value; }} />}</div>
         {slide && <details className="presentation-fidelity"><summary>Preview and editing limits</summary><p>Exact text and supported shapes can be edited. Images use embedded previews when available. Unsupported content stays in the file and appears as a placeholder. Slide commands can be refused for notes, comments, links, sections, or other relationships that cannot be changed safely.</p>{slide.compatibility.diagnostics.length > 0 && <ul>{slide.compatibility.diagnostics.slice(0, 10).map((diagnostic, i) => <li key={i}>{diagnostic.message}</li>)}</ul>}</details>}
@@ -311,7 +313,8 @@ export default function PresentationEditor({ name, bytes, onChange, onBusyChange
         </>}
       </aside>
     </div>}
-    {confirmDelete && <div className="presentation-modal"><section role="alertdialog" aria-modal="true" aria-labelledby="presentation-delete-title" onKeyDown={event => {
+    {menu.anchor && snapshot && <ContextMenu anchor={menu.anchor} label="Slide" onClose={menu.close} items={presentationContextMenu({ object: !!selectedItem && !selectedItem.grouped && (!!text || !!shape || !!geometryTarget(snapshot.deck, selected)), slide: !!slide, disabled: blocked, canDeleteSlide: snapshot.deck.slides.length > 1, onDeleteObject: deleteObject, onNewSlide: () => insert('slide'), onDuplicateSlide: () => structure('duplicate'), onDeleteSlide: () => setConfirmDelete(true) })} />}
+    {confirmDelete &&<div className="presentation-modal"><section role="alertdialog" aria-modal="true" aria-labelledby="presentation-delete-title" onKeyDown={event => {
       if (event.key === 'Escape') { event.preventDefault(); setConfirmDelete(false); deleteTrigger.current?.focus(); }
       if (event.key === 'Tab') { const buttons = Array.from(event.currentTarget.querySelectorAll('button')); const next = event.shiftKey ? buttons[0] : buttons.at(-1); if (document.activeElement === next) { event.preventDefault(); (event.shiftKey ? buttons.at(-1) : buttons[0])?.focus(); } }
     }}><h2 id="presentation-delete-title">Delete slide {index + 1}?</h2><p>You can undo this change before closing the presentation.</p><div><button autoFocus onClick={() => { setConfirmDelete(false); deleteTrigger.current?.focus(); }}>Cancel</button><button className="presentation-danger" onClick={() => { setConfirmDelete(false); structure('delete'); }}>Delete slide</button></div></section></div>}
