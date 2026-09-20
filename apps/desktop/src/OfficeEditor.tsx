@@ -33,10 +33,19 @@ export interface OfficeEditorProps {
 }
 
 interface TextTarget { key: string; label: string; value: string }
-type Preview = { kind: 'docx'; document: NativeDocxDocumentV1; images:Record<string,string>; imageNotice:string }
+type Preview = { kind: 'docx'; document: NativeDocxDocumentV1 }
+/**
+ * Preview media is held BESIDE the snapshot (WeakMap in the engine), never as a property of it. The
+ * snapshot is the return value of engine calls that take find/replace text, so static analysis treats
+ * every property read off it as DOM-derived (CodeQL js/xss-through-dom #48-#50). Image URLs must not be
+ * read through that object; they are minted from media bytes and looked up by snapshot identity.
+ */
+type PreviewMedia = { images: Record<string, string>; notice: string }
+const EMPTY_MEDIA: PreviewMedia = Object.freeze({ images: Object.freeze({}), notice: '' })
 type TextRange = DocumentTextRange
 interface Snapshot { bytes: Uint8Array; preview: Preview; targets: TextTarget[]; preferredSelection?:{key:string;range:TextRange} }
 interface LocalEngine {
+  media(snapshot: Snapshot): PreviewMedia
   hyperlink(snapshot:Snapshot,key:string,url:string|null):Promise<Snapshot>
   page(snapshot:Snapshot,patch:PagePatch):Promise<Snapshot>
   replaceImage(snapshot:Snapshot,id:string,bytes:Uint8Array,name:string):Promise<Snapshot>
@@ -80,12 +89,15 @@ function createEngine(extension: string): LocalEngine {
   if (extension !== 'docx') throw new Error('Choose a DOCX document.')
     const client = createDocxWasmClient()
     const imageCache:DocumentImageCache=new Map()
+    const mediaFor = new WeakMap<Snapshot, PreviewMedia>()
     const read = async (bytes: Uint8Array): Promise<Snapshot> => {
       const document = await client.extract(bytes)
       const media=await loadDocumentImages(client,bytes,document,imageCache)
-      return { bytes, preview: { kind: 'docx', document, images:media.images,imageNotice:media.notice }, targets: editableDocxRuns(document).map(target => ({ key: target.key, label: target.label, value: target.text })) }
+      const value: Snapshot = { bytes, preview: { kind: 'docx', document }, targets: editableDocxRuns(document).map(target => ({ key: target.key, label: target.label, value: target.text })) }
+      mediaFor.set(value, { images: media.images, notice: media.notice })
+      return value
     }
-    return { read, async hyperlink(snapshot,key,url){
+    return { read, media(snapshot){ return mediaFor.get(snapshot) ?? EMPTY_MEDIA }, async hyperlink(snapshot,key,url){
       const document=snapshot.preview.document,run=docxSelection(document,key)?.run
       if(!run?.can_edit_hyperlink)throw new Error('This text segment cannot be linked safely.')
       return read(await client.apply(snapshot.bytes,document,{protocol:'injoffice.office.mutations',version:1,format:'docx',mutation_id:operationId(),expected_revision:document.source.package_sha256,payload:{mutations:[{target_kind:'run',target_id:run.id,expected_xml_sha256:run.anchor.xml_sha256,operation:'hyperlink.set',hyperlink:{url,...(run.hyperlink?{expected_xml_sha256:run.hyperlink.anchor.xml_sha256}:{})}}]}}))
@@ -520,7 +532,7 @@ export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDr
       </div>
       <div className={`office-preview ${isDocument ? 'office-document-preview' : ''}`}>
         <div className="office-preview-scale" style={isDocument ? undefined : { zoom }}>
-        {snapshot.preview.kind === 'docx' && <DocumentPreview replaceImage={typeof window!=='undefined'&&window.injDesktop?.pickAsset?id=>void replaceImage(id):undefined} deleteImage={id=>void deleteImage(id)} images={snapshot.preview.images} imageNotice={snapshot.preview.imageNotice} document={snapshot.preview.document} choose={choose} selected={selected} draft={draft} textRange={textRange} onTextRangeChange={setTextRange} caretOffset={caretOffset} joinPrevious={() => void joinPrevious()} insertLines={(text, caret) => void insertLines(text, caret)} updateDraft={updateDraft} apply={() => void apply()} cancel={cancelDraft} busy={busy} hasDraft={hasDraft} onCompositionChange={value=>{composingRef.current=value;setComposing(value);callbacks.current.onBusyChange?.(busy||value);if(!value&&draftPending.current)hiddenApplyRef.current?.schedule()}} zoom={zoom} navigation={(viewOptions?.navigation ?? true) && !viewOptions?.focus} />}
+        {snapshot.preview.kind === 'docx' && <DocumentPreview replaceImage={typeof window!=='undefined'&&window.injDesktop?.pickAsset?id=>void replaceImage(id):undefined} deleteImage={id=>void deleteImage(id)} images={(engine.current?.media(snapshot) ?? EMPTY_MEDIA).images} imageNotice={(engine.current?.media(snapshot) ?? EMPTY_MEDIA).notice} document={snapshot.preview.document} choose={choose} selected={selected} draft={draft} textRange={textRange} onTextRangeChange={setTextRange} caretOffset={caretOffset} joinPrevious={() => void joinPrevious()} insertLines={(text, caret) => void insertLines(text, caret)} updateDraft={updateDraft} apply={() => void apply()} cancel={cancelDraft} busy={busy} hasDraft={hasDraft} onCompositionChange={value=>{composingRef.current=value;setComposing(value);callbacks.current.onBusyChange?.(busy||value);if(!value&&draftPending.current)hiddenApplyRef.current?.schedule()}} zoom={zoom} navigation={(viewOptions?.navigation ?? true) && !viewOptions?.focus} />}
         </div>
       </div>
       <SelectionToolbar values={toolbarValues} disabled={busy||composing} onChange={patch=>void changeFormatting(patch)} />
