@@ -31,7 +31,12 @@ npm run desktop:start
 
 Needs Node.js 22 or newer, the Go version declared in the native modules, and
 Bash (Git Bash on Windows). The desktop build compiles the bundled WASM
-engines and the Electron host. It does **not** start `injoffice-server` and it
+engines (`@injoffice/docx-wasm`, `@injoffice/xlsx-wasm`, `@injoffice/pptx-wasm`
+via the workspace `prebuild` script) and the Electron host. Vite fails the
+renderer build when any engine `.wasm`, `wasm_exec.js`, or worker is missing
+from those packages' `dist/`, or when the bundle has no hashed copy of them;
+`INJOFFICE_ALLOW_STUBS=1` downgrades that to a warning for local UI work only
+and must never be set for a packaged build. It does **not** start `injoffice-server` and it
 does **not** use the playground on port 3100.
 
 Create or open `.docx`, `.xlsx`, `.pptx`, or `.pdf`. Unsupported mutations
