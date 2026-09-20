@@ -146,9 +146,9 @@ test('PresentationEditor arranges its controls as a PowerPoint ribbon with label
     assert.deepEqual(groups(panels[2]), ['Tables', 'Images', 'Illustrations', 'Text']);
     assert.deepEqual(groups(panels[3]), ['Customize']);
     assert.deepEqual(groups(panels[4]), ['Start Slide Show']);
-    assert.equal(view.root.findByProps({ role: 'toolbar' }).props['aria-label'], 'Quick access');
-    const commandButtons = [...view.root.findAllByProps({ role: 'group' }).flatMap(group => group.findAllByType('button')), ...view.root.findByProps({ role: 'toolbar' }).findAllByType('button')];
-    assert.ok(commandButtons.length >= 18, `command buttons: ${commandButtons.length}`);
+    assert.equal(view.root.findAllByProps({ role: 'toolbar' }).filter(toolbar => toolbar.props['aria-label'] === 'Quick access').length, 0, 'Undo/Redo live in the shell title bar, not in the ribbon');
+    const commandButtons = view.root.findAllByProps({ role: 'group' }).flatMap(group => group.findAllByType('button'));
+    assert.ok(commandButtons.length >= 16, `command buttons: ${commandButtons.length}`);
     for (const node of commandButtons) {
       assert.equal(node.findAllByType('svg').length, 1, `${node.props.title} has an icon`);
       assert.ok(node.props.title, 'every command button has a tooltip');
@@ -156,7 +156,6 @@ test('PresentationEditor arranges its controls as a PowerPoint ribbon with label
     const byLabel = Object.fromEntries(commandButtons.map(node => [node.props['aria-label'] ?? text(node), node]));
     assert.match(byLabel.Underline.props.title, /not supported by the native PPTX transaction/);
     assert.match(byLabel.Bullets.props.title, /not supported by the native PPTX transaction/);
-    assert.match(byLabel.Undo.props.title, /^Undo \(/);
     assert.equal(byLabel.Present.props.disabled, false);
     assert.equal(view.root.findByProps({ 'aria-label': 'Slide background' }) != null, true);
   } finally {

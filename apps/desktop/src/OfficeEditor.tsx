@@ -22,7 +22,8 @@ import './ribbon.css'
 import './office-editor.css'
 
 export interface OfficeEditorProps {
-  registerHistory?: (commands: { undo(): void; redo(): void }) => void
+  /** Undo/Redo for the shell's Quick Access Toolbar; `canUndo`/`canRedo` grey the buttons out. */
+  registerHistory?: (commands: { undo(): void; redo(): void; canUndo?: boolean; canRedo?: boolean }) => void
   registerCommit?: (commit: () => Promise<boolean>) => void
   initialRecoveryDraft?: unknown
   onRecoveryDraftChange?: (draft: unknown | null) => void
@@ -480,7 +481,8 @@ export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDr
   const matches = search ? snapshot?.targets.filter(target => target.value.includes(search)) ?? [] : []
   const historyCommands = useRef({ undo() {}, redo() {} })
   historyCommands.current = { undo: () => travel('undo'), redo: () => travel('redo') }
-  useEffect(() => { registerHistory?.({ undo: () => historyCommands.current.undo(), redo: () => historyCommands.current.redo() }) }, [registerHistory])
+  const canUndo = !busy && !hasDraft && undo.length > 0, canRedo = !busy && !hasDraft && redo.length > 0
+  useEffect(() => { registerHistory?.({ undo: () => historyCommands.current.undo(), redo: () => historyCommands.current.redo(), canUndo, canRedo }) }, [registerHistory, canUndo, canRedo])
   const zoom = Math.max(50, Math.min(200, viewOptions?.zoom ?? 100)) / 100
   const toolbarValues=snapshot && (textRange?.paragraph_id?documentRangeFormattingValues(snapshot.preview.document,selected,textRange,hasDraft?draft:undefined):formattingValues(snapshot.preview,selected))
   if(toolbarValues && textRange && (textRange.unsupported || (textRange.paragraph_id&&docxSelection(snapshot!.preview.document,selected)?.paragraph.runs.some(run=>runAppearance(snapshot!.preview.document,docxSelection(snapshot!.preview.document,selected)!.paragraph,run).hidden)) || (textRange.paragraph_id?!docxSelection(snapshot!.preview.document,selected)?.paragraph.can_format_range:!docxSelection(snapshot!.preview.document,selected)?.run.can_format_range)))toolbarValues.characterEditable=false
@@ -539,7 +541,6 @@ export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDr
   const activeRibbonTab = visibleTabs.includes(ribbonTab) ? ribbonTab : 'Home'
   return <div className={`office-editor ${isDocument ? 'office-editor-document' : ''}`} onKeyDown={event => { if ((event.ctrlKey || event.metaKey) && !event.altKey && ['b','i','u'].includes(event.key.toLowerCase()) && !(event.target as HTMLElement).closest('input,select,textarea')) {event.preventDefault();const key=event.key.toLowerCase(),property=key==='b'?'bold':key==='i'?'italic':'underline';void changeFormatting({[property]:!toolbarValues?.[property]});return} if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') { event.preventDefault(); setSearchOpen(true); requestAnimationFrame(() => searchInput.current?.focus()) } }}>
     {snapshot && <Ribbon label="Document tools" tabs={ribbonTabs} active={activeRibbonTab} onChange={setRibbonTab}
-      quickAccess={<><RibbonButton icon="undo" label="Undo" shortcut="undo" onClick={() => travel('undo')} disabled={busy || hasDraft || !undo.length} /><RibbonButton icon="redo" label="Redo" shortcut="redo" onClick={() => travel('redo')} disabled={busy || hasDraft || !redo.length} /></>}
       trailing={isDocument && <span className="ribbon-note">{formattingScope('docx', toolbarValues, textRange ? 'Selected text range' : undefined)}</span>} />}
     <div className="office-toolbar">
       {isDocument && target && <><RibbonButton className="office-apply" icon="check" label="Apply change" shortcut="apply" disabled={busy || !hasDraft || composing} onClick={() => void apply()} /><RibbonButton icon="close" label="Cancel" shortcut="cancel" disabled={busy} onClick={cancelDraft} /></>}

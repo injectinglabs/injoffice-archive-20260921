@@ -12,28 +12,20 @@ import { readPreferences, writePreferences, initialView, type ViewOptions } from
 import { applyTheme } from './theme';
 import CommandPalette, { type WorkspaceCommand } from './CommandPalette';
 import { RibbonButton, RibbonRows, WorkspaceFileGroupsContext, type WorkspaceFileGroups } from './Ribbon';
-import injOfficeLogo from '../../../logo.png';
+import RibbonIcon from './RibbonIcons';
+import { shortcutLabel, shortcutTooltip } from './shortcuts';
 
 type DocumentSession = { key: number; id: string; name: string; initialName: string; initialBytes: Uint8Array; bytes: Uint8Array; dirty: boolean; untitled?: boolean; editorBusy?: boolean; draftDirty?: boolean; recoveryDraft?: unknown };
 type ReplaceChoice = 'save' | 'discard' | 'cancel';
 
-function ToolbarIcon({ name }: { name: 'open' | 'save' | 'saveAs' | 'navigation' | 'focus' }) {
-  const paths = {
-    open: 'M3 7V5h6l2 2h10v3M3 10h19l-3 10H3V10Z',
-    save: 'M4 3h13l4 4v14H3V3h1Zm3 0v6h10V3M7 21v-8h10v8',
-    saveAs: 'M4 3h13l4 4v5M3 3v18h8M7 3v6h10V3M15 20l6-6-3-3-6 6-1 4 4-1Z',
-    navigation: 'M3 4h18v16H3V4Zm6 0v16M5 8h2m-2 4h2m-2 4h2',
-    focus: 'M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5',
-  };
-  return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={paths[name]} /></svg>;
-}
+type HistoryCommands = { undo(): void; redo(): void; canUndo?: boolean; canRedo?: boolean };
 
-function SessionEditor({ session, onSessionChange, viewOptions, registerSessionCommit, registerSessionHistory }: { registerSessionHistory(key: number, commands: {undo(): void; redo(): void}): void; session: DocumentSession; registerSessionCommit(key: number, commit: () => Promise<boolean>): void; onSessionChange(key: number, patch: Partial<DocumentSession>): void; viewOptions: { zoom: number; navigation: boolean; focus: boolean } }) {
+function SessionEditor({ session, onSessionChange, viewOptions, registerSessionCommit, registerSessionHistory }: { registerSessionHistory(key: number, commands: HistoryCommands): void; session: DocumentSession; registerSessionCommit(key: number, commit: () => Promise<boolean>): void; onSessionChange(key: number, patch: Partial<DocumentSession>): void; viewOptions: { zoom: number; navigation: boolean; focus: boolean } }) {
   const key = session.key;
   const onChange = useCallback((bytes: Uint8Array) => onSessionChange(key, { bytes: new Uint8Array(bytes), dirty: true, recoveryDraft: null }), [key, onSessionChange]);
   const onBusyChange = useCallback((editorBusy: boolean) => onSessionChange(key, { editorBusy }), [key, onSessionChange]);
   const onDraftChange = useCallback((draftDirty: boolean) => onSessionChange(key, { draftDirty }), [key, onSessionChange]);
-  const registerHistory = useCallback((commands: {undo(): void; redo(): void}) => registerSessionHistory(key, commands), [key, registerSessionHistory]);
+  const registerHistory = useCallback((commands: HistoryCommands) => registerSessionHistory(key, commands), [key, registerSessionHistory]);
   const registerCommit = useCallback((commit: () => Promise<boolean>) => registerSessionCommit(key, commit), [key, registerSessionCommit]);
   const onRecoveryDraftChange = useCallback((recoveryDraft: unknown | null) => onSessionChange(key, { recoveryDraft }), [key, onSessionChange]);
   const format = session.initialName.split('.').pop()?.toLowerCase();
@@ -44,8 +36,15 @@ function SessionEditor({ session, onSessionChange, viewOptions, registerSessionC
 export default function App() {
   const [document, setDocument] = useState<DocumentSession | null>(null);
   const [sessions, setSessions] = useState<DocumentSession[]>([]);
-  const historyHandlers = useRef(new Map<number, {undo(): void; redo(): void}>());
-  const registerSessionHistory = useCallback((key: number, commands: {undo(): void; redo(): void}) => { historyHandlers.current.set(key, commands); }, []);
+  const historyHandlers = useRef(new Map<number, HistoryCommands>());
+  // Editors that report canUndo/canRedo grey the title bar's Undo/Redo out; the rest keep them enabled like the Edit menu.
+  const [historyState, setHistoryState] = useState<Record<number, { undo: boolean; redo: boolean }>>({});
+  const registerSessionHistory = useCallback((key: number, commands: HistoryCommands) => {
+    historyHandlers.current.set(key, commands);
+    if (commands.canUndo === undefined && commands.canRedo === undefined) return;
+    const undo = commands.canUndo ?? true, redo = commands.canRedo ?? true;
+    setHistoryState(previous => previous[key]?.undo === undo && previous[key]?.redo === redo ? previous : { ...previous, [key]: { undo, redo } });
+  }, []);
   const commitHandlers = useRef(new Map<number, () => Promise<boolean>>());
   const registerSessionCommit = useCallback((key: number, commit: () => Promise<boolean>) => { commitHandlers.current.set(key, commit); }, []);
   const sessionsRef = useRef<DocumentSession[]>([]);
@@ -225,7 +224,13 @@ export default function App() {
     }
   }, [bridge, saveDocument, updateDocument, refreshRecent, checkpoint]);
 
-  useEffect(() => bridge?.onMenuAction?.((action) => { if (closingRef.current) return; if (action === 'updates') { setUpdatesOpen(true); return; } if (action === 'undo' || action === 'redo') { if (!operation.current && !editorBusyRef.current) { if (draftDirtyRef.current || window.document.activeElement?.closest('dialog, .document-search, .pdf-search')) void bridge?.textHistory(action).catch(() => setError('Text history could not be updated.')); else if (!editorBusyRef.current && current.current) historyHandlers.current.get(current.current.key)?.[action](); } return; } if (action === 'externalOpen') externalPending.current = true; void runAction(action); }), [bridge, runAction]);
+  // Undo/Redo from the Edit menu or the title bar: text fields undo through the host; editors undo their own history.
+  const runHistory = useCallback((action: 'undo' | 'redo') => {
+    if (closingRef.current || operation.current || editorBusyRef.current) return;
+    if (draftDirtyRef.current || window.document.activeElement?.closest('dialog, .document-search, .pdf-search')) void bridge?.textHistory(action).catch(() => setError('Text history could not be updated.'));
+    else if (current.current) historyHandlers.current.get(current.current.key)?.[action]();
+  }, [bridge]);
+  useEffect(() => bridge?.onMenuAction?.((action) => { if (closingRef.current) return; if (action === 'updates') { setUpdatesOpen(true); return; } if (action === 'undo' || action === 'redo') { runHistory(action); return; } if (action === 'externalOpen') externalPending.current = true; void runAction(action); }), [bridge, runAction, runHistory]);
   useEffect(() => { if (!working && !editorBusy && sessions.length < 12 && externalPending.current) { externalPending.current = false; void runAction('externalOpen'); } }, [working, editorBusy, sessions.length, runAction]);
 
   useEffect(() => {
@@ -267,6 +272,7 @@ export default function App() {
       await bridge.close(closing.id);
       checkpointSources.current.delete(closing.id);
       historyHandlers.current.delete(key); commitHandlers.current.delete(key); sessionViews.current.delete(key);
+      setHistoryState(({ [key]: _closed, ...rest }) => rest);
       const remaining = sessionsRef.current.filter(item => item.key !== key);
       publishSessions(remaining);
       if (!remaining.length) setShowHome(true);
@@ -315,6 +321,9 @@ export default function App() {
   const changeZoom = (zoom: number) => setViewOptions(value => ({ ...value, zoom: Math.max(50, Math.min(200, zoom)) }));
   const toggleFocus = () => setViewOptions(value => ({ ...value, focus: !value.focus }));
   const localStatus = document?.untitled ? 'Not saved yet' : draftDirty || document?.dirty ? 'Unsaved changes' : document ? 'Saved on this device' : 'Local workspace';
+  const canUndo = !!document && !busy && (draftDirty || (historyState[document.key]?.undo ?? true));
+  const canRedo = !!document && !busy && (draftDirty || (historyState[document.key]?.redo ?? true));
+  const searchLabel = `Search (${shortcutLabel('commands')})`, searchTitle = shortcutTooltip('Search commands', 'commands');
 
   const commands: WorkspaceCommand[] = [
     { id: 'preferences', label: 'Preferences', detail: 'Local view defaults', disabled: busy, run: () => setSettingsOpen(true) },
@@ -360,34 +369,28 @@ export default function App() {
 
   return (
     <div ref={rootElement} inert={closing ? true : undefined} className={`desktop-app${viewOptions.focus ? ' is-focused' : ''}`} onDragOver={event => { if (event.dataTransfer.types.includes('Files')) event.preventDefault(); }} onDrop={event => { if (event.defaultPrevented || !event.dataTransfer.files.length) return; event.preventDefault(); void importFiles(Array.from(event.dataTransfer.files)); }}>
-      {showHome && <button className="home-command-button" disabled={busy} onClick={() => setCommandSearch(true)}>Search commands · Ctrl / ⌘ K</button>}
-      {!showHome && document && <>
-        <header className="app-titlebar">
-          <button className="workspace-home" disabled={busy} onClick={() => setShowHome(true)} aria-label="Go to start page" title="Start page">
-            <img className="brand-mark" src={injOfficeLogo} alt="" /><span>InjOffice</span>
-          </button>
+      {showHome && <button className="home-command-button titlebar-search" disabled={busy} onClick={() => setCommandSearch(true)} title={searchTitle}><RibbonIcon name="find" /><span>{searchLabel}</span></button>}
+      {!showHome && document && <header className="app-titlebar">
+        {/* Office's title bar: Quick Access (Save, Undo, Redo) · document name and state · Search · view tools. File, New, Open and Save as… live in the ribbon's File tab. */}
+        <div className="titlebar-quick-access" role="toolbar" aria-label="Quick access">
+          <RibbonButton className="titlebar-button" icon="save" label="Save" shortcut="save" labelHidden disabled={busy || (!document.dirty && !draftDirty)} onClick={() => void runAction('save')} />
+          <RibbonButton className="titlebar-button" icon="undo" label="Undo" shortcut="undo" labelHidden disabled={!canUndo} onClick={() => runHistory('undo')} />
+          <RibbonButton className="titlebar-button" icon="redo" label="Redo" shortcut="redo" labelHidden disabled={!canRedo} onClick={() => runHistory('redo')} />
+        </div>
+        <div className="titlebar-centre">
           <div className="title-document">
             <span className={`document-format format-${document.name.split('.').pop()?.toLowerCase()}`}>{document.name.split('.').pop()?.toUpperCase()}</span>
-            <div className="document-heading"><span className="document-name" title={document.name}>{document.name}</span><span className="title-save-status" role="status">{localStatus}</span></div>
-            {(document.dirty || draftDirty) && <span className="dirty-indicator" aria-label="Unsaved changes" />}
+            <span className="document-name" title={document.name}>{document.name}</span>
+            <span className="title-save-status" role="status">{(document.dirty || draftDirty) && <span className="dirty-indicator" aria-hidden="true" />}{localStatus}</span>
           </div>
-          <button className="workspace-save primary-button" onClick={() => void runAction('save')} disabled={busy || (!document.dirty && !draftDirty)}><ToolbarIcon name="save" />Save</button>
-        </header>
-        <nav className="workspace-toolbar" aria-label="Document actions">
-          <div className="toolbar-section">
-            <button disabled={busy} onClick={() => setShowHome(true)}>Home</button>
-            <button onClick={() => void runAction('new')} disabled={busy || !bridge}>New…</button>
-            <button onClick={() => void runAction('open')} disabled={busy || !bridge}><ToolbarIcon name="open" />Open</button>
-            <button onClick={() => void runAction('saveAs')} disabled={busy}><ToolbarIcon name="saveAs" />Save as…</button>
-          </div>
-          <div className="toolbar-section toolbar-view">
-            <button onClick={() => setUpdatesOpen(true)}>App updates</button>
-            <button disabled={busy} onClick={() => setCommandSearch(true)} title="Search commands (Ctrl/⌘ K)">Search commands</button>
-            {isDocx && <button aria-pressed={viewOptions.navigation} onClick={() => setViewOptions(value => ({ ...value, navigation: !value.navigation }))}><ToolbarIcon name="navigation" />Outline</button>}
-            <button aria-pressed={viewOptions.focus} onClick={toggleFocus}><ToolbarIcon name="focus" />{viewOptions.focus ? 'Exit focus' : 'Focus'}</button>
-          </div>
-        </nav>
-      </>}
+          <button className="titlebar-search" disabled={busy} onClick={() => setCommandSearch(true)} title={searchTitle}><RibbonIcon name="find" /><span>{searchLabel}</span></button>
+        </div>
+        <div className="titlebar-tools" role="toolbar" aria-label="View">
+          {isDocx && <RibbonButton className="titlebar-button" icon="sidebar" label={viewOptions.navigation ? 'Hide document outline' : 'Show document outline'} labelHidden aria-pressed={viewOptions.navigation} onClick={() => setViewOptions(value => ({ ...value, navigation: !value.navigation }))} />}
+          <RibbonButton className="titlebar-button" icon="focus" label={viewOptions.focus ? 'Exit focus mode' : 'Focus mode'} labelHidden aria-pressed={viewOptions.focus} onClick={toggleFocus} />
+          <RibbonButton className="titlebar-button" icon="updates" label="App updates" labelHidden onClick={() => setUpdatesOpen(true)} />
+        </div>
+      </header>}
 
       {importProgress&&<div className="app-import-progress" role="status"><span>{importProgress.total?`Importing spreadsheet: ${importProgress.completed.toLocaleString()} of ${importProgress.total.toLocaleString()} fields`:'Preparing spreadsheet import…'}</span><button onClick={()=>importAbort.current?.abort()}>Cancel import</button></div>}
       {error && <div className="app-error" role="alert"><span>{error}</span><button onClick={() => setError('')} aria-label="Dismiss error">×</button></div>}

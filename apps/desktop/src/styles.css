@@ -174,28 +174,28 @@ button:disabled { cursor: default; opacity: .45; }
 button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
 .desktop-app { height: 100vh; min-height: 340px; display: flex; flex-direction: column; overflow: hidden; }
 [hidden] { display: none !important; }
-.app-titlebar { display: flex; align-items: center; gap: 24px; flex-shrink: 0; min-height: 76px; padding: 12px 24px; background: var(--surface); color: var(--ink); }
-.workspace-home { display: flex; align-items: center; gap: 9px; padding: 6px 14px 6px 0; background: transparent; border: 0; color: var(--ink); font-size: 16px; font-weight: 600; }
-.workspace-home:hover { color: var(--blue); }
-.brand-mark { display: block; width: 32px; height: 32px; object-fit: contain; image-rendering: pixelated; flex-shrink: 0; }
-.title-document { min-width: 0; flex: 1; display: flex; align-items: center; gap: 12px; border-left: 1px solid var(--line); padding-left: 24px; }
-.document-heading { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.document-name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 15px; font-weight: 600; }
-.title-save-status { color: var(--muted); font-size: 11px; }
-.document-format { display: grid; place-items: center; width: 38px; height: 44px; flex-shrink: 0; background: var(--docx-soft); color: var(--docx); font-size: 9px; font-weight: 700; border-radius: 4px 9px 4px 4px; }
+/* Office's title bar: Quick Access (Save, Undo, Redo) left, document name + state and the Search pill centred, view tools right. */
+.app-titlebar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; flex-shrink: 0; height: 40px; padding: 0 8px; background: var(--surface-muted); border-bottom: 1px solid var(--border-subtle); color: var(--text); }
+.titlebar-quick-access, .titlebar-tools { display: flex; align-items: center; gap: 2px; min-width: 0; }
+.titlebar-tools { justify-content: flex-end; }
+.app-titlebar .titlebar-button { min-height: 28px; padding: 3px 6px; color: var(--text-secondary); }
+.app-titlebar .titlebar-button[aria-pressed="true"] { color: var(--accent); }
+.app-titlebar .ribbon-icon, .titlebar-search svg { width: 16px; height: 16px; flex-shrink: 0; }
+.titlebar-centre { display: flex; align-items: center; justify-content: center; gap: 16px; min-width: 0; }
+.title-document { display: flex; align-items: center; gap: 8px; min-width: 0; font-size: 12.5px; }
+.document-format { flex-shrink: 0; padding: 1px 5px; border-radius: 3px; background: var(--docx-soft); color: var(--docx); font-size: 9px; font-weight: 700; letter-spacing: .02em; }
 .format-xlsx { background: var(--xlsx-soft); color: var(--xlsx); }
 .format-pptx { background: var(--pptx-soft); color: var(--pptx); }
 .format-pdf { background: var(--pdf-soft); color: var(--pdf); }
+.document-name { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; max-width: 32ch; font-weight: 600; }
+.title-save-status { display: inline-flex; align-items: center; gap: 5px; color: var(--text-muted); font-size: 11.5px; white-space: nowrap; }
+.title-save-status::before { content: '–'; color: var(--text-faint); }
 .dirty-indicator { width: 6px; height: 6px; flex-shrink: 0; border-radius: 50%; background: var(--warning); }
-.workspace-save { display: flex; align-items: center; gap: 7px; }
-.workspace-save svg { width: 17px; height: 17px; }
-.is-focused .app-titlebar { display: none; }
-.workspace-toolbar { display: flex; justify-content: space-between; gap: 20px; min-height: 44px; flex-shrink: 0; padding: 5px 20px; border-top: 1px solid var(--canvas); border-bottom: 1px solid var(--line); background: var(--surface); }
-.toolbar-section { display: flex; align-items: center; gap: 5px; }
-.toolbar-section button { display: flex; align-items: center; gap: 7px; border: 0; border-radius: 5px; padding: 7px 11px; background: transparent; color: var(--text-secondary); font-size: 12px; }
-.toolbar-section button:hover:enabled { background: var(--hover); }
-.toolbar-section button[aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); }
-.toolbar-section svg { width: 17px; height: 17px; }
+.titlebar-search { display: inline-flex; align-items: center; gap: 8px; width: min(320px, 28vw); min-width: 160px; height: 28px; padding: 0 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text-muted); font-size: 12px; text-align: left; }
+.titlebar-search:hover:enabled { background: var(--hover); border-color: var(--border-strong); color: var(--text-secondary); }
+.titlebar-search span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+/* Focus mode keeps the slim title bar (it holds the exit toggle) and hides the document tab strip. */
+.is-focused .document-tabs { display: none; }
 .editor-workspace { flex: 1; min-height: 0; overflow: auto; position: relative; }
 .editor-content { height: 100%; min-height: 0; }
 .primary-button, .dialog-actions .primary-button { color: var(--accent-text); background: var(--accent-fill); border: 1px solid var(--accent-fill); border-radius: 5px; font-weight: 500; padding: 10px 19px; font-size: 14px; }
@@ -223,13 +223,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .dialog-actions button { border-color: var(--line); }
 .dialog-actions button:first-child { margin-right: auto; }
 @media (max-width: 700px) {
-  .app-titlebar { gap: 10px; padding: 10px 12px; }
-  .workspace-home span { display: none; }
-  .title-document { padding-left: 12px; }
-  .document-format { display: none; }
-  .workspace-toolbar { padding-inline: 8px; gap: 8px; }
-  .toolbar-section { gap: 0; }
-  .toolbar-section button { padding-inline: 8px; }
+  .app-titlebar { gap: 6px; padding: 0 4px; }
+  .titlebar-centre { gap: 8px; }
+  .titlebar-search { width: auto; min-width: 0; padding: 0 6px; }
+  .titlebar-search span, .document-format, .title-save-status { display: none; }
   .status-view-controls { gap: 5px; }
   .status-zoom input { width: 60px; }
 }
@@ -260,7 +257,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .command-palette [aria-disabled="true"] { opacity: .45; cursor: default; }
 .command-palette small { color: var(--muted); }
 .command-empty { padding: 12px 20px; color: var(--muted); }
-.home-command-button { align-self: flex-end; margin: 12px 24px 0; padding: 8px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); color: var(--muted); font-size: 12px; }
+.home-command-button { align-self: flex-end; margin: 10px 24px 0; }
 .preferences-dialog { width: min(480px, calc(100vw - 40px)); padding: 26px; border: 1px solid var(--line); border-radius: 12px; color: var(--ink); background: var(--surface-raised); box-shadow: 0 24px 80px var(--shadow); }
 .preferences-dialog::backdrop { background: var(--backdrop); }
 .preferences-dialog h2 { margin: 0 0 10px; font-size: 20px; }
