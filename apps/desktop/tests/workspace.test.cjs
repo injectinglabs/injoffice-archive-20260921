@@ -264,6 +264,9 @@ test('the File tab backstage carries Home, New, Open, Save, Save as, Close and a
     await act(async () => button('Start page: create, open recent or recover').props.onClick());
     assert.equal(renderer.root.findAllByType('test-start').length, 1, 'File › Home shows the start page');
     await act(async () => renderer.root.findByType('test-start').props.onResume());
+    const tabs = renderer.root.findByProps({ 'aria-label': 'Open documents' }).findAllByProps({ className: 'document-tab active' });
+    assert.equal(tabs.length, 1, 'exactly one document tab is active');
+    assert.equal(renderer.root.findByProps({ 'aria-label': 'Close Untitled.xlsx' }).findAllByType('svg').length, 1, 'tab close is an icon button');
     await act(async () => button('Close document').props.onClick());
     assert.equal(renderer.root.findAllByProps({ role: 'alertdialog' }).length, 1, 'closing an unsaved workbook asks first');
     await act(async () => renderer.root.findAllByType('button').find(node => node.children.includes('Discard changes')).props.onClick());
