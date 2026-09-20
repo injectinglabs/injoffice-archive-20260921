@@ -67,6 +67,7 @@
     "linux": {
       "maintainer": "Injecting Inc.",
       "executableName": "injoffice",
+      "artifactName": "${productName}-${version}-linux-${arch}.${ext}",
       "target": [
         "AppImage",
         "deb",
