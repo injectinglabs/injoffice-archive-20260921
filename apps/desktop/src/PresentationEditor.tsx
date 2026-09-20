@@ -3,6 +3,9 @@ import ContextMenu, { presentationContextMenu, selectObjectAt, useContextMenu } 
 import { arrangeCommand, arrangeTargets, toggleArrangeSelection, type ArrangeAction } from './presentationArrange';
 import ShapeArt from './ShapeArt';
 import PresentationTextToolbar from './PresentationTextToolbar';
+import Ribbon, { RibbonButton, type RibbonTabSpec } from './Ribbon';
+import RibbonIcon from './RibbonIcons';
+import './ribbon.css';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { createPptxWasmClient, type PptxNativeExactAutoShapeV1, type PptxNativeExactParagraphV1, type PptxNativeMutationRequestV1 } from '@injoffice/pptx-wasm';
 import type { NativeElement, NativePptxDeck, NativeSlide, NativeTransform } from '@injoffice/pptx-native';
@@ -45,6 +48,7 @@ export default function PresentationEditor({ name, bytes, onChange, onBusyChange
   const [segment, setSegment] = useState({ paragraph: 0, run: 0 });
   const [error, setError] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [ribbonTab, setRibbonTab] = useState('Home');
   const deleteTrigger = useRef<HTMLButtonElement>(null);
   const [undo, setUndo] = useState<Snapshot[]>([]); const [redo, setRedo] = useState<Snapshot[]>([]);
   const undoRef = useRef<Snapshot[]>([]); const redoRef = useRef<Snapshot[]>([]);
@@ -235,27 +239,45 @@ export default function PresentationEditor({ name, bytes, onChange, onBusyChange
   }
   historyRef.current = travel;
   const scale = snapshot ? Math.max(.1, Math.min(1, (workspaceWidth - 64) / (snapshot.deck.size.cx / EMU_PER_PIXEL))) * Math.max(.5, Math.min(2, (viewOptions?.zoom ?? 100) / 100)) : 1;
+  // PowerPoint's ribbon, applied to the controls this editor already has.
+  const ribbonTabs: RibbonTabSpec[] = [
+    { id: 'File', label: 'File', groups: [{ id: 'export', label: 'Export', children: <RibbonButton icon="svg" label="Export slide SVG" title="Export the current supported slide. Text and unsupported objects require the original PPTX." disabled={blocked || !snapshot} onClick={() => void exportSvg()} /> }] },
+    { id: 'Home', label: 'Home', groups: [
+      { id: 'slides', label: 'Slides', children: <>
+        <RibbonButton icon="newSlide" label="New slide" disabled={blocked || !slide} onClick={() => insert('slide')} />
+        <RibbonButton icon="duplicate" label="Duplicate slide" disabled={blocked || !slide} onClick={() => structure('duplicate')} />
+        <RibbonButton icon="moveEarlier" label="Move earlier" disabled={blocked || !slide || index === 0} onClick={() => structure('previous')} />
+        <RibbonButton icon="moveLater" label="Move later" disabled={blocked || !snapshot || index >= snapshot.deck.slides.length - 1} onClick={() => structure('next')} />
+        <RibbonButton icon="deleteSlide" label="Delete slide" disabled={blocked || !snapshot || snapshot.deck.slides.length <= 1} ref={deleteTrigger} onClick={() => setConfirmDelete(true)} />
+      </> },
+      { id: 'font', label: 'Font', children: <PresentationTextToolbar section="font" run={run} align={selectedParagraph?.align} disabled={busy || confirmDelete || !text || (!!draft && draft.kind !== 'text')} onRunChange={patch => textPatch(patch)} onAlignChange={align => textPatch({}, align)} /> },
+      { id: 'paragraph', label: 'Paragraph', children: <PresentationTextToolbar section="paragraph" run={run} align={selectedParagraph?.align} disabled={busy || confirmDelete || !text || (!!draft && draft.kind !== 'text')} onRunChange={patch => textPatch(patch)} onAlignChange={align => textPatch({}, align)} /> },
+      { id: 'drawing', label: 'Drawing', children: <RibbonButton icon="deleteObject" label="Delete object" disabled={blocked || !selectedItem || selectedItem.grouped || (!text && !shape && !geometryTarget(snapshot!.deck, selected))} onClick={deleteObject} /> },
+    ] },
+    { id: 'Insert', label: 'Insert', groups: [
+      { id: 'tables', label: 'Tables', children: <RibbonButton icon="table" label="Table" disabled={blocked || !slide} aria-expanded={tableInsertOpen} onClick={() => setTableInsertOpen(!tableInsertOpen)} /> },
+      { id: 'images', label: 'Images', children: <RibbonButton icon="image" label="Picture" disabled={blocked || !slide} onClick={() => void insertPicture()} /> },
+      { id: 'illustrations', label: 'Illustrations', children: <RibbonButton icon="shape" label="Shape" disabled={blocked || !slide} onClick={() => insert('shape')} /> },
+      { id: 'text', label: 'Text', children: <RibbonButton icon="textbox" label="Text box" disabled={blocked || !slide} onClick={() => insert('text')} /> },
+    ] },
+    { id: 'Design', label: 'Design', groups: [{ id: 'customize', label: 'Customize', children: <label className="presentation-background-control" title="Slide background"><RibbonIcon name="background" />Background<select aria-label="Slide background" value={slide?.background ?? ''} disabled={blocked || !slide || slide.compatibility.diagnostics.some(d => d.code === 'pptx.unsupported-background')} onChange={event => changeBackground(event.target.value)}>
+        <option value="" disabled>Inherited</option>
+        {slide?.background && !['FFFFFF','F5F7FA','202B3C','2459AD','DCE8F7','E4F1E9','FFF2D2','F6E3E6'].includes(slide.background) && <option value={slide.background}>Custom #{slide.background}</option>}
+        {Object.entries({FFFFFF:'White',F5F7FA:'Fog', '202B3C':'Ink','2459AD':'Blue',DCE8F7:'Pale blue',E4F1E9:'Sage',FFF2D2:'Cream',F6E3E6:'Rose'}).map(([color,label]) => <option key={color} value={color}>{label}</option>)}
+      </select></label> }] },
+    { id: 'SlideShow', label: 'Slide Show', groups: [{ id: 'start', label: 'Start Slide Show', children: <RibbonButton icon="present" label="Present" disabled={busy || !snapshot || confirmDelete} onClick={() => { if (!current.current || busyRef.current || dragging.current || composing.current) return; presenting.current = true; setPresentation(startPresentationMode(current.current.deck, index, !!draftRef.current)); }} /> }] },
+  ];
   return <div className="presentation-editor" aria-label="Presentation editor" aria-busy={busy} onKeyDown={event => {
       if (!(event.ctrlKey || event.metaKey) || event.altKey || blocked || composing.current || dragging.current) return;
       const key = event.key.toLowerCase(); if (key !== 'z' && key !== 'y') return;
       event.preventDefault(); event.stopPropagation(); travel(key === 'y' || event.shiftKey ? 'redo' : 'undo');
     }} onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }}>
     {presentation && <PresentationPlayer initial={presentation} onExit={() => { presenting.current = false; setPresentation(undefined); }} renderSlide={(slide, scale) => <SlideCanvas deck={presentation.deck} slide={slide} scale={scale} thumbnail />} />}
-    <div className="presentation-toolbar">
-      <button disabled={busy || !snapshot || confirmDelete} onClick={() => { if (!current.current || busyRef.current || dragging.current || composing.current) return; presenting.current = true; setPresentation(startPresentationMode(current.current.deck, index, !!draftRef.current)); }}>Present</button>
-      <div><button disabled={blocked || !undo.length} onClick={() => travel('undo')}>Undo</button><button disabled={blocked || !redo.length} onClick={() => travel('redo')}>Redo</button></div>
-      <div><button disabled={blocked || !slide} onClick={() => insert('slide')}>New slide</button><button disabled={blocked || !slide} onClick={() => structure('duplicate')}>Duplicate slide</button><button disabled={blocked || !slide || index === 0} onClick={() => structure('previous')}>Move earlier</button><button disabled={blocked || !snapshot || index >= snapshot.deck.slides.length - 1} onClick={() => structure('next')}>Move later</button><button disabled={blocked || !snapshot || snapshot.deck.slides.length <= 1} ref={deleteTrigger} onClick={() => setConfirmDelete(true)}>Delete slide</button></div>
-      <div><button disabled={blocked || !slide} onClick={() => insert('text')}>Text box</button><button disabled={blocked || !slide} onClick={() => insert('shape')}>Shape</button><button disabled={blocked || !slide} onClick={() => void insertPicture()}>Picture</button><button disabled={blocked || !slide} aria-expanded={tableInsertOpen} onClick={() => setTableInsertOpen(!tableInsertOpen)}>Table</button><button disabled={blocked || !selectedItem || selectedItem.grouped || (!text && !shape && !geometryTarget(snapshot!.deck, selected))} onClick={deleteObject}>Delete object</button></div>
-      <button disabled={blocked || !snapshot} onClick={() => void exportSvg()} title="Export the current supported slide. Text and unsupported objects require the original PPTX.">Export slide SVG</button>
-      <label className="presentation-background-control">Background<select aria-label="Slide background" value={slide?.background ?? ''} disabled={blocked || !slide || slide.compatibility.diagnostics.some(d => d.code === 'pptx.unsupported-background')} onChange={event => changeBackground(event.target.value)}>
-        <option value="" disabled>Inherited</option>
-        {slide?.background && !['FFFFFF','F5F7FA','202B3C','2459AD','DCE8F7','E4F1E9','FFF2D2','F6E3E6'].includes(slide.background) && <option value={slide.background}>Custom #{slide.background}</option>}
-        {Object.entries({FFFFFF:'White',F5F7FA:'Fog', '202B3C':'Ink','2459AD':'Blue',DCE8F7:'Pale blue',E4F1E9:'Sage',FFF2D2:'Cream',F6E3E6:'Rose'}).map(([color,label]) => <option key={color} value={color}>{label}</option>)}
-      </select></label>
-      {tableInsertOpen && <div className="presentation-table-options" aria-label="Insert table"><label>Rows <input type="number" min="1" max="100" aria-label="New table rows" value={Number.isFinite(tableSize.rows) ? tableSize.rows : ''} onChange={event => setTableSize({ ...tableSize, rows: event.target.valueAsNumber })} /></label><label>Columns <input type="number" min="1" max="100" aria-label="New table columns" value={Number.isFinite(tableSize.columns) ? tableSize.columns : ''} onChange={event => setTableSize({ ...tableSize, columns: event.target.valueAsNumber })} /></label><button disabled={blocked} onClick={insertTable}>Insert table</button><button onClick={() => setTableInsertOpen(false)}>Cancel</button></div>}
-      {draft && <div className="presentation-pending"><span>Pending changes</span><button className="presentation-primary" disabled={busy} onClick={applyDraft}>Apply changes</button><button disabled={busy} onClick={() => { updateDraft(undefined); setError(''); }}>Cancel</button></div>}
-    </div>
-    <PresentationTextToolbar run={run} align={selectedParagraph?.align} disabled={busy || confirmDelete || !text || (!!draft && draft.kind !== 'text')} onRunChange={patch => textPatch(patch)} onAlignChange={align => textPatch({}, align)} />
+    <Ribbon label="Presentation tools" tabs={ribbonTabs} active={ribbonTab} onChange={setRibbonTab} quickAccess={<><RibbonButton icon="undo" label="Undo" shortcut="undo" disabled={blocked || !undo.length} onClick={() => travel('undo')} /><RibbonButton icon="redo" label="Redo" shortcut="redo" disabled={blocked || !redo.length} onClick={() => travel('redo')} /></>} />
+    {(tableInsertOpen || draft) && <div className="presentation-toolbar">
+      {tableInsertOpen && <div className="presentation-table-options" aria-label="Insert table"><label>Rows <input type="number" min="1" max="100" aria-label="New table rows" value={Number.isFinite(tableSize.rows) ? tableSize.rows : ''} onChange={event => setTableSize({ ...tableSize, rows: event.target.valueAsNumber })} /></label><label>Columns <input type="number" min="1" max="100" aria-label="New table columns" value={Number.isFinite(tableSize.columns) ? tableSize.columns : ''} onChange={event => setTableSize({ ...tableSize, columns: event.target.valueAsNumber })} /></label><RibbonButton icon="check" label="Insert table" disabled={blocked} onClick={insertTable} /><RibbonButton icon="close" label="Cancel" onClick={() => setTableInsertOpen(false)} /></div>}
+      {draft && <div className="presentation-pending"><span>Pending changes</span><RibbonButton className="presentation-primary ribbon-primary" icon="check" label="Apply changes" disabled={busy} onClick={applyDraft} /><RibbonButton icon="close" label="Cancel" disabled={busy} onClick={() => { updateDraft(undefined); setError(''); }} /></div>}
+    </div>}
     {error && <div className="presentation-error" role="alert"><span>{error}</span><button aria-label="Dismiss presentation error" onClick={() => setError('')}>×</button></div>}
     {!snapshot ? <div className="presentation-loading" role="status">{busy ? 'Opening presentation…' : 'This presentation could not be opened.'}</div> : <div className="presentation-layout">
       {!viewOptions?.focus && <nav className="presentation-thumbnails" aria-label="Slides"><div className="presentation-rail-title">Slides <span>{snapshot.deck.slides.length}</span></div>{snapshot.deck.slides.map((item, i) => <button key={item.id} className="presentation-thumbnail" disabled={blocked} aria-label={`Show slide ${i + 1}`} aria-current={index === i ? 'page' : undefined} onClick={() => selectSlide(i)}><span className="presentation-slide-number">{i + 1}</span><div className="presentation-thumb-stage"><SlideCanvas deck={snapshot.deck} slide={item} scale={148 / (snapshot.deck.size.cx / EMU_PER_PIXEL)} thumbnail /></div></button>)}</nav>}

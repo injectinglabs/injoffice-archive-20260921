@@ -1,16 +1,11 @@
 .presentation-editor { display: flex; flex-direction: column; height: 100%; min-height: 0; color: var(--text); background: var(--canvas); font: 13px "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif; }
 .presentation-editor button, .presentation-editor input, .presentation-editor select, .presentation-editor textarea { font: inherit; }
-.presentation-editor button { color: var(--text-secondary); border: 1px solid var(--border); border-radius: 4px; padding: 7px 10px; background: var(--surface); cursor: pointer; }
-.presentation-editor button:hover:enabled { background: var(--hover); border-color: var(--accent-border); }
-.presentation-editor button:disabled { opacity: .45; cursor: default; }
+.presentation-editor button:not(.ribbon-button, [role="tab"]) { color: var(--text-secondary); border: 1px solid var(--border); border-radius: 4px; padding: 7px 10px; background: var(--surface); cursor: pointer; }
+.presentation-editor button:not(.ribbon-button, [role="tab"]):hover:enabled { background: var(--hover); border-color: var(--accent-border); }
+.presentation-editor button:not(.ribbon-button):disabled { opacity: .45; cursor: default; }
 .presentation-editor :is(button, input, select, textarea):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .presentation-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 9px 14px; border-bottom: 1px solid var(--border); background: var(--surface); flex-shrink: 0; }
-.presentation-toolbar > div { display: flex; gap: 5px; }
-.presentation-toolbar > div + div { padding-left: 10px; border-left: 1px solid var(--border-subtle); }
-.presentation-toolbar button { font-size: 12px; }
-.presentation-text-toolbar .formatting-toolbar { padding-inline: 14px; }
-.presentation-text-toolbar .formatting-toolbar button[aria-pressed=true] { color: var(--blue); }
-.presentation-toolbar .presentation-pending { align-items: center; margin-left: auto; font-size: 11px; gap: 9px; }
+.presentation-toolbar .presentation-pending { display: flex; align-items: center; margin-left: auto; font-size: 11px; gap: 9px; }
 .presentation-editor .presentation-primary { color: var(--accent-text); background: var(--accent-fill); border-color: var(--accent-fill); }
 .presentation-editor .presentation-primary:hover:enabled { background: var(--accent-hover); }
 .presentation-layout { flex: 1; min-height: 0; display: flex; }
@@ -80,7 +75,7 @@
 @media (max-width: 1050px) { .presentation-thumbnails { flex-basis: 172px; padding-inline: 5px; } .presentation-inspector { flex-basis: 224px; padding-inline: 12px; } .presentation-toolbar { gap: 6px; padding-inline: 10px; } .presentation-toolbar button { padding-inline: 7px; } .presentation-canvas-label { padding-inline: 18px; } }
 .presentation-object.is-selected { touch-action: none; cursor: move; }
 .presentation-resize-handle { position: absolute; z-index: 5; right: -7px; bottom: -7px; width: 14px; height: 14px; background: var(--document-surface); border: 2px solid var(--accent); border-radius: 2px; cursor: nwse-resize; }
-.presentation-table-options { flex-basis: 100%; align-items: center; gap: 10px; }
+.presentation-table-options { display: flex; align-items: center; gap: 10px; }
 .presentation-table-options label { font-size: 11px; color: var(--text-muted); }
 .presentation-table-options input { width: 56px; margin-left: 5px; border: 1px solid var(--border); border-radius: 3px; padding: 5px; }
 .presentation-table { table-layout: fixed; width: 100%; height: 100%; border-collapse: collapse; }
@@ -104,3 +99,10 @@
 .presentation-arrange-list input { width: auto; }
 .presentation-arrange-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: 8px; }
 .presentation-arrange-actions button { text-align: left; font-size: 12px; }
+
+/* PowerPoint colours the ribbon orange. */
+.presentation-editor .ribbon-tabs [role=tab][aria-selected=true] { color: var(--pptx); border-bottom-color: var(--pptx); }
+.presentation-editor .ribbon-button[aria-pressed=true], .presentation-editor .ribbon-button[aria-expanded=true] { background: var(--pptx-soft); color: var(--pptx); border-color: var(--border); }
+.presentation-editor .ribbon-button:hover:not(:disabled) { background: var(--pptx-soft); border-color: var(--border); }
+.presentation-editor .ribbon .presentation-background-control { flex-direction: row; align-items: center; gap: 6px; font-size: 12px; color: var(--text); }
+.presentation-editor .ribbon .presentation-background-control .ribbon-icon { width: 17px; height: 17px; }
