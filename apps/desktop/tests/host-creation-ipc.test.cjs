@@ -31,6 +31,8 @@ async function harness(t, {pdfExporter, recoveryAdapter, installEffect} = {}) {
       };
     },
   };
+  const nativeTheme = { themeSource: 'system', get shouldUseDarkColors() { return this.themeSource === 'dark'; } };
+  const backgrounds = [];
   let closed = false;
   let prepareClose = () => true;
   let prepareToken;
@@ -52,6 +54,7 @@ async function harness(t, {pdfExporter, recoveryAdapter, installEffect} = {}) {
     close() { const event = { prevented: false, preventDefault() { this.prevented = true; } }; windowEvents.get('close')(event); if (!event.prevented) closed = true; }
     loadURL() {}
     setDocumentEdited() {}
+    setBackgroundColor(color) { backgrounds.push(color); }
   }
   const electron = {
     app: { name: 'InjOffice', isPackaged: true, getPath: () => directory, on: (name, callback) => appEvents.set(name, callback), whenReady: () => ({ then(callback) { ready = Promise.resolve().then(callback); return ready; } }) },
@@ -59,6 +62,7 @@ async function harness(t, {pdfExporter, recoveryAdapter, installEffect} = {}) {
     dialog: { showOpenDialog:async()=>openResult, showSaveDialog: async () => { saveCalls++; return saveResult; }, showMessageBoxSync: () => discardResponse, showMessageBox: async () => ({ response: 0 }) },
     ipcMain: { handle: (name, callback) => handlers.set(name, callback), on: (name, callback) => listeners.set(name, callback) },
     Menu: { buildFromTemplate: value => value, setApplicationMenu: noop },
+    nativeTheme,
     protocol: { registerSchemesAsPrivileged: noop, handle: noop },
     session: { defaultSession: { setPermissionRequestHandler: noop, setPermissionCheckHandler: noop, on: noop, webRequest: { onBeforeRequest: noop } } },
   };
@@ -89,6 +93,8 @@ async function harness(t, {pdfExporter, recoveryAdapter, installEffect} = {}) {
     setSaveResult: value => { saveResult = value; },
     setDiscardResponse: value => { discardResponse = value; },
     saveCalls: () => saveCalls,
+    nativeTheme,
+    backgrounds,
   };
 }
 
@@ -409,4 +415,19 @@ test('synchronous installer failure cancels the freeze and leaves normal close p
   assert.equal(host.canceledCloses(), 1);
   assert.equal((await host.invoke('document:create', 'docx')).untitled, true);
   host.emit('document:dirty', true); host.close(); await settle(); assert.equal(host.closed(), false);
+});
+
+test('theme:set requires a trusted sender and a known preference before touching nativeTheme', async t => {
+  const host = await harness(t);
+  assert.throws(() => host.untrustedUpdate('theme:set', 'dark'), /Untrusted/);
+  for (const theme of ['Dark', 'auto', '', null, undefined, {}]) assert.throws(() => host.invoke('theme:set', theme), /Invalid theme preference/);
+  assert.equal(host.nativeTheme.themeSource, 'system', 'rejected requests leave the native theme untouched');
+  assert.deepEqual(host.backgrounds, []);
+  assert.equal(await host.invoke('theme:set', 'dark'), true);
+  assert.equal(host.nativeTheme.themeSource, 'dark');
+  assert.deepEqual(host.backgrounds, ['#1e1e1e'], 'the window background follows the dark canvas token');
+  assert.equal(await host.invoke('theme:set', 'light'), false);
+  assert.equal(await host.invoke('theme:set', 'system'), false);
+  assert.equal(host.nativeTheme.themeSource, 'system');
+  assert.deepEqual(host.backgrounds, ['#1e1e1e', '#e9edf2', '#e9edf2']);
 });

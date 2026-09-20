@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, Menu, net, protocol, session } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, net, protocol, session } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs/promises');
 const { pathToFileURL } = require('node:url');
@@ -42,6 +42,10 @@ app.on('second-instance', (_event, argv) => {
 if (primaryInstance) queueExternalPaths(process.argv.slice(app.isPackaged ? 1 : 2));
 const filters = [{ name: 'Office documents', extensions: ['xlsx', 'docx', 'docm', 'pptx', 'pdf'] }];
 const csp = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; worker-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-src 'none'";
+
+const themePreferences = ['system', 'light', 'dark'];
+// Matches --canvas in the renderer's styles.css so the window never flashes the other theme.
+const canvasColor = () => (nativeTheme.shouldUseDarkColors ? '#1e1e1e' : '#e9edf2');
 
 function trusted(event) {
   if (!isTrustedSender(event, window, entryURL)) {
@@ -89,7 +93,7 @@ function createWindow() {
   dirty = false;
   editorBusy = false;
   window = new BrowserWindow({
-    width: 1440, height: 960, minWidth: 900, minHeight: 640, title: 'InjOffice', icon: path.join(__dirname, 'icon.png'), backgroundColor: '#edf0f4',
+    width: 1440, height: 960, minWidth: 900, minHeight: 640, title: 'InjOffice', icon: path.join(__dirname, 'icon.png'), backgroundColor: canvasColor(),
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true, spellcheck: false },
   });
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
@@ -325,6 +329,13 @@ app.whenReady().then(async () => {
       else await recovery.write(input.id, name, input.bytes, input.draft ?? null, input.revision);
       checkpointErrors.delete(input.id);
     } catch (error) { checkpointErrors.set(input.id, error.message); throw error; }
+  });
+  ipcMain.handle('theme:set', (event, theme) => {
+    trusted(event);
+    if (!themePreferences.includes(theme)) throw new Error('Invalid theme preference.');
+    nativeTheme.themeSource = theme;
+    if (window && !window.isDestroyed()) window.setBackgroundColor(canvasColor());
+    return nativeTheme.shouldUseDarkColors;
   });
   ipcMain.handle('document:recovery-list', event => { trusted(event); return recovery.list(); });
   ipcMain.handle('document:recover', (event, id) => {

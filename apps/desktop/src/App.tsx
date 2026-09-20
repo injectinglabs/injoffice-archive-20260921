@@ -9,6 +9,7 @@ import OpenError, { classifyOpenError, type OpenErrorKind } from './OpenError';
 import UpdatesDialog, { UpdateNotice } from './UpdatesDialog';
 import PreferencesDialog from './PreferencesDialog';
 import { readPreferences, writePreferences, initialView, type ViewOptions } from './preferences';
+import { applyTheme } from './theme';
 import CommandPalette, { type WorkspaceCommand } from './CommandPalette';
 import injOfficeLogo from '../../../logo.png';
 
@@ -83,6 +84,7 @@ export default function App() {
   };
   const resolveChoice = useRef<((choice: ReplaceChoice) => void) | null>(null);
   const bridge = window.injDesktop;
+  useEffect(() => { applyTheme(preferences.theme); void bridge?.setTheme?.(preferences.theme).catch(() => { /* Native dialogs keep the previous appearance; the renderer already switched. */ }); }, [bridge, preferences.theme]);
 
   const refreshRecent = useCallback(async () => {
     if (!bridge) return;
