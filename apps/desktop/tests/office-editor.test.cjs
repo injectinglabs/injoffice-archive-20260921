@@ -330,11 +330,9 @@ test('OfficeEditor arranges its controls as a Word ribbon with labelled groups, 
     assert.deepEqual(groups(panels[0]), ['Font', 'Paragraph', 'Styles', 'Editing']);
     assert.deepEqual(groups(panels[1]), ['Tables', 'Links', 'Text']);
     assert.deepEqual(groups(panels[2]), ['Paragraph'], 'Page Setup is dropped when the document has no single section');
-    assert.equal(view.root.findByProps({ role: 'toolbar' }).props['aria-label'], 'Quick access');
-    const quick = view.root.findByProps({ role: 'toolbar' }).findAllByType('button');
-    assert.deepEqual(quick.map(button => button.props.title), [`Undo (${shortcutLabel('undo')})`, `Redo (${shortcutLabel('redo')})`]);
-    const commandButtons = [...view.root.findAllByProps({ role: 'group' }).flatMap(group => group.findAllByType('button')), ...quick];
-    assert.ok(commandButtons.length >= 10, `command buttons: ${commandButtons.length}`);
+    assert.equal(view.root.findAllByProps({ role: 'toolbar' }).filter(toolbar => toolbar.props['aria-label'] === 'Quick access').length, 0, 'Undo/Redo live in the shell title bar, not in the ribbon');
+    const commandButtons = view.root.findAllByProps({ role: 'group' }).flatMap(group => group.findAllByType('button'));
+    assert.ok(commandButtons.length >= 8, `command buttons: ${commandButtons.length}`);
     for (const button of commandButtons) {
       assert.equal(button.findAllByType('svg').length, 1, `${button.props.title} has an icon`);
       assert.ok(button.props.title, 'every command button has a tooltip');

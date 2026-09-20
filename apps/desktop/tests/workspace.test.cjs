@@ -16,7 +16,7 @@ async function loadShortcuts() {
   try { const { output } = await bundle.generate({ format: 'cjs' }); const result = { exports: {} }; new Function('require', 'module', 'exports', output[0].code)(require, result, result.exports); return result.exports; } finally { await bundle.close(); }
 }
 test('workspace tabs retain independent bytes and editor instances; save and close target only their session', async () => {
-  const App = await loadApp();
+  const App = await loadApp(); const { shortcutTooltip } = await loadShortcuts();
   const saves = [], checkpoints = [], closed = [], histories = [];
   let menu, next = 0;
   const preferences = new Map();
@@ -42,11 +42,18 @@ test('workspace tabs retain independent bytes and editor instances; save and clo
   first.props.registerHistory({undo:()=>histories.push('native-undo'),redo:()=>histories.push('native-redo')});
   await act(async () => menu('undo'));
   assert.deepEqual(histories,['text-undo']);
+  const quick = () => Object.fromEntries(renderer.root.findByProps({ 'aria-label': 'Quick access' }).findAllByType('button').map(button => [button.props['aria-label'], button]));
+  assert.deepEqual(Object.keys(quick()), ['Save', 'Undo', 'Redo'], 'the title bar carries Office\'s Quick Access Toolbar');
+  assert.equal(quick().Undo.props.title, shortcutTooltip('Undo', 'undo'));
+  assert.equal(quick().Undo.props.disabled, false, 'a dirty text draft undoes through the host, so Undo stays enabled');
+  await act(async () => quick().Undo.props.onClick());
+  assert.deepEqual(histories,['text-undo','text-undo'], 'the title bar Undo takes the same path as Edit › Undo');
   await act(async () => first.props.onBusyChange(true));
   await act(async () => menu('save'));
   assert.equal(saves.length,0,'a native operation must block Save even while a draft exists');
   await act(async () => menu('undo'));
-  assert.deepEqual(histories,['text-undo'],'native work must block text undo too');
+  assert.deepEqual(histories,['text-undo','text-undo'],'native work must block text undo too');
+  assert.equal(quick().Undo.props.disabled, true, 'native work greys the title bar Undo out');
   await act(async () => first.props.onBusyChange(false));
   first.props.registerCommit(async () => { first.props.onChange(new Uint8Array([33])); first.props.onDraftChange(false); first.props.onBusyChange(false); return true; });
   await act(async () => menu('new'));
@@ -64,7 +71,15 @@ test('workspace tabs retain independent bytes and editor instances; save and clo
   assert.equal(renderer.root.findByProps({'aria-label':'Document zoom'}).props.value,125);
   await act(async () => menu('save'));
   await act(async () => menu('undo'));
-  assert.deepEqual(histories,['text-undo','native-undo']);
+  assert.deepEqual(histories,['text-undo','text-undo','native-undo']);
+  await act(async () => { first.props.registerHistory({undo:()=>histories.push('native-undo'),redo:()=>histories.push('native-redo'),canUndo:false,canRedo:true}); });
+  assert.equal(quick().Undo.props.disabled, true, 'an editor with nothing to undo greys the title bar Undo out');
+  assert.equal(quick().Redo.props.disabled, false);
+  await act(async () => quick().Redo.props.onClick());
+  assert.deepEqual(histories.at(-1),'native-redo');
+  await act(async () => { first.props.registerHistory({undo:()=>histories.push('native-undo'),redo:()=>histories.push('native-redo'),canUndo:true,canRedo:false}); });
+  assert.equal(quick().Undo.props.disabled, false);
+  assert.equal(quick().Save.props.disabled, true, 'Save in the Quick Access Toolbar greys out once the document is saved');
   assert.equal(saves[1].id, 'id-1'); assert.deepEqual(saves[1].bytes, [33], 'Save commits the selected tab draft before passing bytes to host');
   await act(async()=>first.props.onRecoveryDraftChange({version:1,format:'docx',text:'after save'}));
   assert.deepEqual(checkpoints.at(-1).bytes,[33],'the first draft after Save republishes native bytes because the old journal was removed');
@@ -74,7 +89,7 @@ test('workspace tabs retain independent bytes and editor instances; save and clo
   assert.deepEqual(closed, ['id-1']);
   assert.equal(renderer.root.findAllByType('test-editor').length, 1);
   assert.equal(renderer.root.findByType('test-editor').props.name, 'Untitled.xlsx');
-  await act(async () => renderer.root.findByProps({ title: 'Search commands (Ctrl/⌘ K)' }).props.onClick());
+  await act(async () => renderer.root.findByProps({ title: shortcutTooltip('Search commands', 'commands') }).props.onClick());
   let search = renderer.root.findByProps({ 'aria-label': 'Search workspace commands' });
   await act(async () => search.props.onChange({target:{value:'preferences'}}));
   await act(async () => search.props.onKeyDown({key:'Enter',preventDefault(){}}));
@@ -85,7 +100,7 @@ test('workspace tabs retain independent bytes and editor instances; save and clo
   assert.equal(JSON.parse(preferences.get('injoffice.preferences.v1')).defaultZoom,150);
   assert.equal(JSON.parse(preferences.get('injoffice.preferences.v1')).theme,'dark');
   assert.deepEqual(themes,['system','dark'],'the host follows the saved appearance for native dialogs');
-  await act(async () => renderer.root.findByProps({ title: 'Search commands (Ctrl/⌘ K)' }).props.onClick());
+  await act(async () => renderer.root.findByProps({ title: shortcutTooltip('Search commands', 'commands') }).props.onClick());
   search = renderer.root.findByProps({ 'aria-label': 'Search workspace commands' });
   await act(async () => search.props.onChange({target:{value:'blank pdf'}}));
   assert.equal(renderer.root.findAllByProps({role:'option'}).length,1);
@@ -255,7 +270,7 @@ test('the File tab backstage carries Home, New, Open, Save, Save as, Close and a
     assert.deepEqual(closed, ['id-xlsx']);
     assert.deepEqual(renderer.root.findAllByType('test-editor').map(editor => editor.props.name), ['Untitled.docx']);
     // The palette still lists every backstage command.
-    await act(async () => renderer.root.findByProps({ title: 'Search commands (Ctrl/⌘ K)' }).props.onClick());
+    await act(async () => renderer.root.findByProps({ title: shortcutTooltip('Search commands', 'commands') }).props.onClick());
     const labels = renderer.root.findAllByProps({ role: 'option' }).map(option => option.props.id);
     for (const id of ['command-home', 'command-new-docx', 'command-open', 'command-save', 'command-save-as', 'command-close', 'command-updates', 'command-preferences']) assert.ok(labels.includes(id), id);
   } finally { if (renderer) await act(async () => renderer.unmount()); delete global.window; }

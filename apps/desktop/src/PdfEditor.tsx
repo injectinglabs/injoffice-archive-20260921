@@ -8,7 +8,7 @@ import './pdf-editor.css'
 type Tool = 'edit-note' | 'replace' | 'view' | 'text' | 'note' | 'highlight' | 'underline' | 'strikeout' | 'rectangle' | 'ellipse' | 'line' | 'arrow' | 'form'
 type Placement = { at: [number, number]; end?: [number, number] }
 export type PdfEditorProps = {
-  registerHistory?: (commands: { undo(): void; redo(): void }) => void
+  registerHistory?: (commands: { undo(): void; redo(): void; canUndo?: boolean; canRedo?: boolean }) => void
   registerCommit?: (commit: () => Promise<boolean>) => void
   initialRecoveryDraft?: unknown
   onRecoveryDraftChange?: (draft: unknown | null) => void
@@ -279,8 +279,9 @@ export default function PdfEditor({ name, bytes, onChange, onBusyChange, onDraft
   useEffect(() => { registerCommit?.(() => commitRef.current()) }, [registerCommit])
   const historyCommands = useRef({ undo() {}, redo() {} })
   historyCommands.current = { undo: () => restore('undo'), redo: () => restore('redo') }
-  useEffect(() => { registerHistory?.({ undo: () => historyCommands.current.undo(), redo: () => historyCommands.current.redo() }) }, [registerHistory])
   const disabled = busy || hasDraft
+  const canUndo = !disabled && !!history.current?.canUndo, canRedo = !disabled && !!history.current?.canRedo
+  useEffect(() => { registerHistory?.({ undo: () => historyCommands.current.undo(), redo: () => historyCommands.current.redo(), canUndo, canRedo }) }, [registerHistory, canUndo, canRedo])
   const count = summary?.pages.length ?? 0
   const displayStart = placement && viewport?.convertToViewportPoint(...placement.at)
   const displayEnd = placement?.end && viewport?.convertToViewportPoint(...placement.end)

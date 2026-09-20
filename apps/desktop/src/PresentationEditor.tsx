@@ -15,7 +15,7 @@ import PresentationPlayer from './PresentationPlayer';
 import { exportNativePptxSlideSvg } from '@injoffice/pptx-render';
 import { startPresentationMode, type PresentationModeState } from './presentationMode';
 
-export interface OfficeEditorProps { registerHistory?: (commands: { undo(): void; redo(): void }) => void; registerCommit?: (commit: () => Promise<boolean>) => void; initialRecoveryDraft?: unknown; onRecoveryDraftChange?: (draft: unknown | null) => void; name: string; bytes: Uint8Array; onChange: (bytes: Uint8Array) => void; onBusyChange?: (busy: boolean) => void; onDraftChange?: (dirty: boolean) => void; viewOptions?: { zoom: number; navigation: boolean; focus: boolean } }
+export interface OfficeEditorProps { registerHistory?: (commands: { undo(): void; redo(): void; canUndo?: boolean; canRedo?: boolean }) => void; registerCommit?: (commit: () => Promise<boolean>) => void; initialRecoveryDraft?: unknown; onRecoveryDraftChange?: (draft: unknown | null) => void; name: string; bytes: Uint8Array; onChange: (bytes: Uint8Array) => void; onBusyChange?: (busy: boolean) => void; onDraftChange?: (dirty: boolean) => void; viewOptions?: { zoom: number; navigation: boolean; focus: boolean } }
 type Snapshot = { bytes: Uint8Array; deck: NativePptxDeck };
 type Draft = import('./presentationCommands').PresentationDraft;
 type PresentationEditorProps = OfficeEditorProps & { initialRecoveryDraft?: unknown; onRecoveryDraftChange?(draft: unknown | null): void; registerCommit?(commit: () => Promise<boolean>): void; registerHistory?(commands: { undo(): void; redo(): void }): void };
@@ -26,7 +26,6 @@ export default function PresentationEditor({ name, bytes, onChange, onBusyChange
   const [presentation, setPresentation] = useState<PresentationModeState>();
   const presenting = useRef(false);
   const historyRef = useRef<(direction: 'undo' | 'redo') => void>(() => {});
-  useEffect(() => { registerHistory?.({ undo: () => historyRef.current('undo'), redo: () => historyRef.current('redo') }); }, [registerHistory]);
   const commitRef = useRef<() => Promise<boolean>>(async () => false);
   const composing = useRef(false); const dragging = useRef(false);
   useEffect(() => { registerCommit?.(() => commitRef.current()); }, [registerCommit]);
@@ -81,6 +80,8 @@ export default function PresentationEditor({ name, bytes, onChange, onBusyChange
     return () => observer.disconnect();
   }, [!!snapshot, viewOptions?.focus]);
   const blocked = busy || !!draft || confirmDelete;
+  const canUndo = !blocked && undo.length > 0, canRedo = !blocked && redo.length > 0;
+  useEffect(() => { registerHistory?.({ undo: () => historyRef.current('undo'), redo: () => historyRef.current('redo'), canUndo, canRedo }); }, [registerHistory, canUndo, canRedo]);
   const slide = snapshot?.deck.slides[index];
   const selectedItem = slide && positionElements(slide.elements).find(item => elementKey(item.element) === selected);
   const text = snapshot && textTarget(snapshot.deck, selected);
@@ -273,7 +274,7 @@ export default function PresentationEditor({ name, bytes, onChange, onBusyChange
       event.preventDefault(); event.stopPropagation(); travel(key === 'y' || event.shiftKey ? 'redo' : 'undo');
     }} onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }}>
     {presentation && <PresentationPlayer initial={presentation} onExit={() => { presenting.current = false; setPresentation(undefined); }} renderSlide={(slide, scale) => <SlideCanvas deck={presentation.deck} slide={slide} scale={scale} thumbnail />} />}
-    <Ribbon label="Presentation tools" tabs={ribbonTabs} active={ribbonTab} onChange={setRibbonTab} quickAccess={<><RibbonButton icon="undo" label="Undo" shortcut="undo" disabled={blocked || !undo.length} onClick={() => travel('undo')} /><RibbonButton icon="redo" label="Redo" shortcut="redo" disabled={blocked || !redo.length} onClick={() => travel('redo')} /></>} />
+    <Ribbon label="Presentation tools" tabs={ribbonTabs} active={ribbonTab} onChange={setRibbonTab} />
     {(tableInsertOpen || draft) && <div className="presentation-toolbar">
       {tableInsertOpen && <div className="presentation-table-options" aria-label="Insert table"><label>Rows <input type="number" min="1" max="100" aria-label="New table rows" value={Number.isFinite(tableSize.rows) ? tableSize.rows : ''} onChange={event => setTableSize({ ...tableSize, rows: event.target.valueAsNumber })} /></label><label>Columns <input type="number" min="1" max="100" aria-label="New table columns" value={Number.isFinite(tableSize.columns) ? tableSize.columns : ''} onChange={event => setTableSize({ ...tableSize, columns: event.target.valueAsNumber })} /></label><RibbonButton icon="check" label="Insert table" disabled={blocked} onClick={insertTable} /><RibbonButton icon="close" label="Cancel" onClick={() => setTableInsertOpen(false)} /></div>}
       {draft && <div className="presentation-pending"><span>Pending changes</span><RibbonButton className="presentation-primary ribbon-primary" icon="check" label="Apply changes" disabled={busy} onClick={applyDraft} /><RibbonButton icon="close" label="Cancel" disabled={busy} onClick={() => { updateDraft(undefined); setError(''); }} /></div>}

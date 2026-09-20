@@ -181,9 +181,9 @@ test('SpreadsheetEditor arranges its controls as an Excel ribbon with labelled g
     assert.deepEqual(groups(panels[3]), ['Defined Names', 'Calculation']);
     assert.deepEqual(groups(panels[4]), ['Sort & Filter']);
     assert.deepEqual(groups(panels[5]), ['Window']);
-    assert.equal(view.root.findByProps({ role: 'toolbar' }).props['aria-label'], 'Quick access');
-    const commandButtons = [...view.root.findAllByProps({ role: 'group' }).flatMap(group => group.findAllByType('button')), ...view.root.findByProps({ role: 'toolbar' }).findAllByType('button')];
-    assert.ok(commandButtons.length >= 20, `command buttons: ${commandButtons.length}`);
+    assert.equal(view.root.findAllByProps({ role: 'toolbar' }).filter(toolbar => toolbar.props['aria-label'] === 'Quick access').length, 0, 'Undo/Redo live in the shell title bar, not in the ribbon');
+    const commandButtons = view.root.findAllByProps({ role: 'group' }).flatMap(group => group.findAllByType('button'));
+    assert.ok(commandButtons.length >= 18, `command buttons: ${commandButtons.length}`);
     for (const node of commandButtons) {
       assert.equal(node.findAllByType('svg').length, 1, `${node.props.title} has an icon`);
       assert.ok(node.props.title, 'every command button has a tooltip');
@@ -194,7 +194,6 @@ test('SpreadsheetEditor arranges its controls as an Excel ribbon with labelled g
     assert.match(byLabel.Charts.props.title, /not supported by the native XLSX transaction/);
     assert.match(byLabel['Sort range'].props.title, /not supported by the native XLSX transaction/);
     assert.equal(byLabel.Recalculate.props.disabled, false);
-    assert.match(byLabel.Undo.props.title, /^Undo \(/);
     assert.equal(view.root.findByProps({ 'aria-label': 'Cell value or formula' }) != null, true, 'name box and fx bar are untouched');
   } finally {
     if (view) await act(async () => view.unmount());
