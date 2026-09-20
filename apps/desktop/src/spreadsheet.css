@@ -22,3 +22,4 @@
 .sheet-name-entry button { text-align: left; overflow: hidden; text-overflow: ellipsis; }
 .sheet-name-entry code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sheet-name-entry span { color: var(--sheet-muted); font-size: 11px; }
+.sheet-number-format{display:flex;align-items:center;gap:2px}.sheet-number-format button{min-width:30px;font-size:12px}.sheet-number-format button[aria-label="Increase decimals"],.sheet-number-format button[aria-label="Decrease decimals"]{font-size:11px;letter-spacing:-.02em}.sheet-borders{max-width:110px}
