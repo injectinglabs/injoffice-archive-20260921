@@ -24,6 +24,8 @@ test('electron-builder packages the Vite renderer and Electron host, not dist/',
   assert.equal(pkg.build.linux.icon, 'build/icons/icon.png');
   // electron-builder derives the executable from the package name (@injoffice/desktop -> "@injofficedesktop"), which AppImage refuses.
   assert.equal(pkg.build.linux.executableName, 'injoffice');
+  // deb/rpm default to ${name}_${version}_${arch}, and the scoped name puts a slash in the file name; fpm cannot write it.
+  assert.equal(pkg.build.linux.artifactName, '${productName}-${version}-linux-${arch}.${ext}');
   const extensions = pkg.build.fileAssociations.map(item => item.ext).sort();
   assert.deepEqual(extensions, ['docx', 'pdf', 'pptx', 'xlsx']);
 
