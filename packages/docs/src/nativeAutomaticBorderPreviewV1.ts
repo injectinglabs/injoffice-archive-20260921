@@ -155,8 +155,11 @@ export function projectNativeDocxAutomaticBordersV1(
         "Automatic-border evidence cannot overwrite explicit source borders",
       );
     if (
-      entry.cell_shading_rgb !== undefined &&
-      entry.cell_shading_rgb !== "FFFFFF"
+      (entry.cell_shading_rgb !== undefined &&
+        entry.cell_shading_rgb !== "FFFFFF") ||
+      entry.conditional_cell_shading?.some(
+        (cell) => cell.shading_rgb !== "FFFFFF",
+      )
     )
       throw new TypeError(
         "Automatic borders require qualified white table fill",
