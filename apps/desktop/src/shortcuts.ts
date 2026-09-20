@@ -1,7 +1,7 @@
 // Single source of truth for the keyboard shortcuts the desktop editors honour.
 // Ribbon tooltips, command hints and aria-keyshortcuts all read from here so the
 // same binding is never spelled twice.
-export type ShortcutId = 'undo' | 'redo' | 'bold' | 'italic' | 'underline' | 'find' | 'save' | 'saveAs' | 'open' | 'new' | 'commands' | 'apply' | 'cancel'
+export type ShortcutId = 'undo' | 'redo' | 'bold' | 'italic' | 'underline' | 'find' | 'save' | 'saveAs' | 'open' | 'new' | 'commands' | 'apply' | 'confirm' | 'cancel'
 
 interface Binding { key: string; mod?: boolean; shift?: boolean; other?: Partial<Binding> }
 
@@ -19,6 +19,7 @@ const bindings: Record<ShortcutId, Binding> = {
   new: { key: 'N', mod: true },
   commands: { key: 'K', mod: true },
   apply: { key: 'Enter', mod: true },
+  confirm: { key: 'Enter' },
   cancel: { key: 'Escape' },
 }
 

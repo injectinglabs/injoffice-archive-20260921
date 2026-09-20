@@ -62,6 +62,11 @@ const paths = {
   background: 'M5 13l8-8 6 6-8 8zM5 13l5 5M19 16c1.5 2 1.5 4 0 5-1.5-1-1.5-3 0-5Z',
   fill: 'M5 13l8-8 6 6-8 8zM5 13l5 5M19 16c1.5 2 1.5 4 0 5-1.5-1-1.5-3 0-5Z',
   more: 'M5 12h.01M12 12h.01M19 12h.01',
+  currency: 'M16 7c0-1.7-1.8-3-4-3S8 5.3 8 7s1.8 3 4 3 4 1.3 4 3-1.8 3-4 3-4-1.3-4-3M12 2v20',
+  percent: 'M19 5 5 19M7.5 5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5ZM16.5 14a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5Z',
+  comma: 'M12 13.5a1.8 1.8 0 1 1 1.8 1.8c0 1.8-.9 3.2-2.6 4.2',
+  decimalsMore: 'M4 17h.01M8 11h2a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2H8V11ZM17 4v8M14 7l3-3 3 3',
+  decimalsFewer: 'M4 17h.01M8 11h2a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2H8V11ZM17 4v8M14 9l3 3 3-3',
 }
 
 export type RibbonIconName = keyof typeof paths
