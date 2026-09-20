@@ -116,9 +116,17 @@ WASM editor tests, packaging, and signed builds are **not** PR merge gates.
 ```bash
 npm run test -w @injoffice/desktop
 npm run typecheck -w @injoffice/desktop
-# after desktop:build; no GUI:
+# after desktop:build; no GUI: drives each built engine worker + wasm_exec.js + .wasm
 npm run test:native -w @injoffice/desktop
+# after electron-builder; no GUI: app.asar carries host, renderer and byte-identical engines
+npm run test:packaged -w @injoffice/desktop
+node apps/desktop/scripts/check-packaged-updater.cjs apps/desktop/release   # --release for signed drafts
+npm run manifest -w @injoffice/desktop   # release/manifest.json + SHA256SUMS with the source revision
 ```
+
+`scripts/release-validation.mjs preflight <mac|windows|linux>` refuses a signed
+release run that is not on a matching `desktop-vX.Y.Z` tag or lacks a signing
+secret for the platform; `collect <dir>` checks the downloaded asset set.
 
 Electron, TipTap, Univer, and HTML/SVG preview are not the OOXML file
 authority. `scripts/check-office-architecture.mjs` must keep forbidding
