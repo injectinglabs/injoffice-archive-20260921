@@ -403,7 +403,7 @@ export default function App() {
       {sessions.length > 0 && <nav className="document-tabs" aria-label="Open documents" hidden={showHome}>
         {sessions.map(item => <div className={`document-tab${item.key === document?.key ? ' active' : ''}`} key={item.key}>
           <button aria-current={item.key === document?.key ? 'page' : undefined} disabled={busy} onClick={() => publishSessions(sessionsRef.current, item.key)} title={item.name}><span className={`tab-format format-${item.name.split('.').pop()}`}>{item.name.split('.').pop()?.toUpperCase()}</span>{item.dirty || item.draftDirty ? '• ' : ''}{item.name}</button>
-          <button disabled={busy} aria-label={`Close ${item.name}`} onClick={() => void closeDocument(item.key)}>×</button>
+          <button disabled={busy} aria-label={`Close ${item.name}`} title={`Close ${item.name}`} onClick={() => void closeDocument(item.key)}><RibbonIcon name="close" /></button>
         </div>)}
       </nav>}
       <WorkspaceFileGroupsContext value={fileGroups}>{sessions.map(item => <main key={item.key} className="editor-workspace" hidden={showHome || item.key !== document?.key} aria-label={item.name} aria-busy={item.editorBusy}>

@@ -13,8 +13,13 @@ Vite builds `src/main.tsx` into `apps/desktop/renderer` for the Electron host.
 is a React view with recents and create actions. The updates dialog talks to
 the host update state machine over `window.injDesktop`. Preferences persist
 fail-closed on this device; the command palette searches workspace actions.
-`App.tsx` is the session shell (tabs, recents, recovery, close/update freeze);
-editors are still mocked in tests. Formatting, hyperlink, table, paragraph,
+`App.tsx` is the session shell (tabs, recents, recovery, close/update freeze)
+and Office's title bar: Quick Access Save/Undo/Redo (editors report
+`canUndo`/`canRedo` through `registerHistory`), the document name with its
+saved state, the Search pill that opens the command palette, and Outline/Focus/
+Updates icons, over a slim document tab row. Home, New, Open, Save, Save as…,
+Close, Updates and Preferences reach every ribbon's File tab through
+`WorkspaceFileGroupsContext`. Editors are still mocked in tests. Formatting, hyperlink, table, paragraph,
 and page-layout chrome land here without WASM. Selection offsets for caret
 restore are in `document-range.ts`. Paragraph/run appearance follows the
 OOXML style cascade (bold/italic toggles, cycle-safe). PNG/JPEG insert sizes
