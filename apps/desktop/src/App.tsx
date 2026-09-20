@@ -11,6 +11,7 @@ import PreferencesDialog from './PreferencesDialog';
 import { readPreferences, writePreferences, initialView, type ViewOptions } from './preferences';
 import { applyTheme } from './theme';
 import CommandPalette, { type WorkspaceCommand } from './CommandPalette';
+import { RibbonButton, RibbonRows, WorkspaceFileGroupsContext, type WorkspaceFileGroups } from './Ribbon';
 import injOfficeLogo from '../../../logo.png';
 
 type DocumentSession = { key: number; id: string; name: string; initialName: string; initialBytes: Uint8Array; bytes: Uint8Array; dirty: boolean; untitled?: boolean; editorBusy?: boolean; draftDirty?: boolean; recoveryDraft?: unknown };
@@ -323,6 +324,7 @@ export default function App() {
     { id: 'open', label: 'Open file', detail: 'Ctrl / ⌘ O', disabled: busy || !bridge, run: () => { void runAction('open'); } },
     { id: 'save', label: 'Save document', detail: 'Ctrl / ⌘ S', disabled: busy || !document, run: () => { void runAction('save'); } },
     { id: 'save-as', label: 'Save document as…', disabled: busy || !document, run: () => { void runAction('saveAs'); } },
+    { id: 'close', label: 'Close document', detail: document?.name, disabled: busy || !document, run: () => { if (document) void closeDocument(document.key); } },
     { id: 'focus', label: viewOptions.focus ? 'Exit focus mode' : 'Enter focus mode', disabled: !document, run: () => { setShowHome(false); toggleFocus(); } },
     { id: 'updates', label: 'App updates', run: () => setUpdatesOpen(true) },
     { id: 'zoom-reset', label: 'Reset document zoom to 100%', disabled: !document, run: () => changeZoom(100) },
@@ -331,6 +333,30 @@ export default function App() {
     ...(isDocx ? [{ id: 'outline', label: viewOptions.navigation ? 'Hide document outline' : 'Show document outline', run: () => setViewOptions(value => ({ ...value, navigation: !value.navigation })) }] : []),
     ...sessions.map(item => ({ id: `tab-${item.key}`, label: `Switch to ${item.name}`, detail: 'Open document', disabled: busy, run: () => { publishSessions(sessionsRef.current, item.key); setShowHome(false); } })),
   ];
+
+  // Office keeps New/Open/Save/Close in the File backstage; every editor's ribbon renders these
+  // groups in its File tab (before its own Export group) through WorkspaceFileGroupsContext.
+  const fileGroups: WorkspaceFileGroups = {
+    before: [
+      { id: 'workspace-home', label: 'Start', children: <RibbonButton icon="home" label="Home" title="Start page: create, open recent or recover" disabled={busy} onClick={() => setShowHome(true)} /> },
+      { id: 'workspace-new', label: 'New', children: <RibbonRows>
+        <div><RibbonButton icon="newDocument" label="Document" title="New document (DOCX)" disabled={busy || !bridge} onClick={() => void runAction('create', 'docx')} /><RibbonButton icon="newDocument" label="Spreadsheet" title="New spreadsheet (XLSX)" disabled={busy || !bridge} onClick={() => void runAction('create', 'xlsx')} /></div>
+        <div><RibbonButton icon="newDocument" label="Presentation" title="New presentation (PPTX)" disabled={busy || !bridge} onClick={() => void runAction('create', 'pptx')} /><RibbonButton icon="newDocument" label="PDF" title="New blank PDF" disabled={busy || !bridge} onClick={() => void runAction('create', 'pdf')} /></div>
+      </RibbonRows> },
+      { id: 'workspace-open-save', label: 'Open & Save', children: <>
+        <RibbonButton icon="open" label="Open" shortcut="open" disabled={busy || !bridge} onClick={() => void runAction('open')} />
+        <RibbonButton icon="save" label="Save" shortcut="save" disabled={busy || !document || (!document.dirty && !draftDirty)} onClick={() => void runAction('save')} />
+        <RibbonButton icon="saveAs" label="Save as…" shortcut="saveAs" disabled={busy || !document} onClick={() => void runAction('saveAs')} />
+      </> },
+    ],
+    after: [
+      { id: 'workspace-close', label: 'Close', children: <RibbonButton icon="closeDocument" label="Close document" disabled={busy || !document} onClick={() => { if (document) void closeDocument(document.key); }} /> },
+      { id: 'workspace-app', label: 'InjOffice', children: <>
+        <RibbonButton icon="updates" label="Updates" title="App updates" onClick={() => setUpdatesOpen(true)} />
+        <RibbonButton icon="settings" label="Preferences" title="Preferences: local view defaults and appearance" disabled={busy} onClick={() => setSettingsOpen(true)} />
+      </> },
+    ],
+  };
 
   return (
     <div ref={rootElement} inert={closing ? true : undefined} className={`desktop-app${viewOptions.focus ? ' is-focused' : ''}`} onDragOver={event => { if (event.dataTransfer.types.includes('Files')) event.preventDefault(); }} onDrop={event => { if (event.defaultPrevented || !event.dataTransfer.files.length) return; event.preventDefault(); void importFiles(Array.from(event.dataTransfer.files)); }}>
@@ -377,11 +403,11 @@ export default function App() {
           <button disabled={busy} aria-label={`Close ${item.name}`} onClick={() => void closeDocument(item.key)}>×</button>
         </div>)}
       </nav>}
-      {sessions.map(item => <main key={item.key} className="editor-workspace" hidden={showHome || item.key !== document?.key} aria-label={item.name} aria-busy={item.editorBusy}>
+      <WorkspaceFileGroupsContext value={fileGroups}>{sessions.map(item => <main key={item.key} className="editor-workspace" hidden={showHome || item.key !== document?.key} aria-label={item.name} aria-busy={item.editorBusy}>
         <div className="editor-content" inert={working || item.key !== document?.key ? true : undefined}>
           <SessionEditor session={item} registerSessionHistory={registerSessionHistory} registerSessionCommit={registerSessionCommit} onSessionChange={changeSession} viewOptions={sessionViews.current.get(item.key) ?? viewOptions} />
         </div>
-      </main>)}
+      </main>)}</WorkspaceFileGroupsContext>
 
       <footer className="app-status" hidden={showHome}><span className="status-message" role="status">{busy ? 'Working…' : draftDirty ? 'Draft changes · Save applies your edits.' : notice || localStatus}</span><div className="status-view-controls"><div className="status-zoom"><button disabled={!document || viewOptions.zoom <= 50} aria-label="Zoom out" onClick={() => changeZoom(viewOptions.zoom - 10)}>−</button><input type="range" aria-label="Document zoom" min="50" max="200" step="5" disabled={!document} value={viewOptions.zoom} onChange={event => changeZoom(Number(event.target.value))} /><button disabled={!document || viewOptions.zoom >= 200} aria-label="Zoom in" onClick={() => changeZoom(viewOptions.zoom + 10)}>+</button><output>{viewOptions.zoom}%</output></div></div></footer>
 

@@ -67,6 +67,15 @@ const paths = {
   comma: 'M12 13.5a1.8 1.8 0 1 1 1.8 1.8c0 1.8-.9 3.2-2.6 4.2',
   decimalsMore: 'M4 17h.01M8 11h2a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2H8V11ZM17 4v8M14 7l3-3 3 3',
   decimalsFewer: 'M4 17h.01M8 11h2a2 2 0 0 1 2 2v2a2 2 0 0 1-2 2H8V11ZM17 4v8M14 9l3 3 3-3',
+  // File tab (workspace backstage) and title bar
+  home: 'm3 10 9-7 9 7M5 9v12h5v-7h4v7h5V9',
+  newDocument: 'M6 3h9l5 5v13H6zM15 3v5h5M12 11v6M9 14h6',
+  open: 'M3 7V5h6l2 2h10v3M3 10h19l-3 10H3V10Z',
+  save: 'M5 3h11l3 3v15H5zM8 3v5h7V3M8 21v-7h8v7',
+  saveAs: 'M5 3h11l3 3v5M5 3v18h7M8 3v5h7V3M15 20l6-6-3-3-6 6-1 4z',
+  closeDocument: 'M6 3h9l5 5v13H6zM15 3v5h5M9.5 12.5l5 5M14.5 12.5l-5 5',
+  updates: 'M12 3v10M8 9l4 4 4-4M4 15v4h16v-4',
+  settings: 'M12 8.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7ZM12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1',
 }
 
 export type RibbonIconName = keyof typeof paths

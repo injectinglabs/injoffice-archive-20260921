@@ -122,3 +122,35 @@ test('ribbon buttons carry an icon, a label, and the shortcut in their tooltip',
   assert.equal(text(buttons[2]), 'Export PDF…');
   await act(async () => view.unmount());
 });
+
+test('the shell contributes Office backstage groups to every editor File tab through context', async () => {
+  const { default: Ribbon, RibbonButton, WorkspaceFileGroupsContext, withWorkspaceFileGroups, visibleRibbonTabs } = await load('Ribbon.tsx');
+  const clicks = [];
+  const workspace = {
+    before: [{ id: 'workspace-home', label: 'Start', children: h(RibbonButton, { icon: 'home', label: 'Home', onClick: () => clicks.push('home') }) }, { id: 'workspace-open-save', label: 'Open & Save', children: h(RibbonButton, { icon: 'open', label: 'Open', shortcut: 'open' }) }],
+    after: [{ id: 'workspace-close', label: 'Close', children: h(RibbonButton, { icon: 'closeDocument', label: 'Close document' }) }],
+  };
+  const editorTabs = [
+    { id: 'File', label: 'File', groups: [{ id: 'export', label: 'Export', children: h(RibbonButton, { icon: 'export', label: 'Export sheet' }) }] },
+    { id: 'Home', label: 'Home', groups: [{ id: 'font', label: 'Font', children: h(RibbonButton, { icon: 'bold', label: 'Bold' }) }] },
+  ];
+  // Editor groups (Export) sit between the shell's leading and trailing groups; the editor's other tabs are untouched.
+  assert.deepEqual(visibleRibbonTabs(withWorkspaceFileGroups(editorTabs, workspace)).map(tab => [tab.id, tab.groups.map(group => group.label)]), [['File', ['Start', 'Open & Save', 'Export', 'Close']], ['Home', ['Font']]]);
+  // An editor whose File tab is empty (no export available) still gets a File tab, first.
+  const emptyFile = [{ id: 'File', label: 'File', groups: [{ id: 'export', label: 'Export', children: false }] }, editorTabs[1]];
+  assert.deepEqual(visibleRibbonTabs(withWorkspaceFileGroups(emptyFile, workspace)).map(tab => tab.groups.map(group => group.label)), [['Start', 'Open & Save', 'Close'], ['Font']]);
+  // An editor without a File tab gets one prepended; without a provider nothing changes.
+  assert.deepEqual(withWorkspaceFileGroups([editorTabs[1]], workspace).map(tab => tab.id), ['File', 'Home']);
+  assert.equal(withWorkspaceFileGroups(editorTabs, null), editorTabs);
+
+  let view;
+  await act(async () => { view = create(h(WorkspaceFileGroupsContext, { value: workspace }, h(Ribbon, { label: 'Spreadsheet tools', tabs: editorTabs, active: 'File', onChange() {} }))); });
+  assert.deepEqual(view.root.findAllByProps({ role: 'tab' }).map(text), ['File', 'Home']);
+  assert.deepEqual(view.root.findAllByProps({ role: 'group' }).map(group => group.props['aria-label']), ['Start', 'Open & Save', 'Export', 'Close', 'Font']);
+  const open = view.root.findAllByType('button').find(button => text(button) === 'Open');
+  assert.equal(open.props.title, 'Open (⌘O)');
+  await act(async () => view.root.findAllByType('button').find(button => button.props.role !== 'tab' && text(button) === 'Home').props.onClick());
+  assert.deepEqual(clicks, ['home']);
+  await act(async () => { view = create(h(Ribbon, { label: 'Spreadsheet tools', tabs: emptyFile, active: 'File', onChange() {} })); });
+  assert.deepEqual(view.root.findAllByProps({ role: 'tab' }).map(text), ['Home'], 'without the shell provider an empty File tab still drops out');
+});

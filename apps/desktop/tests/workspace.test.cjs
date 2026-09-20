@@ -6,7 +6,7 @@ const { create, act } = require('react-test-renderer');
 global.IS_REACT_ACT_ENVIRONMENT = true;
 async function loadApp({busyOnMount=false} = {}) {
   const { rolldown } = await import('rolldown');
-  const bundle = await rolldown({ input: path.resolve(__dirname, '../src/App.tsx'), platform: 'node', external: id => /^react(?:\/|$)/.test(id), transform: { jsx: { runtime: 'automatic' } }, plugins: [{ name: 'workspace-boundaries', resolveId(id) { if(id==='./UpdatesDialog')return '\0mock-updates'; if(id==='./spreadsheetDelimited')return '\0mock-delimited'; if (id.endsWith('.css')) return '\0css'; if (['./OfficeEditor', './PdfEditor', './PresentationEditor', './SpreadsheetEditor', './StartPage'].includes(id) || id.endsWith('.png')) return '\0mock:' + id; }, load(id) { if(id==='\0css')return 'export default ""'; if(id==='\0mock-updates')return 'export const UpdateNotice=()=>null; export default ()=>null;'; if(id==='\0mock-delimited')return 'export const importDelimitedWorkbook=(...args)=>globalThis.__importDelimited(...args)'; if (id.startsWith('\0mock:')) return id.endsWith('.png') ? 'export default "logo.png";' : `import React from 'react'; export function SpreadsheetEditor(props) { ${busyOnMount ? 'React.useEffect(()=>{props.onBusyChange?.(true)},[]);' : ''} return React.createElement('${!id.endsWith('StartPage') ? 'test-editor' : 'test-start'}',props); } export default SpreadsheetEditor;`; } }] });
+  const bundle = await rolldown({ input: path.resolve(__dirname, '../src/App.tsx'), platform: 'node', external: id => /^react(?:\/|$)/.test(id), transform: { jsx: { runtime: 'automatic' } }, plugins: [{ name: 'workspace-boundaries', resolveId(id) { if(id==='./UpdatesDialog')return '\0mock-updates'; if(id==='./spreadsheetDelimited')return '\0mock-delimited'; if (id.endsWith('.css')) return '\0css'; if (['./OfficeEditor', './PdfEditor', './PresentationEditor', './SpreadsheetEditor', './StartPage'].includes(id) || id.endsWith('.png')) return '\0mock:' + id; }, load(id) { if(id==='\0css')return 'export default ""'; if(id==='\0mock-updates')return 'export const UpdateNotice=()=>null; export default ()=>null;'; if(id==='\0mock-delimited')return 'export const importDelimitedWorkbook=(...args)=>globalThis.__importDelimited(...args)'; if (id.startsWith('\0mock:')) return id.endsWith('.png') ? 'export default "logo.png";' : id.endsWith('StartPage') ? `import React from 'react'; export default function StartPage(props) { return React.createElement('test-start', props); }` : `import React from 'react'; import { WorkspaceFileGroupsContext } from ${JSON.stringify(path.resolve(__dirname, '../src/Ribbon.tsx'))}; export function SpreadsheetEditor(props) { ${busyOnMount ? 'React.useEffect(()=>{props.onBusyChange?.(true)},[]);' : ''} const file = React.useContext(WorkspaceFileGroupsContext); return React.createElement('test-editor', props, React.createElement('test-file-tab', null, ...[...file.before, ...file.after].map(group => React.createElement('test-file-group', { key: group.id, label: group.label }, group.children)))); } export default SpreadsheetEditor;`; } }] });
   try { const { output } = await bundle.generate({ format: 'cjs', codeSplitting: false }); const result = { exports: {} }; new Function('require', 'module', 'exports', output[0].code)(require, result, result.exports); return result.exports.default ?? result.exports; } finally { await bundle.close(); }
 }
 test('workspace tabs retain independent bytes and editor instances; save and close target only their session', async () => {
@@ -217,5 +217,40 @@ test('unsupported open replaces the start page with OpenError instead of an empt
     assert.match(renderer.root.findByProps({ id: 'open-error-title' }).children.join(''), /not supported/i);
     await act(async () => renderer.root.findAllByType('button').find(button => button.props.children === 'Back to start').props.onClick());
     assert.equal(renderer.root.findAllByType('test-start').length, 1);
+  } finally { if (renderer) await act(async () => renderer.unmount()); delete global.window; }
+});
+
+test('the File tab backstage carries Home, New, Open, Save, Save as, Close and app entries into every editor ribbon', async () => {
+  const App = await loadApp(); const saves = [], closed = []; let renderer;
+  global.window = { localStorage: { getItem: () => null, setItem() {} }, document: { title: '' }, addEventListener() {}, removeEventListener() {}, injDesktop: {
+    recent: async () => [], recovery: async () => [], nextExternal: async () => null, setDirty() {}, setBusy() {}, onMenuAction() { return () => {}; }, checkpoint: async () => {},
+    create: async format => ({ id: `id-${format}`, name: `Untitled.${format}`, bytes: new Uint8Array([1]), untitled: true }),
+    save: async input => { saves.push(input.saveAs); return { id: input.id, name: 'Report.docx', untitled: false }; },
+    close: async id => closed.push(id),
+  } };
+  try {
+    await act(async () => { renderer = create(React.createElement(App)); });
+    await act(async () => renderer.root.findByType('test-start').props.onCreate('docx'));
+    const groups = renderer.root.findAllByType('test-file-group');
+    assert.deepEqual(groups.map(group => group.props.label), ['Start', 'New', 'Open & Save', 'Close', 'InjOffice']);
+    const button = title => renderer.root.findAllByType('button').find(node => node.props.title === title);
+    assert.equal(button('Save (⌘S)').props.disabled, false, 'a freshly created document is unsaved, so Save is enabled');
+    await act(async () => button('Save as… (⌘⇧S)').props.onClick());
+    assert.deepEqual(saves, [true]);
+    assert.equal(button('Save (⌘S)').props.disabled, true, 'Save greys out once the document is saved');
+    await act(async () => button('New spreadsheet (XLSX)').props.onClick());
+    assert.deepEqual(renderer.root.findAllByType('test-editor').map(editor => editor.props.name), ['Untitled.docx', 'Untitled.xlsx']);
+    await act(async () => button('Start page: create, open recent or recover').props.onClick());
+    assert.equal(renderer.root.findAllByType('test-start').length, 1, 'File › Home shows the start page');
+    await act(async () => renderer.root.findByType('test-start').props.onResume());
+    await act(async () => button('Close document').props.onClick());
+    assert.equal(renderer.root.findAllByProps({ role: 'alertdialog' }).length, 1, 'closing an unsaved workbook asks first');
+    await act(async () => renderer.root.findAllByType('button').find(node => node.children.includes('Discard changes')).props.onClick());
+    assert.deepEqual(closed, ['id-xlsx']);
+    assert.deepEqual(renderer.root.findAllByType('test-editor').map(editor => editor.props.name), ['Untitled.docx']);
+    // The palette still lists every backstage command.
+    await act(async () => renderer.root.findByProps({ title: 'Search commands (Ctrl/⌘ K)' }).props.onClick());
+    const labels = renderer.root.findAllByProps({ role: 'option' }).map(option => option.props.id);
+    for (const id of ['command-home', 'command-new-docx', 'command-open', 'command-save', 'command-save-as', 'command-close', 'command-updates', 'command-preferences']) assert.ok(labels.includes(id), id);
   } finally { if (renderer) await act(async () => renderer.unmount()); delete global.window; }
 });
