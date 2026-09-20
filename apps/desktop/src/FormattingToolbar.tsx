@@ -1,11 +1,12 @@
+import type { ReactNode } from 'react';
 export interface FormattingValues {
   font?: string; size?: number; bold?: boolean; italic?: boolean; underline?: boolean;
   color?: string; alignment?: string; characterEditable?: boolean; fill?: string; numberFormat?: string;
 }
 export type FormattingPatch = Partial<FormattingValues>;
 
-export default function FormattingToolbar({ kind, values, disabled, onChange, scopeLabel }: {
-  scopeLabel?:string; kind: 'docx' | 'xlsx' | 'pptx'; values?: FormattingValues; disabled: boolean; onChange(patch: FormattingPatch): void;
+export default function FormattingToolbar({ kind, values, disabled, onChange, scopeLabel, children }: {
+  scopeLabel?:string; kind: 'docx' | 'xlsx' | 'pptx'; values?: FormattingValues; disabled: boolean; onChange(patch: FormattingPatch): void; children?: ReactNode;
 }) {
   const inactive = disabled || !values;
   const characterInactive = inactive || values?.characterEditable === false;
@@ -27,6 +28,7 @@ export default function FormattingToolbar({ kind, values, disabled, onChange, sc
         {!values?.alignment && <option value="">Inherited alignment</option>}{kind === 'xlsx' && <option value="general">General alignment</option>}<option value="left">Align left</option><option value="center">Center</option><option value="right">Align right</option>{kind === 'docx' && <><option value="both">Justify</option><option value="distribute">Distribute</option></>}
       </select>
     </div>
+    {children}
     <span className="formatting-scope">{values ? kind === 'xlsx' ? 'Selected cell' : kind === 'docx' ? scopeLabel??'Selected segment · direct formatting' : 'Selected text segment' : kind === 'xlsx' ? 'Select a cell to format' : 'Select text to format'}</span>
   </div>;
 }
