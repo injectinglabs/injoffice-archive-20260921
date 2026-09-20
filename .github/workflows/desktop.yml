@@ -1,10 +1,51 @@
 name: Desktop builds
+# Unsigned developer previews for every desktop platform (workflow_dispatch only).
+# The Go WASM engines are built once on Linux and shared with the packaging jobs,
+# so all four installers carry byte-identical engines and no job needs Go or Bash
+# beyond Node. Signed drafts are desktop-release.yml.
 on:
   workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: desktop-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
+  engines:
+    name: native engines (wasm)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go/xlsxpatch/go.mod
+          # No root go.mod and no external Go dependencies; cache the build cache below instead.
+          cache: false
+      - name: Cache the Go build cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/go-build
+          key: ${{ runner.os }}-go-build-wasm-${{ hashFiles('go/*/go.mod', 'go/*/go.sum', 'go/**/*.go') }}
+          restore-keys: ${{ runner.os }}-go-build-wasm-
+      - run: npm ci
+      - name: Build the WASM engines and their workspace dependencies
+        # Each engine's build.sh enforces its own size ceiling.
+        run: npm run build -w @injoffice/docx-wasm -w @injoffice/xlsx-wasm -w @injoffice/pptx-wasm
+      - name: Prove the built engines extract a blank document
+        run: npm run test:native -w @injoffice/desktop
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-engines
+          path: packages/*/dist
+          if-no-files-found: error
+          retention-days: 1
   desktop:
+    needs: engines
     strategy:
       fail-fast: false
       matrix:
@@ -22,31 +63,39 @@ jobs:
             platform: linux-x64
             args: --linux --x64
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go/xlsxpatch/go.mod
-          cache: false
       - name: Install Linux packaging tools
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y rpm
       - run: npm ci
-      - run: npm run desktop:build
+      - name: Use the engines built by the engines job
+        uses: actions/download-artifact@v4
+        with:
+          name: native-engines
+          path: packages
+      - name: Prove the transferred engines work on this runner
+        run: npm run test:native -w @injoffice/desktop
+      - name: Build the renderer from the built engines
+        # The workspace prebuild would rebuild the engines with Go; they come from the engines job.
+        # scripts/renderer-modules.cjs fails this step if any engine asset is missing or unbundled.
+        working-directory: apps/desktop
+        run: npx vite build
       - run: npm run test -w @injoffice/desktop
-      - run: npm run test:native -w @injoffice/desktop
       - run: npm run typecheck -w @injoffice/desktop
-      - run: npm run test:packaged -w @injoffice/desktop
       - name: Package unsigned installers
         working-directory: apps/desktop
         run: npx electron-builder ${{ matrix.args }} --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-      - name: Verify packaged updater dependencies
+      - name: Verify the packaged application carries host, renderer and engines
+        run: npm run test:packaged -w @injoffice/desktop
+      - name: Verify packaged updater dependencies and the absent update channel
         run: node apps/desktop/scripts/check-packaged-updater.cjs apps/desktop/release
       - name: Record artifact checksums and source revision
         run: npm run manifest -w @injoffice/desktop
