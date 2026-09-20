@@ -17,7 +17,7 @@ test('preflight passes only on a matching desktop-v tag with every platform secr
   assert.equal(branch.length, 1)
   assert.match(branch[0], /desktop-vX\.Y\.Z tag/)
   assert.match(preflight('linux', { GITHUB_REF_TYPE: 'tag', GITHUB_REF_NAME: 'v9.9.9' })[0], /desktop-vX\.Y\.Z tag/)
-  assert.match(preflight('linux', { GITHUB_REF_TYPE: 'tag', GITHUB_REF_NAME: 'desktop-v99.0.0' })[0], new RegExp(`does not match apps/desktop/package.json version ${version.replace(/\./g, '\\.')}`))
+  assert.ok(preflight('linux', { GITHUB_REF_TYPE: 'tag', GITHUB_REF_NAME: 'desktop-v99.0.0' })[0].includes(`does not match apps/desktop/package.json version ${version}`))
   assert.match(preflight('other', onTag)[0], /unknown platform/)
 })
 
