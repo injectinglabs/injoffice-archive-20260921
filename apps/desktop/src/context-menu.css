@@ -1,0 +1,9 @@
+.context-menu { position: fixed; z-index: 1200; min-width: 228px; max-width: min(340px, calc(100vw - 16px)); padding: 5px; margin: 0; background: var(--surface-raised); color: var(--text); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 12px 36px var(--shadow); font-size: 12px; line-height: 1.3; outline: none; user-select: none; }
+.context-menu > button[role] { display: flex; align-items: center; justify-content: space-between; gap: 22px; width: 100%; min-height: 0; margin: 0; padding: 7px 10px 7px 26px; border: 0; border-radius: 5px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; position: relative; opacity: 1; }
+.context-menu > button[role]:hover:not([aria-disabled="true"]), .context-menu > button[role]:focus-visible { background: var(--accent-soft); color: var(--accent); outline: none; }
+.context-menu > button[aria-disabled="true"] { opacity: .45; cursor: default; }
+.context-menu > button[aria-checked="true"]::before { content: "✓"; position: absolute; left: 9px; font-size: 11px; }
+.context-menu-label { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.context-menu-shortcut { font: inherit; font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+.context-menu > button[role]:hover:not([aria-disabled="true"]) .context-menu-shortcut, .context-menu > button[role]:focus-visible .context-menu-shortcut { color: inherit; }
+.context-menu-separator { height: 1px; margin: 5px 6px; background: var(--border-subtle); }

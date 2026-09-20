@@ -14,6 +14,7 @@ import InsertTableControl from './InsertTableControl'
 import ParagraphToolbar, { type ParagraphPatch } from './ParagraphToolbar'
 import FormattingToolbar, { type FormattingPatch } from './FormattingToolbar'
 import SelectionToolbar from './SelectionToolbar'
+import ContextMenu, { activateRunAt, documentContextMenu, useContextMenu } from './ContextMenu'
 import { documentRangeFormattingValues, formattingValues, documentFormatting, documentParagraphFormatting, docxSelection, documentTableSelection, paragraphOperations, documentStructure, type ParagraphOperation } from './formatting'
 import {documentStatistics,statisticsWithDraft} from './document-statistics'
 import './office-editor.css'
@@ -164,6 +165,7 @@ function createEngine(extension: string): LocalEngine {
 
 export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDraftChange, viewOptions, initialRecoveryDraft, onRecoveryDraftChange, registerCommit, registerHistory }: OfficeEditorProps) {
   const ribbonId=useId()
+  const menu=useContextMenu()
   const [ribbonTab,setRibbonTab]=useState<'Home'|'Insert'|'Layout'|'Table'>('Home')
   const [snapshot, setSnapshot] = useState<Snapshot>()
   const [busy, setBusy] = useState(true)
@@ -518,12 +520,13 @@ export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDr
       {selectedTable && (['table.row.insert_after','table.row.delete','table.column.insert_after','table.column.delete'] as const).filter(operation=>selectedTable.edit_policy.allowed_operations.includes(operation)).map(operation=><button key={operation} disabled={busy||composing} onClick={()=>void changeTableGrid(operation)}>{({'table.row.insert_after':'Add row below','table.row.delete':'Delete row','table.column.insert_after':'Add column right','table.column.delete':'Delete column'})[operation]}</button>)}
         </div>}
       </div>
-      <div className={`office-preview ${isDocument ? 'office-document-preview' : ''}`}>
+      <div className={`office-preview ${isDocument ? 'office-document-preview' : ''}`} onContextMenu={event=>{activateRunAt(event);menu.open(event)}}>
         <div className="office-preview-scale" style={isDocument ? undefined : { zoom }}>
         {snapshot.preview.kind === 'docx' && <DocumentPreview replaceImage={typeof window!=='undefined'&&window.injDesktop?.pickAsset?id=>void replaceImage(id):undefined} deleteImage={id=>void deleteImage(id)} images={snapshot.preview.images} imageNotice={snapshot.preview.imageNotice} document={snapshot.preview.document} choose={choose} selected={selected} draft={draft} textRange={textRange} onTextRangeChange={setTextRange} caretOffset={caretOffset} joinPrevious={() => void joinPrevious()} insertLines={(text, caret) => void insertLines(text, caret)} updateDraft={updateDraft} apply={() => void apply()} cancel={cancelDraft} busy={busy} hasDraft={hasDraft} onCompositionChange={value=>{composingRef.current=value;setComposing(value);callbacks.current.onBusyChange?.(busy||value);if(!value&&draftPending.current)hiddenApplyRef.current?.schedule()}} zoom={zoom} navigation={(viewOptions?.navigation ?? true) && !viewOptions?.focus} />}
         </div>
       </div>
       <SelectionToolbar values={toolbarValues} disabled={busy||composing} onChange={patch=>void changeFormatting(patch)} />
+      {menu.anchor&&<ContextMenu anchor={menu.anchor} label="Document" onClose={menu.close} items={documentContextMenu({anchor:menu.anchor,target:!!target,values:toolbarValues,disabled:busy||composing,link:!!docxSelection(snapshot.preview.document,selected)?.run.can_edit_hyperlink&&!textRange?.unsupported&&!(textRange&&textRange.start_utf16!==textRange.end_utf16),table:paragraphOperations(snapshot.preview.document,selected).includes('block.insert_after'),onFormat:patch=>void changeFormatting(patch),onFind:()=>{setSearchOpen(true);requestAnimationFrame(()=>searchInput.current?.focus())},onRibbonTab:setRibbonTab})} />}
     </>}
     {statistics&&<footer className="office-document-status" aria-label="Document statistics" title="Body text including tables and pending edits. Headers, footers, notes and hidden text are excluded."><span>{statistics.words.toLocaleString()} words</span><span>{statistics.characters.toLocaleString()} characters</span><span>Body text{hasDraft?' · includes pending edits':''}</span></footer>}
     {!snapshot && !busy && <div className="office-empty">This file could not be opened. Choose another file to continue.</div>}
