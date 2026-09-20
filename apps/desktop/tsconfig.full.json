@@ -1,0 +1,7 @@
+{
+  // The whole renderer, used by tests/typecheck-scope.test.cjs to prove every tsconfig.json
+  // exclusion still fails. `npm run typecheck` uses tsconfig.json.
+  "extends": "./tsconfig.json",
+  "include": ["src"],
+  "exclude": []
+}
