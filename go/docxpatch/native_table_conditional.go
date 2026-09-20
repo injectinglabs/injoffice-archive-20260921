@@ -31,6 +31,7 @@ type nativeTableLook struct {
 type nativeTableRegionLayer struct {
 	definition *nativeStyleDefinition
 	fill       *string
+	borders    *nativeRegionBorders
 }
 
 type nativeConditionalTableStyle struct {
@@ -38,6 +39,11 @@ type nativeConditionalTableStyle struct {
 	rowBandSize int
 	colBandSize int
 	regions     map[string]*nativeTableRegionLayer
+	// The chain's w:tblBorders read as Word paints them (auto colour black,
+	// theme tints from the authored colour); nil when a layer's borders could
+	// not be read that way either.
+	tableBorders           *NativeTableBordersV1
+	tableBordersUnresolved bool
 }
 
 // NativeResolvedTableCellShadingV1 is the fill the conditional cascade resolves
@@ -132,6 +138,14 @@ func (resolver *nativeLayoutResolver) resolveConditionalTableStyle(table *Native
 	conditional := &nativeConditionalTableStyle{look: look, rowBandSize: 1, colBandSize: 1, regions: map[string]*nativeTableRegionLayer{}}
 	for _, layer := range chain {
 		if tblPr := firstDirectNativeChild(layer.node, resolver.wordNS, "tblPr"); tblPr != nil {
+			for _, borders := range directNativeChildren(tblPr, resolver.wordNS, "tblBorders") {
+				parsed, ok := resolver.parseRegionBorders(borders)
+				if !ok {
+					conditional.tableBordersUnresolved = true
+					continue
+				}
+				conditional.tableBorders = mergeNativeTableBorders(conditional.tableBorders, &NativeTableBordersV1{Top: parsed.top, Right: parsed.right, Bottom: parsed.bottom, Left: parsed.left, InsideHorizontal: parsed.insideH, InsideVertical: parsed.insideV})
+			}
 			for _, name := range []string{"tblStyleRowBandSize", "tblStyleColBandSize"} {
 				sizes := directNativeChildren(tblPr, resolver.wordNS, name)
 				if len(sizes) > 1 {
@@ -224,7 +238,21 @@ func (resolver *nativeLayoutResolver) mergeConditionalTableRegion(table *NativeT
 					}
 					merged.fill = fill
 				case "tcBorders":
-					resolver.addDiagnostic("CONDITIONAL_TABLE_STYLE_PRESERVED", table.ID, layer.partName, property, "Conditional table-style cell borders are preserved and not applied to the region")
+					// Region borders are resolved per cell for the approximate
+					// lane (native_table_conditional_borders.go); the exact tier
+					// keeps refusing until shared-edge resolution is proven.
+					parsed, ok := resolver.parseRegionBorders(property)
+					if !ok {
+						// A region the look never selects cannot reach a cell,
+						// so its unreadable borders do not block the others.
+						if conditional.regionSelectable(kind) {
+							conditional.tableBordersUnresolved = true
+						}
+						resolver.addDiagnostic("CONDITIONAL_TABLE_STYLE_PRESERVED", table.ID, layer.partName, property, "Conditional table-style cell borders are outside the single/none subset and are not applied")
+						continue
+					}
+					merged.borders = mergeRegionBorders(merged.borders, parsed)
+					resolver.addDiagnostic("CONDITIONAL_TABLE_STYLE_PRESERVED", table.ID, layer.partName, property, "Conditional table-style cell borders are applied per cell by the approximate preview; exact shared-edge resolution is not proven")
 				default:
 					resolver.addDiagnostic("CONDITIONAL_TABLE_STYLE_PRESERVED", table.ID, layer.partName, property, "Conditional table-style cell property "+property.Name.Local+" is preserved and not applied to the region")
 				}
@@ -391,4 +419,32 @@ func nativeAuthoredClearFill(node *nativeXMLNode, wordNS string) (*string, bool)
 		return nil, false
 	}
 	return nativeString(rgb), true
+}
+
+// regionSelectable reports whether the table's look can select a region at all.
+func (conditional *nativeConditionalTableStyle) regionSelectable(kind string) bool {
+	look := conditional.look
+	switch kind {
+	case "firstRow":
+		return look.firstRow
+	case "lastRow":
+		return look.lastRow
+	case "firstCol":
+		return look.firstColumn
+	case "lastCol":
+		return look.lastColumn
+	case "band1Horz", "band2Horz":
+		return !look.noHBand
+	case "band1Vert", "band2Vert":
+		return !look.noVBand
+	case "nwCell":
+		return look.firstRow && look.firstColumn
+	case "neCell":
+		return look.firstRow && look.lastColumn
+	case "swCell":
+		return look.lastRow && look.firstColumn
+	case "seCell":
+		return look.lastRow && look.lastColumn
+	}
+	return true
 }

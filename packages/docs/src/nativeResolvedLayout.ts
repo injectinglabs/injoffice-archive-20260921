@@ -155,12 +155,20 @@ export interface NativeDocxResolvedTableCellShadingV1 {
   shading_rgb: string
 }
 
+/** One cell's four painted edges after the conditional cascade and Word's
+ * shared-edge resolution (heavier border wins, ties to the darker colour). */
+export interface NativeDocxResolvedTableCellBordersV1 {
+  cell_id: string
+  borders: Pick<NativeDocxTableBordersV1, 'top' | 'right' | 'bottom' | 'left'>
+}
+
 export interface NativeDocxResolvedTableV1 {
   table_id: string
   style_id?: string
   borders?: NativeDocxTableBordersV1
   cell_shading_rgb?: string
   conditional_cell_shading?: NativeDocxResolvedTableCellShadingV1[]
+  conditional_cell_borders?: NativeDocxResolvedTableCellBordersV1[]
   geometry?: NativeDocxResolvedTableGeometryV1
   automatic_border_preview?: NativeDocxAutomaticBorderEvidenceV1
 }
@@ -210,8 +218,10 @@ export const DOCX_RESOLVED_LAYOUT_V1_BINDING_FIELDS = {
   RunV1: ['run_id', 'paragraph_id', 'character_style_id', 'applied_paragraph_styles', 'applied_character_styles', 'properties'],
   TableBorderV1: ['style', 'size_eighth_points', 'color_rgb'],
   TableBordersV1: ['top', 'right', 'bottom', 'left', 'inside_horizontal', 'inside_vertical'],
-  TableV1: ['table_id', 'style_id', 'borders', 'cell_shading_rgb', 'conditional_cell_shading', 'geometry', 'automatic_border_preview'],
+  TableV1: ['table_id', 'style_id', 'borders', 'cell_shading_rgb', 'conditional_cell_shading', 'conditional_cell_borders', 'geometry', 'automatic_border_preview'],
   TableCellShadingV1: ['cell_id', 'shading_rgb'],
+  TableCellBordersV1: ['cell_id', 'borders'],
+  TableCellEdgesV1: ['top', 'right', 'bottom', 'left'],
   FontV1: ['name', 'alt_name'],
   DiagnosticV1: ['code', 'severity', 'scope_id', 'part_name', 'path', 'preservation', 'message'],
   LayoutInputV1: ['protocol', 'version', 'document_id', 'revision', 'source_parts', 'numbering_source', 'paragraphs', 'runs', 'tables', 'fonts', 'diagnostics'],
@@ -696,16 +706,30 @@ export function decodeNativeDocxResolvedLayout(value: unknown): DecodeNativeDocx
         if (margins) for (const side of ['top_twips', 'right_twips', 'bottom_twips', 'left_twips']) integer(margins[side], `${geometryPath}/cell_margins/${side}`, issues, 0, DOCX_MAX_TWIPS_FOR_MILLIPOINTS, false)
       }
     }
-    if (entry.borders !== undefined) {
-      const borders = object(entry.borders, `${path}/borders`, DOCX_RESOLVED_LAYOUT_V1_BINDING_FIELDS.TableBordersV1, issues)
-      if (borders) for (const key of DOCX_RESOLVED_LAYOUT_V1_BINDING_FIELDS.TableBordersV1) if (borders[key] !== undefined) {
-        const borderPath = `${path}/borders/${key}`
+    const validateBorders = (value: unknown, bordersPath: string, keys: readonly string[]) => {
+      const borders = object(value, bordersPath, keys, issues)
+      if (borders) for (const key of keys) if (borders[key] !== undefined) {
+        const borderPath = `${bordersPath}/${key}`
         const border = object(borders[key], borderPath, DOCX_RESOLVED_LAYOUT_V1_BINDING_FIELDS.TableBorderV1, issues)
         if (!border) continue
         enumValue(border.style, `${borderPath}/style`, ['none', 'single'], issues)
         integer(border.size_eighth_points, `${borderPath}/size_eighth_points`, issues, 0, 768, false)
         optionalString(border.color_rgb, `${borderPath}/color_rgb`, issues, COLOR, 6)
       }
+    }
+    if (entry.borders !== undefined) validateBorders(entry.borders, `${path}/borders`, DOCX_RESOLVED_LAYOUT_V1_BINDING_FIELDS.TableBordersV1)
+    if (entry.conditional_cell_borders !== undefined) {
+      const cellIDs = new Set<string>()
+      array(entry.conditional_cell_borders, `${path}/conditional_cell_borders`, issues).forEach((value, cellIndex) => {
+        const cellPath = `${path}/conditional_cell_borders/${cellIndex}`
+        const cell = object(value, cellPath, DOCX_RESOLVED_LAYOUT_V1_BINDING_FIELDS.TableCellBordersV1, issues)
+        if (!cell) return
+        const cellID = stringValue(cell.cell_id, `${cellPath}/cell_id`, issues)
+        if (cellID && cellIDs.has(cellID)) add(issues, 'DUPLICATE_ID', `${cellPath}/cell_id`, 'conditional cell borders repeat a cell id')
+        if (cellID) cellIDs.add(cellID)
+        if (cell.borders === undefined) add(issues, 'REQUIRED', `${cellPath}/borders`, 'conditional cell borders require the four edges')
+        else validateBorders(cell.borders, `${cellPath}/borders`, DOCX_RESOLVED_LAYOUT_V1_BINDING_FIELDS.TableCellEdgesV1)
+      })
     }
   })
   const fontNames = new Set<string>()

@@ -89,6 +89,7 @@ type NativeResolvedTableV1 struct {
 	Borders                *NativeTableBordersV1                `json:"borders,omitempty"`
 	CellShadingRGB         *string                              `json:"cell_shading_rgb,omitempty"`
 	ConditionalCellShading []NativeResolvedTableCellShadingV1   `json:"conditional_cell_shading,omitempty"`
+	ConditionalCellBorders []NativeResolvedTableCellBordersV1   `json:"conditional_cell_borders,omitempty"`
 }
 
 type NativeResolvedParagraphPropertiesV1 struct {
@@ -1621,6 +1622,18 @@ func (resolver *nativeLayoutResolver) resolveTableStyle(table *NativeTableV1) (N
 			cellStyles = layers
 			if len(fills) > 0 {
 				resolved.ConditionalCellShading = fills
+			}
+			// The document's own w:tblBorders win over the chain's; the chain's
+			// are exact when the simple parse kept them and otherwise Word's
+			// reading of them (auto colour black).
+			tableBorders, exact := table.Borders, true
+			if tableBorders == nil && simple {
+				tableBorders = resolved.Borders
+			} else if tableBorders == nil {
+				tableBorders, exact = conditional.tableBorders, false
+			}
+			if !conditional.tableBordersUnresolved {
+				resolved.ConditionalCellBorders = conditional.cellBorders(table, tableBorders, exact)
 			}
 		} else {
 			resolver.addDiagnostic("CONDITIONAL_TABLE_STYLE_PRESERVED", table.ID, chain[len(chain)-1].partName, chain[len(chain)-1].node, "Conditional table-style regions could not be resolved against this table's grid and are not guessed")

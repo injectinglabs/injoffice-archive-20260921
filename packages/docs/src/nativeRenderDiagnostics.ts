@@ -25,7 +25,7 @@ export function nativeDocxUnresolvableTableStyleV1(
   if (diagnostic.part_name === undefined || diagnostic.part_name !== resolved.source_parts.styles_part || diagnostic.path !== undefined) return false
   const table = resolved.tables.find((entry) => entry.table_id === diagnostic.scope_id)
   return table !== undefined && table.style_id !== undefined
-    && table.borders === undefined && table.cell_shading_rgb === undefined && table.conditional_cell_shading === undefined
+    && table.borders === undefined && table.cell_shading_rgb === undefined && table.conditional_cell_shading === undefined && table.conditional_cell_borders === undefined
     && table.geometry === undefined && table.automatic_border_preview === undefined
 }
 
