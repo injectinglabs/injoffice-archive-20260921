@@ -108,8 +108,9 @@ async function until(predicate) {
   throw new Error('Editor did not settle');
 }
 
+const text = node => node.children.map(child => typeof child === 'string' ? child : text(child)).join('');
 function button(view, label) {
-  return view.root.findAllByType('button').find(node => node.props.children === label);
+  return view.root.findAllByType('button').find(node => node.props.children === label || text(node) === label);
 }
 
 test('SpreadsheetEditor mounts, reports busy, and applies a cell edit', async () => {
@@ -154,6 +155,47 @@ test('SpreadsheetEditor mounts, reports busy, and applies a cell edit', async ()
     assert.equal(transaction.cells[0].kind, 'cell.set_value');
     assert.equal(transaction.cells[0].value, 'Hello');
     assert.deepEqual([...changes[0]], [2]);
+  } finally {
+    if (view) await act(async () => view.unmount());
+    delete globalThis.__xlsxClient;
+  }
+});
+
+test('SpreadsheetEditor arranges its controls as an Excel ribbon with labelled groups and icons', async () => {
+  const client = mockClient();
+  globalThis.__xlsxClient = client;
+  const SpreadsheetEditor = await loadEditor();
+  const busy = [];
+  let view;
+  try {
+    await act(async () => {
+      view = create(React.createElement(SpreadsheetEditor, { name: 'Book.xlsx', bytes: new Uint8Array([1]), onChange: () => {}, onBusyChange: value => busy.push(value) }));
+    });
+    await until(() => busy.at(-1) === false && view.root.findAllByProps({ className: 'sheet-grid' }).length > 0);
+    assert.deepEqual(view.root.findAllByProps({ role: 'tab' }).map(text), ['File', 'Home', 'Insert', 'Formulas', 'Data', 'View']);
+    const panels = view.root.findAllByProps({ role: 'tabpanel' });
+    const groups = panel => panel.findAllByProps({ role: 'group' }).map(group => group.props['aria-label']);
+    assert.deepEqual(groups(panels[0]), ['Export']);
+    assert.deepEqual(groups(panels[1]), ['Font', 'Alignment', 'Number', 'Cells']);
+    assert.deepEqual(groups(panels[2]), ['Charts']);
+    assert.deepEqual(groups(panels[3]), ['Defined Names', 'Calculation']);
+    assert.deepEqual(groups(panels[4]), ['Sort & Filter']);
+    assert.deepEqual(groups(panels[5]), ['Window']);
+    assert.equal(view.root.findByProps({ role: 'toolbar' }).props['aria-label'], 'Quick access');
+    const commandButtons = [...view.root.findAllByProps({ role: 'group' }).flatMap(group => group.findAllByType('button')), ...view.root.findByProps({ role: 'toolbar' }).findAllByType('button')];
+    assert.ok(commandButtons.length >= 20, `command buttons: ${commandButtons.length}`);
+    for (const node of commandButtons) {
+      assert.equal(node.findAllByType('svg').length, 1, `${node.props.title} has an icon`);
+      assert.ok(node.props.title, 'every command button has a tooltip');
+    }
+    for (const summary of view.root.findAllByType('summary')) assert.equal(summary.findAllByType('svg').length, 1, `${text(summary)} popover has an icon`);
+    const byLabel = Object.fromEntries(commandButtons.map(node => [node.props['aria-label'] ?? text(node), node]));
+    assert.equal(byLabel.Charts.props.disabled, true);
+    assert.match(byLabel.Charts.props.title, /not supported by the native XLSX transaction/);
+    assert.match(byLabel['Sort range'].props.title, /not supported by the native XLSX transaction/);
+    assert.equal(byLabel.Recalculate.props.disabled, false);
+    assert.match(byLabel.Undo.props.title, /^Undo \(/);
+    assert.equal(view.root.findByProps({ 'aria-label': 'Cell value or formula' }) != null, true, 'name box and fx bar are untouched');
   } finally {
     if (view) await act(async () => view.unmount());
     delete globalThis.__xlsxClient;
