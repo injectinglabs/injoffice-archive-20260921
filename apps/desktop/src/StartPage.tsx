@@ -17,10 +17,10 @@ export interface StartPageProps {
 }
 
 const formats = [
-  { extension: 'docx', name: 'Documents', letter: 'W', detail: 'DOCX', color: '#2459ad' },
-  { extension: 'xlsx', name: 'Spreadsheets', letter: 'S', detail: 'XLSX', color: '#28764f' },
-  { extension: 'pptx', name: 'Presentations', letter: 'P', detail: 'PPTX', color: '#b95b31' },
-  { extension: 'pdf', name: 'PDF files', letter: 'P', detail: 'PDF', color: '#b8494f' },
+  { extension: 'docx', name: 'Documents', letter: 'W', detail: 'DOCX', color: 'var(--docx)' },
+  { extension: 'xlsx', name: 'Spreadsheets', letter: 'S', detail: 'XLSX', color: 'var(--xlsx)' },
+  { extension: 'pptx', name: 'Presentations', letter: 'P', detail: 'PPTX', color: 'var(--pptx)' },
+  { extension: 'pdf', name: 'PDF files', letter: 'P', detail: 'PDF', color: 'var(--pdf)' },
 ] as const;
 
 function Icon({ name }: { name: 'home' | 'open' | 'search' | 'remove' | 'return' | 'clock' }) {
@@ -41,7 +41,7 @@ function formatFor(name: string) {
 
 function FileBadge({ name, large = false }: { name: string; large?: boolean }) {
   const format = formatFor(name);
-  return <span className={`start-file-badge${large ? ' start-file-badge-large' : ''}`} style={{ color: format?.color ?? '#687386' }} aria-hidden="true"><svg viewBox="0 0 32 38" fill="none"><path d="M5 1h15l8 8v27H5V1Z" fill="currentColor" opacity=".09" /><path d="M5 1h15l8 8v27H5V1Z" stroke="currentColor" strokeWidth="1.3" /><path d="M20 1v8h8" stroke="currentColor" strokeWidth="1.3" /></svg><span>{format?.detail ?? 'FILE'}</span></span>;
+  return <span className={`start-file-badge${large ? ' start-file-badge-large' : ''}`} style={{ color: format?.color ?? 'var(--text-muted)' }} aria-hidden="true"><svg viewBox="0 0 32 38" fill="none"><path d="M5 1h15l8 8v27H5V1Z" fill="currentColor" opacity=".09" /><path d="M5 1h15l8 8v27H5V1Z" stroke="currentColor" strokeWidth="1.3" /><path d="M20 1v8h8" stroke="currentColor" strokeWidth="1.3" /></svg><span>{format?.detail ?? 'FILE'}</span></span>;
 }
 
 function recentDate(timestamp: number) {
