@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('injDesktop', {
     ipcRenderer.on('updates:state', listener);
     return () => ipcRenderer.removeListener('updates:state', listener);
   },
+  setTheme: theme => ipcRenderer.invoke('theme:set', theme),
   textHistory: direction => ipcRenderer.invoke('document:text-history', direction),
   nextExternal: () => ipcRenderer.invoke('document:next-external'),
   open: () => ipcRenderer.invoke('document:open'),

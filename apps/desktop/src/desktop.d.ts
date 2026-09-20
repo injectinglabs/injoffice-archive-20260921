@@ -19,6 +19,7 @@ declare global {
       installUpdate(): Promise<DesktopUpdateState>;
       setAutomaticUpdates(enabled: boolean): Promise<DesktopUpdateState>;
       onUpdateState(callback: (state: DesktopUpdateState) => void): () => void;
+      setTheme?(theme: 'system' | 'light' | 'dark'): Promise<boolean>;
       textHistory(direction: 'undo' | 'redo'): Promise<void>;
       nextExternal(): Promise<{ id: string; name: string; bytes: Uint8Array } | null>;
       open(): Promise<{ id: string; name: string; bytes: Uint8Array } | null>;

@@ -14,8 +14,9 @@ test('workspace tabs retain independent bytes and editor instances; save and clo
   const saves = [], checkpoints = [], closed = [], histories = [];
   let menu, next = 0;
   const preferences = new Map();
+  const themes = [];
   global.window = { localStorage: { getItem: key => preferences.get(key) ?? null, setItem: (key,value) => preferences.set(key,value) }, document: { title: '' }, addEventListener() {}, removeEventListener() {}, injDesktop: {
-    textHistory: async direction => histories.push(`text-${direction}`), nextExternal: async () => null, recent: async () => [], recovery: async () => [], setDirty() {}, setBusy() {},
+    textHistory: async direction => histories.push(`text-${direction}`), nextExternal: async () => null, recent: async () => [], recovery: async () => [], setDirty() {}, setBusy() {}, setTheme: async theme => { themes.push(theme); return theme === 'dark'; },
     onMenuAction(callback) { menu = callback; return () => {}; },
     create: async format => ({ id: `id-${++next}`, name: `Untitled.${format}`, bytes: new Uint8Array([next]), untitled: true }),
     checkpoint: async (id, bytes, draft, revision) => checkpoints.push({ id, bytes: bytes ? [...bytes] : null, draft, revision }),
@@ -71,9 +72,13 @@ test('workspace tabs retain independent bytes and editor instances; save and clo
   let search = renderer.root.findByProps({ 'aria-label': 'Search workspace commands' });
   await act(async () => search.props.onChange({target:{value:'preferences'}}));
   await act(async () => search.props.onKeyDown({key:'Enter',preventDefault(){}}));
-  await act(async () => renderer.root.findByType('select').props.onChange({target:{value:'150'}}));
+  const [zoomSelect, themeSelect] = renderer.root.findAllByType('select');
+  await act(async () => zoomSelect.props.onChange({target:{value:'150'}}));
+  await act(async () => themeSelect.props.onChange({target:{value:'dark'}}));
   await act(async () => renderer.root.findAllByType('button').find(button => button.children.includes('Save preferences')).props.onClick());
   assert.equal(JSON.parse(preferences.get('injoffice.preferences.v1')).defaultZoom,150);
+  assert.equal(JSON.parse(preferences.get('injoffice.preferences.v1')).theme,'dark');
+  assert.deepEqual(themes,['system','dark'],'the host follows the saved appearance for native dialogs');
   await act(async () => renderer.root.findByProps({ title: 'Search commands (Ctrl/⌘ K)' }).props.onClick());
   search = renderer.root.findByProps({ 'aria-label': 'Search workspace commands' });
   await act(async () => search.props.onChange({target:{value:'blank pdf'}}));

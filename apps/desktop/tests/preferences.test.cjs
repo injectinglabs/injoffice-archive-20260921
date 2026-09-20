@@ -36,8 +36,25 @@ test('preferences fail closed on damaged storage and write a versioned blob', as
   assert.deepEqual(readPreferences(), defaultPreferences);
   const store = storage();
   global.window = { localStorage: store };
-  writePreferences({ version: 1, defaultZoom: 125, showNavigation: false });
-  assert.deepEqual(readPreferences(), { version: 1, defaultZoom: 125, showNavigation: false });
+  writePreferences({ version: 1, defaultZoom: 125, showNavigation: false, theme: 'dark' });
+  assert.deepEqual(readPreferences(), { version: 1, defaultZoom: 125, showNavigation: false, theme: 'dark' });
   assert.deepEqual(initialView(readPreferences()), { zoom: 125, navigation: false, focus: false });
   assert.equal(JSON.parse(store.map.get('injoffice.preferences.v1')).version, 1);
+});
+
+test('theme preference follows the system when absent and fails closed on unknown values', async () => {
+  const { defaultPreferences, readPreferences, themePreferences } = await loadPreferences();
+  assert.deepEqual(themePreferences, ['system', 'light', 'dark']);
+  assert.equal(defaultPreferences.theme, 'system');
+  // Blobs written before the theme existed keep their view defaults and follow the system.
+  global.window = { localStorage: storage({ 'injoffice.preferences.v1': JSON.stringify({ version: 1, defaultZoom: 150, showNavigation: false }) }) };
+  assert.deepEqual(readPreferences(), { version: 1, defaultZoom: 150, showNavigation: false, theme: 'system' });
+  for (const theme of ['light', 'dark', 'system']) {
+    global.window = { localStorage: storage({ 'injoffice.preferences.v1': JSON.stringify({ version: 1, defaultZoom: 150, showNavigation: false, theme }) }) };
+    assert.equal(readPreferences().theme, theme);
+  }
+  for (const theme of ['Dark', 'auto', '', null, 1, {}]) {
+    global.window = { localStorage: storage({ 'injoffice.preferences.v1': JSON.stringify({ version: 1, defaultZoom: 150, showNavigation: false, theme }) }) };
+    assert.deepEqual(readPreferences(), defaultPreferences, `theme ${JSON.stringify(theme)} rejects the whole blob`);
+  }
 });
