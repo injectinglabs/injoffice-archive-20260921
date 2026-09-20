@@ -923,10 +923,17 @@ function tableCommandsByPage(
       if (work > DOCX_PAGE_PAINT_LIMITS.maxOutputNodes) return undefined
     }
   }
+  const resolvedTables = new Map(request.pagination_request.resolved_layout.tables.map((entry) => [entry.table_id, entry]))
   for (const table of tables) {
     const rows = layoutNativeDocxTableRowsV1(table, request.pagination_request.shaped_lines)
     if (!rows) return undefined
     const gridColumns = table.grid_widths_millipoints.length
+    // Per-cell edges the conditional table-style cascade resolved (region
+    // w:tcBorders over the table's own borders, shared edges already settled
+    // between neighbours). Only the approximate lane reaches here with them:
+    // the resolver leaves a CONDITIONAL_TABLE_STYLE_PRESERVED diagnostic on
+    // every such table, which the exact tier refuses on.
+    const conditionalBorders = new Map((resolvedTables.get(table.table.id)?.conditional_cell_borders ?? []).map((entry) => [entry.cell_id, entry.borders]))
     for (const [rowIndex, row] of rows.entries()) {
       const anchorCell = table.rows[rowIndex]!.cells.find((cell) => cell.vertical_merge !== 'continue') ?? table.rows[rowIndex]!.cells[0]
       const firstParagraph = anchorCell?.cell.paragraphs[0]
@@ -955,8 +962,14 @@ function tableCommandsByPage(
           const lastFragment = !placement.fragment || placement.fragment.source_y_millipoints + height === placement.fragment.source_height_millipoints
           if (cell.shading_rgb) target.fills.push({ kind: 'fill_table_cell', id: `paint:table:${table.table.id}:${rowIndex}:${cellIndex}:fill${placementSuffix}`, table_id: table.table.id, row_id: row.row_id, cell_id: cell.cell_id, x_millipoints: x, y_millipoints: rowY, width_millipoints: cell.width_millipoints, height_millipoints: height, fill_rgb: cell.shading_rgb })
           const source = table.table.borders
+          const own = conditionalBorders.get(cell.cell_id)
           const lastMergeRow = rowIndex + cell.row_span - 1
-          const edges: Array<{ edge: NativeDocxStrokeTableBorderCommandV1['edge']; border?: import('./nativeContract.js').NativeDocxTableBorderV1; x1: number; y1: number; x2: number; y2: number }> = [
+          const edges: Array<{ edge: NativeDocxStrokeTableBorderCommandV1['edge']; border?: import('./nativeContract.js').NativeDocxTableBorderV1; x1: number; y1: number; x2: number; y2: number }> = own ? [
+            { edge: 'top', border: firstFragment && rowIndex === 0 ? own.top : undefined, x1: x, y1: rowY, x2: x + cell.width_millipoints, y2: rowY },
+            { edge: 'left', border: cell.column_ordinal === 0 ? own.left : undefined, x1: x, y1: rowY, x2: x, y2: rowY + height },
+            { edge: 'right', border: own.right, x1: x + cell.width_millipoints, y1: rowY, x2: x + cell.width_millipoints, y2: rowY + height },
+            { edge: 'bottom', border: lastFragment ? own.bottom : undefined, x1: x, y1: rowY + height, x2: x + cell.width_millipoints, y2: rowY + height },
+          ] : [
             { edge: 'top', border: firstFragment && rowIndex === 0 ? source?.top : undefined, x1: x, y1: rowY, x2: x + cell.width_millipoints, y2: rowY },
             { edge: 'left', border: cell.column_ordinal === 0 ? source?.left : undefined, x1: x, y1: rowY, x2: x, y2: rowY + height },
             { edge: 'right', border: cell.column_ordinal + cell.grid_span === gridColumns ? source?.right : source?.inside_vertical, x1: x + cell.width_millipoints, y1: rowY, x2: x + cell.width_millipoints, y2: rowY + height },
@@ -1066,6 +1079,11 @@ export async function compileNativeDocxApproximatePagePreviewV1(value: unknown, 
   return withApproximatePolicyReasons(approximatePagePreviewEnvelope(settings, eligibility, painted.value, request.pagination_request), request, paintedLayouts.headerFooter)
 }
 
+/** Declared approximate conditional table-style policy; disclosed as an envelope reason whenever a painted body table carries per-cell region results. */
+export const DOCX_APPROXIMATE_CONDITIONAL_TABLE_STYLE_WARNING = 'Approximate read-only preview: conditional table-style regions (w:tblStylePr selected by w:tblLook) are resolved per cell into fills, paragraph/run properties and borders (approximate-conditional-table-style-v1); a shared edge takes the heavier border, an automatic border colour is painted black and a theme tint or shade is read from the authored value; this is not Word-validated layout.' as const
+function approximateConditionalTableStyle(resolved: NativeDocxPaginationRequestV1['resolved_layout'], document: NativeDocxPaginationRequestV1['document']): boolean {
+  return resolved.tables.some((entry) => (entry.conditional_cell_shading !== undefined || entry.conditional_cell_borders !== undefined) && document.body.blocks.some((block) => block.table?.id === entry.table_id))
+}
 /** Declared approximate table-style policy; disclosed as an envelope reason whenever applied. */
 export const DOCX_APPROXIMATE_TABLE_STYLE_EFFECTS_WARNING = 'Approximate read-only preview: table-style properties outside the exact border/fill subset (style indents, cell margins, conditional regions) are not applied; direct table properties and defaults are painted instead.' as const
 const APPROXIMATE_TABLE_STYLE_CODES: ReadonlySet<string> = new Set(['TABLE_STYLE_EFFECTS_PRESERVED', 'CONDITIONAL_TABLE_STYLE_PRESERVED'])
@@ -1083,6 +1101,7 @@ function withApproximatePolicyReasons(envelope: NativeDocxApproximatePagePreview
   const reasons = [
     ...nativeDocxApproximatePaginationPolicyReasonsV1(request.paginated_layout),
     ...(pagination.resolved_layout.diagnostics.some((entry) => approximateTableStyleEffect(entry, pagination.document)) ? [DOCX_APPROXIMATE_TABLE_STYLE_EFFECTS_WARNING] : []),
+    ...(approximateConditionalTableStyle(pagination.resolved_layout, pagination.document) ? [DOCX_APPROXIMATE_CONDITIONAL_TABLE_STYLE_WARNING] : []),
     ...nativeDocxApproximateHeaderFooterPolicyReasonsV1(headerFooter),
   ]
   for (const reason of reasons) if (!envelope.reasons.includes(reason)) envelope.reasons.push(reason)

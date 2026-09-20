@@ -159,7 +159,8 @@ export function projectNativeDocxAutomaticBordersV1(
         entry.cell_shading_rgb !== "FFFFFF") ||
       entry.conditional_cell_shading?.some(
         (cell) => cell.shading_rgb !== "FFFFFF",
-      )
+      ) ||
+      entry.conditional_cell_borders !== undefined
     )
       throw new TypeError(
         "Automatic borders require qualified white table fill",

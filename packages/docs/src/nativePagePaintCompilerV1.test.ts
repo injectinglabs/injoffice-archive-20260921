@@ -2363,6 +2363,19 @@ describe('native DOCX page-paint compiler v1', () => {
     expect(completed.page_paint_output.pages[0]!.commands.map((command) => command.kind)).toEqual(['fill_table_cell', 'fill_glyph_path', 'stroke_table_border', 'stroke_table_border', 'stroke_table_border', 'stroke_table_border'])
     expect(completed.page_paint_output.provenance.table_projection.sha256).toMatch(/^sha256:[0-9a-f]{64}$/)
   })
+  it('paints the per-cell edges the conditional table-style cascade resolved instead of the table-level borders', async () => {
+    const input = tableFixture()
+    const resolved = input.resolved_layout as NativeDocxResolvedLayoutInputV1
+    resolved.tables[0]!.conditional_cell_borders = [{ cell_id: 'cell:1', borders: { top: { style: 'none', size_eighth_points: 0 }, right: { style: 'single', size_eighth_points: 4, color_rgb: 'FF0000' }, bottom: { style: 'single', size_eighth_points: 12, color_rgb: 'F4B083' } } }]
+    const prepared = await prepareNativeDocxPagePaintV1(input)
+    const outline = prepared.outline_requests[0]!
+    const completed = await completeNativeDocxPagePaintV1({ prepared, outline_results: [{ status: 'outlined', face: outline.face, glyph_id: outline.glyph_id, units_per_em: 2_048, path: [{ kind: 'move_to', x: 0, y: 0 }, { kind: 'line_to', x: 1_000, y: 0 }, { kind: 'line_to', x: 1_000, y: 1_000 }, { kind: 'close_path' }] }] })
+    expect(completed.page_paint_output.status).toBe('painted')
+    if (completed.page_paint_output.status !== 'painted') return
+    const strokes = completed.page_paint_output.pages[0]!.commands.flatMap((command) => command.kind === 'stroke_table_border' ? [[command.edge, command.width_millipoints, command.stroke_rgb]] : [])
+    // The nil top edge and the unstated left edge paint nothing; the table's own 1 pt black rules are not consulted.
+    expect(strokes).toEqual([['right', 500, 'FF0000'], ['bottom', 1_500, 'F4B083']])
+  })
   it('strict requests attest the strict table projection for approximate-only-qualifiable tables', async () => {
     const input = tableFixture(), document = input.document as NativeDocxDocumentV1
     const table = document.body.blocks[0]!.table!

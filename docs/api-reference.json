@@ -3529,6 +3529,11 @@
               "signature": "export declare const DOCX_APPROXIMATE_COLUMN_SEPARATOR_WIDTH_MILLIPOINTS = 960"
             },
             {
+              "name": "DOCX_APPROXIMATE_CONDITIONAL_TABLE_STYLE_WARNING",
+              "kind": "const",
+              "signature": "export declare const DOCX_APPROXIMATE_CONDITIONAL_TABLE_STYLE_WARNING: 'Approximate read-only preview: conditional table-style regions (w:tblStylePr selected by w:tblLook) are resolved per cell into fills, paragraph/run properties and borders (approximate-conditional-table-style-v1); a shared edge takes the heavier border, an automatic border colour is painted black and a theme tint or shade is read from the authored value; this is not Word-validated layout.'"
+            },
+            {
               "name": "DOCX_APPROXIMATE_DRAWING_CHART_CODE",
               "kind": "const",
               "signature": "export declare const DOCX_APPROXIMATE_DRAWING_CHART_CODE: 'docx.approximate-drawing-chart-preview'"
@@ -5222,6 +5227,11 @@
               "name": "NativeDocxResolvedSourcePartsV1",
               "kind": "interface",
               "signature": "export interface NativeDocxResolvedSourcePartsV1"
+            },
+            {
+              "name": "NativeDocxResolvedTableCellBordersV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxResolvedTableCellBordersV1"
             },
             {
               "name": "NativeDocxResolvedTableCellShadingV1",

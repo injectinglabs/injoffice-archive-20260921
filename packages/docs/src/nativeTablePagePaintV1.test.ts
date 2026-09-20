@@ -1120,4 +1120,29 @@ describe('bounded native DOCX table page-paint geometry', () => {
     resolved.diagnostics.push(missingStyle)
     expect(isRenderNeutralLayoutDiagnostic(missingStyle, resolved)).toBe(false)
   })
+
+  it('validates conditional cell borders as four resolved edges per unique cell and treats them as a style effect', () => {
+    const edge = { style: 'single' as const, size_eighth_points: 12, color_rgb: 'F4B083' }
+    for (const [entries, ok] of [
+      [[{ cell_id: 'cell:1', borders: { top: { style: 'none', size_eighth_points: 0 }, bottom: edge } }], true],
+      [[{ cell_id: 'cell:1', borders: {} }], true],
+      [[{ cell_id: 'cell:1', borders: { top: edge } }, { cell_id: 'cell:1', borders: { top: edge } }], false],
+      [[{ cell_id: 'cell:1', borders: { inside_horizontal: edge } }], false],
+      [[{ cell_id: 'cell:1', borders: { top: { style: 'double', size_eighth_points: 4, color_rgb: 'F4B083' } } }], false],
+      [[{ cell_id: 'cell:1' }], false],
+      [[{ borders: { top: edge } }], false],
+      ['top', false],
+    ] as const) {
+      const resolved = structuredClone(fixture().resolved_layout) as NativeDocxResolvedLayoutInputV1
+      ;(resolved.tables[0] as unknown as Record<string, unknown>).conditional_cell_borders = structuredClone(entries)
+      expect(decodeNativeDocxResolvedLayout(resolved).ok, JSON.stringify(entries)).toBe(ok)
+    }
+    const resolved = fixture().resolved_layout
+    resolved.source_parts.styles_part = 'word/styles.xml'
+    resolved.tables[0]!.style_id = 'Tabellengitternetz'
+    resolved.tables[0]!.conditional_cell_borders = [{ cell_id: 'cell:1', borders: { top: edge } }]
+    const missingStyle = { code: 'MISSING_TABLE_STYLE', severity: 'unsupported' as const, scope_id: 'table:1', part_name: 'word/styles.xml', preservation: 'preserve-verbatim' as const, message: 'The referenced table style is missing and was not guessed' }
+    resolved.diagnostics.push(missingStyle)
+    expect(isRenderNeutralLayoutDiagnostic(missingStyle, resolved)).toBe(false)
+  })
 })
