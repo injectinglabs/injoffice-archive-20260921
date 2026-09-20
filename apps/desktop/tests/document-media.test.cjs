@@ -49,7 +49,7 @@ test('loadDocumentImages previews inline PNG and omits unsupported placement', a
   assert.equal(documentDrawings(model).length, 2);
   const cache = new Map();
   const first = await loadDocumentImages(reader, png, model, cache);
-  assert.ok(first.images.ok.startsWith('data:image/png;base64,'));
+  assert.ok(first.images.ok.startsWith('blob:'));
   assert.equal(first.images.float, undefined);
   assert.match(first.notice, /not shown/);
   let reads = 0;
@@ -58,11 +58,10 @@ test('loadDocumentImages previews inline PNG and omits unsupported placement', a
   assert.equal(reads, 0);
 });
 
-test('loadDocumentImages never splices the declared content type into the data URL', async () => {
-  const { loadDocumentImages, rasterDataUrlPrefix, isRasterDataUrl } = await loadMedia();
+test('loadDocumentImages mints blob URLs typed from a fixed table, never from the declared content type', async () => {
+  const { loadDocumentImages, rasterContentType, isPreviewImageUrl, releaseDocumentImages } = await loadMedia();
   const bytes = Buffer.from('raster-bytes');
   const reader = { readMedia: async () => bytes };
-  // A hostile or merely unexpected declared type must not reach the URL: the prefix is a lookup, not a template.
   const model = document([
     drawing('png'),
     drawing('jpeg', { content_type: 'image/jpeg' }),
@@ -71,24 +70,25 @@ test('loadDocumentImages never splices the declared content type into the data U
     drawing('spoof', { content_type: 'image/png;charset=x' }),
     drawing('none', { content_type: undefined }),
   ]);
-  const { images, notice } = await loadDocumentImages(reader, bytes, model, new Map());
-  assert.equal(images.png, 'data:image/png;base64,' + bytes.toString('base64'));
-  assert.equal(images.jpeg, 'data:image/jpeg;base64,' + bytes.toString('base64'));
+  const cache = new Map();
+  const { images, notice } = await loadDocumentImages(reader, bytes, model, cache);
+  assert.ok(isPreviewImageUrl(images.png) && isPreviewImageUrl(images.jpeg));
+  assert.notEqual(images.png, images.jpeg);
   for (const id of ['svg', 'html', 'spoof', 'none']) assert.equal(images[id], undefined, id);
   assert.match(notice, /4 images are preserved but not shown/);
-  assert.equal(rasterDataUrlPrefix('image/png'), 'data:image/png;base64,');
-  assert.equal(rasterDataUrlPrefix('text/html'), undefined);
-  assert.equal(rasterDataUrlPrefix('constructor'), undefined);
-  assert.equal(rasterDataUrlPrefix(undefined), undefined);
+  assert.equal(cache.size, 2);
+  releaseDocumentImages(cache);
+  assert.equal(cache.size, 0);
+  assert.equal(rasterContentType('image/png'), 'image/png');
+  assert.equal(rasterContentType('image/jpeg'), 'image/jpeg');
+  assert.equal(rasterContentType('text/html'), undefined);
+  assert.equal(rasterContentType('image/png;charset=x'), undefined);
+  assert.equal(rasterContentType('constructor'), undefined);
+  assert.equal(rasterContentType(undefined), undefined);
 });
 
-test('isRasterDataUrl admits only our own raster data URLs at the img sink', async () => {
-  const { isRasterDataUrl } = await loadMedia();
-  assert.equal(isRasterDataUrl('data:image/png;base64,AAAA'), true);
-  assert.equal(isRasterDataUrl('data:image/jpeg;base64,AAAA'), true);
-  assert.equal(isRasterDataUrl('data:text/html;base64,AAAA'), false);
-  assert.equal(isRasterDataUrl('data:image/svg+xml;base64,AAAA'), false);
-  assert.equal(isRasterDataUrl('javascript:alert(1)'), false);
-  assert.equal(isRasterDataUrl('https://example.test/x.png'), false);
-  assert.equal(isRasterDataUrl(undefined), false);
+test('isPreviewImageUrl admits only blob URLs at the img sink', async () => {
+  const { isPreviewImageUrl } = await loadMedia();
+  assert.equal(isPreviewImageUrl(URL.createObjectURL(new Blob([new Uint8Array([1])], { type: 'image/png' }))), true);
+  for (const bad of ['data:image/png;base64,AAAA', 'data:text/html;base64,AAAA', 'javascript:alert(1)', 'https://example.test/x.png', undefined]) assert.equal(isPreviewImageUrl(bad), false, String(bad));
 });
