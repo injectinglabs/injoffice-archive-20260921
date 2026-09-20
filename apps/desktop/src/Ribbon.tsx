@@ -1,4 +1,4 @@
-import { Children, useId, type ButtonHTMLAttributes, type KeyboardEvent, type ReactNode, type Ref } from 'react'
+import { Children, createContext, useContext, useId, type ButtonHTMLAttributes, type KeyboardEvent, type ReactNode, type Ref } from 'react'
 import RibbonIcon, { type RibbonIconName } from './RibbonIcons'
 import { shortcutKeys, shortcutTooltip, type ShortcutId } from './shortcuts'
 // ribbon.css is imported by each editor next to its own stylesheet so that
@@ -14,6 +14,22 @@ const hasContent = (node: ReactNode) => Children.toArray(node).length > 0
 /** Tabs that have at least one populated group, with their empty groups removed. */
 export function visibleRibbonTabs(tabs: RibbonTabSpec[]): RibbonTabSpec[] {
   return tabs.map(tab => ({ ...tab, groups: tab.groups.filter(group => hasContent(group.children)) })).filter(tab => tab.groups.length > 0)
+}
+
+/**
+ * Workspace commands the shell contributes to every editor's File tab (Office's
+ * backstage: Home, New, Open, Save, Save as…, Close, Updates). `before` groups
+ * precede the editor's own File groups (Export…) and `after` groups follow them.
+ */
+export interface WorkspaceFileGroups { before: RibbonGroupSpec[]; after: RibbonGroupSpec[] }
+export const WorkspaceFileGroupsContext = createContext<WorkspaceFileGroups | null>(null)
+
+/** The editor's tabs with the workspace File groups merged into (or added as) the File tab. */
+export function withWorkspaceFileGroups(tabs: RibbonTabSpec[], workspace: WorkspaceFileGroups | null): RibbonTabSpec[] {
+  if (!workspace) return tabs
+  const file = tabs.find(tab => tab.id === 'File') ?? { id: 'File', label: 'File', groups: [] }
+  const merged = { ...file, groups: [...workspace.before, ...file.groups, ...workspace.after] }
+  return tabs.includes(file) ? tabs.map(tab => tab === file ? merged : tab) : [merged, ...tabs]
 }
 
 export interface RibbonProps {
@@ -36,7 +52,7 @@ export interface RibbonProps {
  */
 export default function Ribbon({ label, tabs, active, onChange, quickAccess, trailing }: RibbonProps) {
   const id = useId()
-  const visible = visibleRibbonTabs(tabs)
+  const visible = visibleRibbonTabs(withWorkspaceFileGroups(tabs, useContext(WorkspaceFileGroupsContext)))
   const current = visible.find(tab => tab.id === active) ?? visible[0]
   const tabId = (tab: RibbonTabSpec) => `${id}-tab-${tab.id}`
   const panelId = (tab: RibbonTabSpec) => `${id}-panel-${tab.id}`
