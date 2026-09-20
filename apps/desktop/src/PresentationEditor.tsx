@@ -1,6 +1,7 @@
 import SlideArrangePanel from './SlideArrangePanel';
 import { arrangeCommand, arrangeTargets, toggleArrangeSelection, type ArrangeAction } from './presentationArrange';
 import ShapeArt from './ShapeArt';
+import PresentationTextToolbar from './PresentationTextToolbar';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { createPptxWasmClient, type PptxNativeExactAutoShapeV1, type PptxNativeExactParagraphV1, type PptxNativeMutationRequestV1 } from '@injoffice/pptx-wasm';
 import type { NativeElement, NativePptxDeck, NativeSlide, NativeTransform } from '@injoffice/pptx-native';
@@ -252,6 +253,7 @@ export default function PresentationEditor({ name, bytes, onChange, onBusyChange
       {tableInsertOpen && <div className="presentation-table-options" aria-label="Insert table"><label>Rows <input type="number" min="1" max="100" aria-label="New table rows" value={Number.isFinite(tableSize.rows) ? tableSize.rows : ''} onChange={event => setTableSize({ ...tableSize, rows: event.target.valueAsNumber })} /></label><label>Columns <input type="number" min="1" max="100" aria-label="New table columns" value={Number.isFinite(tableSize.columns) ? tableSize.columns : ''} onChange={event => setTableSize({ ...tableSize, columns: event.target.valueAsNumber })} /></label><button disabled={blocked} onClick={insertTable}>Insert table</button><button onClick={() => setTableInsertOpen(false)}>Cancel</button></div>}
       {draft && <div className="presentation-pending"><span>Pending changes</span><button className="presentation-primary" disabled={busy} onClick={applyDraft}>Apply changes</button><button disabled={busy} onClick={() => { updateDraft(undefined); setError(''); }}>Cancel</button></div>}
     </div>
+    <PresentationTextToolbar run={run} align={selectedParagraph?.align} disabled={busy || confirmDelete || !text || (!!draft && draft.kind !== 'text')} onRunChange={patch => textPatch(patch)} onAlignChange={align => textPatch({}, align)} />
     {error && <div className="presentation-error" role="alert"><span>{error}</span><button aria-label="Dismiss presentation error" onClick={() => setError('')}>×</button></div>}
     {!snapshot ? <div className="presentation-loading" role="status">{busy ? 'Opening presentation…' : 'This presentation could not be opened.'}</div> : <div className="presentation-layout">
       {!viewOptions?.focus && <nav className="presentation-thumbnails" aria-label="Slides"><div className="presentation-rail-title">Slides <span>{snapshot.deck.slides.length}</span></div>{snapshot.deck.slides.map((item, i) => <button key={item.id} className="presentation-thumbnail" disabled={blocked} aria-label={`Show slide ${i + 1}`} aria-current={index === i ? 'page' : undefined} onClick={() => selectSlide(i)}><span className="presentation-slide-number">{i + 1}</span><div className="presentation-thumb-stage"><SlideCanvas deck={snapshot.deck} slide={item} scale={148 / (snapshot.deck.size.cx / EMU_PER_PIXEL)} thumbnail /></div></button>)}</nav>}

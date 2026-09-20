@@ -8,6 +8,8 @@
 .presentation-toolbar > div { display: flex; gap: 5px; }
 .presentation-toolbar > div + div { padding-left: 10px; border-left: 1px solid var(--border-subtle); }
 .presentation-toolbar button { font-size: 12px; }
+.presentation-text-toolbar .formatting-toolbar { padding-inline: 14px; }
+.presentation-text-toolbar .formatting-toolbar button[aria-pressed=true] { color: var(--blue); }
 .presentation-toolbar .presentation-pending { align-items: center; margin-left: auto; font-size: 11px; gap: 9px; }
 .presentation-editor .presentation-primary { color: var(--accent-text); background: var(--accent-fill); border-color: var(--accent-fill); }
 .presentation-editor .presentation-primary:hover:enabled { background: var(--accent-hover); }
