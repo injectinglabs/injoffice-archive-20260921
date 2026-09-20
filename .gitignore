@@ -13,3 +13,5 @@ testdata/native-office-production-e2e/v1/host-observations/adapter-requests/*.js
 
 # electron-builder output for apps/desktop (unsigned and signed installers)
 apps/desktop/release/
+# Vite renderer output (electron/main.cjs serves injoffice://app from here)
+apps/desktop/renderer/
