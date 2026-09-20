@@ -7,6 +7,7 @@ save, recent-file history, recovery journal, renderer URL policy, blank
 DOCX/XLSX/PPTX/PDF seeds, the in-app update state machine, and the DOCX PDF
 export host and PDF text-replace host (worker-backed; painters land later). They do not import
 Electron. Electron is a desktop host dependency; renderer /src stays offline.
+Vite builds `src/main.tsx` into `apps/desktop/renderer` for the Electron host.
 `electron/main.cjs` is tested with a mock Electron. The start page
 is a React view with recents and create actions. The updates dialog talks to
 the host update state machine over `window.injDesktop`. Preferences persist
@@ -46,7 +47,8 @@ PresentationEditor is the PPTX canvas, inspector, and Present control that launc
 PdfEditor is the PDF page and annotation workspace; it applies through pdf-commands and does not import OfficeEditor.
 SpreadsheetCharts is the worksheet chart sidebar; empty selections disable insert and a valid range emits chart.insert.
 SpreadsheetEditor is the worksheet grid, formula bar, and native XLSX apply path; it does not import OfficeEditor.
-The rest of the renderer, GitHub provider, and packaging workflows land
+Vite builds the renderer from index.html and src/main.tsx into renderer/.
+The rest of the GitHub provider and packaging workflows land
 in follow-up changes. Preview builds never load an updater.
 
 Support, unsigned vs signed builds, and engine lockstep: [docs/DESKTOP.md](../../docs/DESKTOP.md).
