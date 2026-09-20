@@ -51,6 +51,11 @@ Unsigned developer previews are not public updates.
 Installer output belongs in `apps/desktop/release/` and is gitignored. Do not
 commit DMGs, NSIS installers, AppImages, or `latest-*.yml`.
 
+Packaging icons live in `apps/desktop/build/icons/`: `icon.png` (1024 × 1024,
+Linux), `icon.icns` (macOS), and `icon.ico` (Windows). They are nearest-neighbor
+conversions of repository-root `logo.png`. Regenerate on macOS with
+`python3 apps/desktop/build/icons/generate.py`.
+
 ### Unsigned developer previews
 
 GitHub Actions → **Desktop builds** (`.github/workflows/desktop.yml`,
