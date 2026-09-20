@@ -41,6 +41,7 @@
     },
     "files": [
       "electron/**/*.cjs",
+      "electron/icon.png",
       "renderer/**/*",
       "package.json"
     ],
