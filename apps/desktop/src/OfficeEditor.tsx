@@ -13,6 +13,7 @@ import PageLayoutControl,{type PagePatch} from './PageLayoutControl'
 import InsertTableControl from './InsertTableControl'
 import ParagraphToolbar, { type ParagraphPatch } from './ParagraphToolbar'
 import FormattingToolbar, { type FormattingPatch } from './FormattingToolbar'
+import SelectionToolbar from './SelectionToolbar'
 import { documentRangeFormattingValues, formattingValues, documentFormatting, documentParagraphFormatting, docxSelection, documentTableSelection, paragraphOperations, documentStructure, type ParagraphOperation } from './formatting'
 import {documentStatistics,statisticsWithDraft} from './document-statistics'
 import './office-editor.css'
@@ -522,6 +523,7 @@ export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDr
         {snapshot.preview.kind === 'docx' && <DocumentPreview replaceImage={typeof window!=='undefined'&&window.injDesktop?.pickAsset?id=>void replaceImage(id):undefined} deleteImage={id=>void deleteImage(id)} images={snapshot.preview.images} imageNotice={snapshot.preview.imageNotice} document={snapshot.preview.document} choose={choose} selected={selected} draft={draft} textRange={textRange} onTextRangeChange={setTextRange} caretOffset={caretOffset} joinPrevious={() => void joinPrevious()} insertLines={(text, caret) => void insertLines(text, caret)} updateDraft={updateDraft} apply={() => void apply()} cancel={cancelDraft} busy={busy} hasDraft={hasDraft} onCompositionChange={value=>{composingRef.current=value;setComposing(value);callbacks.current.onBusyChange?.(busy||value);if(!value&&draftPending.current)hiddenApplyRef.current?.schedule()}} zoom={zoom} navigation={(viewOptions?.navigation ?? true) && !viewOptions?.focus} />}
         </div>
       </div>
+      <SelectionToolbar values={toolbarValues} disabled={busy||composing} onChange={patch=>void changeFormatting(patch)} />
     </>}
     {statistics&&<footer className="office-document-status" aria-label="Document statistics" title="Body text including tables and pending edits. Headers, footers, notes and hidden text are excluded."><span>{statistics.words.toLocaleString()} words</span><span>{statistics.characters.toLocaleString()} characters</span><span>Body text{hasDraft?' · includes pending edits':''}</span></footer>}
     {!snapshot && !busy && <div className="office-empty">This file could not be opened. Choose another file to continue.</div>}

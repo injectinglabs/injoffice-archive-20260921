@@ -48,6 +48,7 @@ PresentationEditor is the PPTX canvas, inspector, and Present control that launc
 PdfEditor is the PDF page and annotation workspace; it applies through pdf-commands and does not import OfficeEditor.
 SpreadsheetCharts is the worksheet chart sidebar; empty selections disable insert and a valid range emits chart.insert.
 SpreadsheetEditor is the worksheet grid, formula bar, and native XLSX apply path; it does not import OfficeEditor.
+SelectionToolbar is the floating mini toolbar over a DOCX text selection; it renders the ribbon FormattingToolbar so formatting uses one path.
 Vite builds the renderer from index.html and src/main.tsx into renderer/.
 Packaging icons live in `build/icons/` as nearest-neighbor conversions of
 repository-root `logo.png`. `npm run dist` runs Vite then electron-builder
