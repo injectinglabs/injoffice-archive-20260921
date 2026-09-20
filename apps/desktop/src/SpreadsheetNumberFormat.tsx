@@ -1,3 +1,4 @@
+import { RibbonButton } from './Ribbon';
 /** Excel's Number group over the native XLSX `style.patch` number_format, plus a fail-closed Borders control. */
 
 /** Presets stay inside the qualified display subset (packages/sheets nativeCellDisplayV2) so the grid renders them rather than
@@ -34,12 +35,12 @@ export default function SpreadsheetNumberFormat({ numberFormat, disabled, onChan
   const more = adjustDecimals(current, 1), fewer = adjustDecimals(current, -1);
   const options = [...new Set([...Object.values(NUMBER_FORMAT_PRESETS), current])];
   return <div className="sheet-number-format" aria-label="Number format">
-    <select aria-label="Cell number format" disabled={disabled} value={current} onChange={event => onChange(event.target.value)}>{options.map(value => <option key={value} value={value}>{formatLabel(value)}</option>)}</select>
-    <button aria-label="Currency format" title="Currency" aria-pressed={Boolean(parsed?.prefix)} disabled={disabled} onClick={() => onChange(NUMBER_FORMAT_PRESETS.currency)}>$</button>
-    <button aria-label="Percent format" title="Percent" aria-pressed={Boolean(parsed?.percent)} disabled={disabled} onClick={() => onChange(NUMBER_FORMAT_PRESETS.percent)}>%</button>
-    <button aria-label="Comma style" title="Comma style" aria-pressed={Boolean(parsed?.grouped && !parsed.prefix && !parsed.suffix)} disabled={disabled} onClick={() => onChange(NUMBER_FORMAT_PRESETS.comma)}>,</button>
-    <button aria-label="Increase decimals" title={more ? 'Increase decimals' : DECIMALS_UNSUPPORTED} disabled={disabled || !more} onClick={() => more && onChange(more)}>+.0</button>
-    <button aria-label="Decrease decimals" title={fewer ? 'Decrease decimals' : DECIMALS_UNSUPPORTED} disabled={disabled || !fewer} onClick={() => fewer && onChange(fewer)}>-.0</button>
+    <select aria-label="Cell number format" title="Number format" disabled={disabled} value={current} onChange={event => onChange(event.target.value)}>{options.map(value => <option key={value} value={value}>{formatLabel(value)}</option>)}</select>
+    <RibbonButton icon="currency" label="Currency format" title="Currency" labelHidden aria-pressed={Boolean(parsed?.prefix)} disabled={disabled} onClick={() => onChange(NUMBER_FORMAT_PRESETS.currency)} />
+    <RibbonButton icon="percent" label="Percent format" title="Percent" labelHidden aria-pressed={Boolean(parsed?.percent)} disabled={disabled} onClick={() => onChange(NUMBER_FORMAT_PRESETS.percent)} />
+    <RibbonButton icon="comma" label="Comma style" labelHidden aria-pressed={Boolean(parsed?.grouped && !parsed.prefix && !parsed.suffix)} disabled={disabled} onClick={() => onChange(NUMBER_FORMAT_PRESETS.comma)} />
+    <RibbonButton icon="decimalsMore" label="Increase decimals" title={more ? 'Increase decimals' : DECIMALS_UNSUPPORTED} labelHidden disabled={disabled || !more} onClick={() => more && onChange(more)} />
+    <RibbonButton icon="decimalsFewer" label="Decrease decimals" title={fewer ? 'Decrease decimals' : DECIMALS_UNSUPPORTED} labelHidden disabled={disabled || !fewer} onClick={() => fewer && onChange(fewer)} />
   </div>;
 }
 

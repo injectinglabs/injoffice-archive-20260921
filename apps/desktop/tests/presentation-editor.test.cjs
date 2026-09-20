@@ -86,8 +86,9 @@ async function until(predicate) {
   throw new Error('Editor did not settle');
 }
 
+const text = node => node.children.map(child => typeof child === 'string' ? child : text(child)).join('');
 function button(view, label) {
-  return view.root.findAllByType('button').find(node => node.props.children === label);
+  return view.root.findAllByType('button').find(node => node.props.children === label || text(node) === label);
 }
 
 test('PresentationEditor reports busy, applies a slide insert, and Present mounts PresentationPlayer', async () => {
@@ -123,5 +124,43 @@ test('PresentationEditor reports busy, applies a slide insert, and Present mount
     if (view) await act(async () => view.unmount());
     delete globalThis.__pptxClient;
     delete globalThis.__presentationPlayer;
+  }
+});
+
+test('PresentationEditor arranges its controls as a PowerPoint ribbon with labelled groups and icons', async () => {
+  const client = mockClient();
+  globalThis.__pptxClient = client;
+  const PresentationEditor = await loadEditor();
+  const busy = [];
+  let view;
+  try {
+    await act(async () => {
+      view = create(React.createElement(PresentationEditor, { name: 'Deck.pptx', bytes: new Uint8Array([1]), onChange: () => {}, onBusyChange: value => busy.push(value) }));
+    });
+    await until(() => busy.at(-1) === false && view.root.findAllByProps({ 'aria-label': 'Show slide 1' }).length > 0);
+    assert.deepEqual(view.root.findAllByProps({ role: 'tab' }).map(text), ['File', 'Home', 'Insert', 'Design', 'Slide Show']);
+    const panels = view.root.findAllByProps({ role: 'tabpanel' });
+    const groups = panel => panel.findAllByProps({ role: 'group' }).map(group => group.props['aria-label']);
+    assert.deepEqual(groups(panels[0]), ['Export']);
+    assert.deepEqual(groups(panels[1]), ['Slides', 'Font', 'Paragraph', 'Drawing']);
+    assert.deepEqual(groups(panels[2]), ['Tables', 'Images', 'Illustrations', 'Text']);
+    assert.deepEqual(groups(panels[3]), ['Customize']);
+    assert.deepEqual(groups(panels[4]), ['Start Slide Show']);
+    assert.equal(view.root.findByProps({ role: 'toolbar' }).props['aria-label'], 'Quick access');
+    const commandButtons = [...view.root.findAllByProps({ role: 'group' }).flatMap(group => group.findAllByType('button')), ...view.root.findByProps({ role: 'toolbar' }).findAllByType('button')];
+    assert.ok(commandButtons.length >= 18, `command buttons: ${commandButtons.length}`);
+    for (const node of commandButtons) {
+      assert.equal(node.findAllByType('svg').length, 1, `${node.props.title} has an icon`);
+      assert.ok(node.props.title, 'every command button has a tooltip');
+    }
+    const byLabel = Object.fromEntries(commandButtons.map(node => [node.props['aria-label'] ?? text(node), node]));
+    assert.match(byLabel.Underline.props.title, /not supported by the native PPTX transaction/);
+    assert.match(byLabel.Bullets.props.title, /not supported by the native PPTX transaction/);
+    assert.match(byLabel.Undo.props.title, /^Undo \(/);
+    assert.equal(byLabel.Present.props.disabled, false);
+    assert.equal(view.root.findByProps({ 'aria-label': 'Slide background' }) != null, true);
+  } finally {
+    if (view) await act(async () => view.unmount());
+    delete globalThis.__pptxClient;
   }
 });
