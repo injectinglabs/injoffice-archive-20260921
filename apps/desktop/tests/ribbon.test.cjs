@@ -125,6 +125,7 @@ test('ribbon buttons carry an icon, a label, and the shortcut in their tooltip',
 
 test('the shell contributes Office backstage groups to every editor File tab through context', async () => {
   const { default: Ribbon, RibbonButton, WorkspaceFileGroupsContext, withWorkspaceFileGroups, visibleRibbonTabs } = await load('Ribbon.tsx');
+  const { shortcutTooltip } = await load('shortcuts.ts');
   const clicks = [];
   const workspace = {
     before: [{ id: 'workspace-home', label: 'Start', children: h(RibbonButton, { icon: 'home', label: 'Home', onClick: () => clicks.push('home') }) }, { id: 'workspace-open-save', label: 'Open & Save', children: h(RibbonButton, { icon: 'open', label: 'Open', shortcut: 'open' }) }],
@@ -148,7 +149,7 @@ test('the shell contributes Office backstage groups to every editor File tab thr
   assert.deepEqual(view.root.findAllByProps({ role: 'tab' }).map(text), ['File', 'Home']);
   assert.deepEqual(view.root.findAllByProps({ role: 'group' }).map(group => group.props['aria-label']), ['Start', 'Open & Save', 'Export', 'Close', 'Font']);
   const open = view.root.findAllByType('button').find(button => text(button) === 'Open');
-  assert.equal(open.props.title, 'Open (⌘O)');
+  assert.equal(open.props.title, shortcutTooltip('Open', 'open'), 'the tooltip carries the platform shortcut');
   await act(async () => view.root.findAllByType('button').find(button => button.props.role !== 'tab' && text(button) === 'Home').props.onClick());
   assert.deepEqual(clicks, ['home']);
   await act(async () => { view = create(h(Ribbon, { label: 'Spreadsheet tools', tabs: emptyFile, active: 'File', onChange() {} })); });

@@ -9,6 +9,12 @@ async function loadApp({busyOnMount=false} = {}) {
   const bundle = await rolldown({ input: path.resolve(__dirname, '../src/App.tsx'), platform: 'node', external: id => /^react(?:\/|$)/.test(id), transform: { jsx: { runtime: 'automatic' } }, plugins: [{ name: 'workspace-boundaries', resolveId(id) { if(id==='./UpdatesDialog')return '\0mock-updates'; if(id==='./spreadsheetDelimited')return '\0mock-delimited'; if (id.endsWith('.css')) return '\0css'; if (['./OfficeEditor', './PdfEditor', './PresentationEditor', './SpreadsheetEditor', './StartPage'].includes(id) || id.endsWith('.png')) return '\0mock:' + id; }, load(id) { if(id==='\0css')return 'export default ""'; if(id==='\0mock-updates')return 'export const UpdateNotice=()=>null; export default ()=>null;'; if(id==='\0mock-delimited')return 'export const importDelimitedWorkbook=(...args)=>globalThis.__importDelimited(...args)'; if (id.startsWith('\0mock:')) return id.endsWith('.png') ? 'export default "logo.png";' : id.endsWith('StartPage') ? `import React from 'react'; export default function StartPage(props) { return React.createElement('test-start', props); }` : `import React from 'react'; import { WorkspaceFileGroupsContext } from ${JSON.stringify(path.resolve(__dirname, '../src/Ribbon.tsx'))}; export function SpreadsheetEditor(props) { ${busyOnMount ? 'React.useEffect(()=>{props.onBusyChange?.(true)},[]);' : ''} const file = React.useContext(WorkspaceFileGroupsContext); return React.createElement('test-editor', props, React.createElement('test-file-tab', null, ...[...file.before, ...file.after].map(group => React.createElement('test-file-group', { key: group.id, label: group.label }, group.children)))); } export default SpreadsheetEditor;`; } }] });
   try { const { output } = await bundle.generate({ format: 'cjs', codeSplitting: false }); const result = { exports: {} }; new Function('require', 'module', 'exports', output[0].code)(require, result, result.exports); return result.exports.default ?? result.exports; } finally { await bundle.close(); }
 }
+// Tooltips spell the shortcut per platform (⌘ on macOS, Ctrl elsewhere), so tests derive them from shortcuts.ts.
+async function loadShortcuts() {
+  const { rolldown } = await import('rolldown');
+  const bundle = await rolldown({ input: path.resolve(__dirname, '../src/shortcuts.ts'), platform: 'node' });
+  try { const { output } = await bundle.generate({ format: 'cjs' }); const result = { exports: {} }; new Function('require', 'module', 'exports', output[0].code)(require, result, result.exports); return result.exports; } finally { await bundle.close(); }
+}
 test('workspace tabs retain independent bytes and editor instances; save and close target only their session', async () => {
   const App = await loadApp();
   const saves = [], checkpoints = [], closed = [], histories = [];
@@ -221,7 +227,7 @@ test('unsupported open replaces the start page with OpenError instead of an empt
 });
 
 test('the File tab backstage carries Home, New, Open, Save, Save as, Close and app entries into every editor ribbon', async () => {
-  const App = await loadApp(); const saves = [], closed = []; let renderer;
+  const App = await loadApp(); const { shortcutTooltip } = await loadShortcuts(); const saves = [], closed = []; let renderer;
   global.window = { localStorage: { getItem: () => null, setItem() {} }, document: { title: '' }, addEventListener() {}, removeEventListener() {}, injDesktop: {
     recent: async () => [], recovery: async () => [], nextExternal: async () => null, setDirty() {}, setBusy() {}, onMenuAction() { return () => {}; }, checkpoint: async () => {},
     create: async format => ({ id: `id-${format}`, name: `Untitled.${format}`, bytes: new Uint8Array([1]), untitled: true }),
@@ -234,10 +240,10 @@ test('the File tab backstage carries Home, New, Open, Save, Save as, Close and a
     const groups = renderer.root.findAllByType('test-file-group');
     assert.deepEqual(groups.map(group => group.props.label), ['Start', 'New', 'Open & Save', 'Close', 'InjOffice']);
     const button = title => renderer.root.findAllByType('button').find(node => node.props.title === title);
-    assert.equal(button('Save (⌘S)').props.disabled, false, 'a freshly created document is unsaved, so Save is enabled');
-    await act(async () => button('Save as… (⌘⇧S)').props.onClick());
+    assert.equal(button(shortcutTooltip('Save', 'save')).props.disabled, false, 'a freshly created document is unsaved, so Save is enabled');
+    await act(async () => button(shortcutTooltip('Save as…', 'saveAs')).props.onClick());
     assert.deepEqual(saves, [true]);
-    assert.equal(button('Save (⌘S)').props.disabled, true, 'Save greys out once the document is saved');
+    assert.equal(button(shortcutTooltip('Save', 'save')).props.disabled, true, 'Save greys out once the document is saved');
     await act(async () => button('New spreadsheet (XLSX)').props.onClick());
     assert.deepEqual(renderer.root.findAllByType('test-editor').map(editor => editor.props.name), ['Untitled.docx', 'Untitled.xlsx']);
     await act(async () => button('Start page: create, open recent or recover').props.onClick());
