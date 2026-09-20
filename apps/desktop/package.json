@@ -7,7 +7,9 @@
   "author": "Injecting Inc.",
   "license": "Apache-2.0",
   "main": "electron/main.cjs",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "build": "vite build",
     "start": "electron .",
@@ -38,6 +40,7 @@
     },
     "files": [
       "electron/**/*.cjs",
+      "electron/icon.png",
       "renderer/**/*",
       "package.json"
     ],
