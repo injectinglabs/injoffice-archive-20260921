@@ -52,3 +52,12 @@ test('desktop icons are nearest-neighbor conversions of the repository logo', ()
   assert.match(generate, /Image\.Resampling\.NEAREST/);
   assert.equal(fs.existsSync(path.resolve(__dirname, '../../../logo.png')), true);
 });
+
+test('the window icon the host loads is the tracked packaging icon and is packaged', () => {
+  const windowIcon = fs.readFileSync(path.resolve(__dirname, '../electron/icon.png'));
+  assert.equal(windowIcon.equals(fs.readFileSync(path.join(icons, 'icon.png'))), true, 'electron/icon.png must be a copy of build/icons/icon.png');
+  const host = fs.readFileSync(path.resolve(__dirname, '../electron/main.cjs'), 'utf8');
+  assert.match(host, /icon: path\.join\(__dirname, 'icon\.png'\)/);
+  const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../package.json'), 'utf8'));
+  assert.ok(pkg.build.files.includes('electron/icon.png'), 'electron-builder files must include the window icon');
+});

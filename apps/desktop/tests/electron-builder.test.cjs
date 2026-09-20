@@ -17,7 +17,7 @@ test('electron-builder packages the Vite renderer and Electron host, not dist/',
   assert.equal(pkg.build.directories.output, 'release');
   assert.equal(pkg.build.electronVersion, '43.7.0');
   assert.equal(pkg.build.publish, null);
-  assert.deepEqual(pkg.build.files, ['electron/**/*.cjs', 'renderer/**/*', 'package.json']);
+  assert.deepEqual(pkg.build.files, ['electron/**/*.cjs', 'electron/icon.png', 'renderer/**/*', 'package.json']);
   assert.ok(!pkg.build.files.some(pattern => pattern.startsWith('dist/')));
   assert.equal(pkg.build.mac.icon, 'build/icons/icon.icns');
   assert.equal(pkg.build.win.icon, 'build/icons/icon.ico');
