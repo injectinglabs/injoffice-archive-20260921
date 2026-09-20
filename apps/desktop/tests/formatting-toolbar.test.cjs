@@ -12,6 +12,11 @@ async function load(file) {
     platform: 'node',
     external: id => /^react(?:\/|$)/.test(id) || id.includes('packages/docs/src/'),
     transform: { jsx: { runtime: 'automatic' } },
+    plugins: [{
+      name: 'css',
+      resolveId(id) { if (id.endsWith('.css')) return '\0css'; },
+      load(id) { if (id === '\0css') return 'export default ""'; },
+    }],
   });
   try {
     const { output } = await bundle.generate({ format: 'cjs', codeSplitting: false });

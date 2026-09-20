@@ -45,6 +45,19 @@ async function loadEditor(client) {
   }
 }
 
+async function loadModule(file) {
+  const { rolldown } = await import('rolldown');
+  const bundle = await rolldown({ input: path.resolve(__dirname, '../src', file), platform: 'node', external: id => /^react(?:\/|$)/.test(id) });
+  try {
+    const { output } = await bundle.generate({ format: 'cjs', codeSplitting: false });
+    const mod = { exports: {} };
+    new Function('require', 'module', 'exports', output[0].code)(require, mod, mod.exports);
+    return mod.exports;
+  } finally {
+    await bundle.close();
+  }
+}
+
 function tinyDocument(text = '') {
   const paragraph = {
     id: 'p1', can_format_range: true,
@@ -302,4 +315,37 @@ test('OfficeEditor commit applies a pending debounce once', async t => {
   for (let count = 0; count < 10; count++) await act(async () => Promise.resolve());
   assert.equal(nativeApplies(client).length, 1);
   await act(async () => view.unmount());
+});
+
+test('OfficeEditor arranges its controls as a Word ribbon with labelled groups, icons, and shortcut tooltips', async () => {
+  const { shortcutLabel } = await loadModule('shortcuts.ts');
+  const client = mockClient(tinyDocument('Hello'));
+  const { view } = await mountEditor(client);
+  const text = node => node.children.map(child => typeof child === 'string' ? child : text(child)).join('');
+  try {
+    const tabs = view.root.findAllByProps({ role: 'tab' }).map(text);
+    assert.deepEqual(tabs, ['Home', 'Insert', 'Layout'], 'File is omitted without a PDF export bridge; no tab is ever empty');
+    const panels = view.root.findAllByProps({ role: 'tabpanel' });
+    const groups = panel => panel.findAllByProps({ role: 'group' }).map(group => group.props['aria-label']);
+    assert.deepEqual(groups(panels[0]), ['Font', 'Paragraph', 'Styles', 'Editing']);
+    assert.deepEqual(groups(panels[1]), ['Tables', 'Links', 'Text']);
+    assert.deepEqual(groups(panels[2]), ['Paragraph'], 'Page Setup is dropped when the document has no single section');
+    assert.equal(view.root.findByProps({ role: 'toolbar' }).props['aria-label'], 'Quick access');
+    const quick = view.root.findByProps({ role: 'toolbar' }).findAllByType('button');
+    assert.deepEqual(quick.map(button => button.props.title), [`Undo (${shortcutLabel('undo')})`, `Redo (${shortcutLabel('redo')})`]);
+    const commandButtons = [...view.root.findAllByProps({ role: 'group' }).flatMap(group => group.findAllByType('button')), ...quick];
+    assert.ok(commandButtons.length >= 10, `command buttons: ${commandButtons.length}`);
+    for (const button of commandButtons) {
+      assert.equal(button.findAllByType('svg').length, 1, `${button.props.title} has an icon`);
+      assert.ok(button.props.title, 'every command button has a tooltip');
+    }
+    const titles = Object.fromEntries(commandButtons.map(button => [button.props['aria-label'] ?? text(button), button.props.title]));
+    assert.equal(titles.Bold, `Bold (${shortcutLabel('bold')})`);
+    assert.equal(titles.Italic, `Italic (${shortcutLabel('italic')})`);
+    assert.equal(titles.Underline, `Underline (${shortcutLabel('underline')})`);
+    assert.equal(titles['Find / replace'], `Find / replace (${shortcutLabel('find')})`);
+    assert.equal(view.root.findAllByProps({ className: 'office-toolbar' })[0].findAllByType('button').length, 0, 'no editing row buttons before a run is chosen');
+  } finally {
+    await act(async () => view.unmount());
+  }
 });
