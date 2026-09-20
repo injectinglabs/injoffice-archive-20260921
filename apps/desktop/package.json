@@ -7,7 +7,9 @@
   "author": "Injecting Inc.",
   "license": "Apache-2.0",
   "main": "electron/main.cjs",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "build": "vite build",
     "start": "electron .",
@@ -58,6 +60,7 @@
     },
     "linux": {
       "maintainer": "Injecting Inc.",
+      "executableName": "injoffice",
       "target": [
         "AppImage",
         "deb",
