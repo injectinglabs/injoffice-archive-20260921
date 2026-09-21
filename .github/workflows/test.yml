@@ -64,6 +64,7 @@ jobs:
       - run: npm run test:dependency-integrity
       - run: npm run test:declaration-specifiers
       - run: npm run check:packages
+      - run: npm run check:collab-consumer
       - name: Every workspace test script is assigned to a ts-tests shard
         run: node scripts/run-ci-test-shard.mjs --check
 

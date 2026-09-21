@@ -1,3 +1,4 @@
+export type { SheetPresenceHost, SheetPresenceCoordinates, SheetPresenceDisposable } from './sheetPresenceHost'
 export { PresenceManager, type PresenceOptions, type CommandServiceLike, type ResyncReason } from './manager'
 export { PresenceState } from './presence'
 export { DocPresenceManager } from './docManager'

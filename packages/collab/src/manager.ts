@@ -1,12 +1,5 @@
-import type { IDisposable, IRange } from '@univerjs/core'
-import type { FUniver } from '@univerjs/core/lib/facade'
 import type { ComponentType } from 'react'
-// Side-effect type imports: the facade's sheet/UI surface (getActiveWorkbook,
-// highlightRanges, Event.SelectionChanged, …) exists only as module
-// augmentations — see packages/charts/src/manager.ts for the same note.
-import type {} from '@univerjs/sheets/lib/facade'
-import type {} from '@univerjs/sheets-ui/lib/facade'
-import type {} from '@univerjs/ui/lib/facade'
+import type { SheetPresenceCoordinates, SheetPresenceDisposable, SheetPresenceHost } from './sheetPresenceHost'
 import { PresenceState } from './presence'
 import { SheetPresenceLabel, SheetPresencePopup, type SheetPresenceLabelProps } from './SheetPresenceLabel'
 import { sameSelection, withAlpha } from './selection'
@@ -60,7 +53,7 @@ import type { CollabTransport, FileChange, PeerInfo, SheetSelection } from './ty
 
 /** The slice of Univer's ICommandService the sync layer needs (DI-resolved by the host). */
 export interface CommandServiceLike {
-  onMutationExecutedForCollab(listener: (info: MutationInfo, options?: ExecOptions) => void): IDisposable
+  onMutationExecutedForCollab(listener: (info: MutationInfo, options?: ExecOptions) => void): SheetPresenceDisposable
   syncExecuteCommand(id: string, params?: object, options?: ExecOptions): unknown
 }
 
@@ -84,12 +77,12 @@ let nextPresenceManagerId = 1
 
 export class PresenceManager {
   readonly state = new PresenceState()
-  private readonly api: FUniver
+  private readonly api: SheetPresenceHost
   private readonly transport: CollabTransport
   private readonly opts: PresenceOptions & { publishIntervalMs: number }
   private readonly peerLabelKey = `injoffice.sheet.presence-label.${nextPresenceManagerId++}`
   private readonly disposables: Array<() => void> = []
-  private readonly peerVisuals = new Map<string, IDisposable[]>()
+  private readonly peerVisuals = new Map<string, SheetPresenceDisposable[]>()
   private readonly peerLabelTimers = new Map<string, ReturnType<typeof setTimeout>>()
   private readonly changeListeners = new Set<() => void>()
   private readonly fileListeners = new Set<(c: FileChange) => void>()
@@ -113,7 +106,7 @@ export class PresenceManager {
   private catchingUp: Promise<void> | null = null
   private resynced = false
 
-  constructor(api: FUniver, transport: CollabTransport, opts: PresenceOptions) {
+  constructor(api: SheetPresenceHost, transport: CollabTransport, opts: PresenceOptions) {
     this.api = api
     this.transport = transport
     this.opts = { publishIntervalMs: 80, peerLabelComponent: SheetPresenceLabel, ...opts }
@@ -530,7 +523,7 @@ export class PresenceManager {
     if (!ws || ws.getSheetId() !== sel.sheet) return
     try {
       const ranges = sel.ranges.map(([r0, c0, r1, c1]) => ws.getRange(r0, c0, r1 - r0 + 1, c1 - c0 + 1))
-      const visuals: IDisposable[] = []
+      const visuals: SheetPresenceDisposable[] = []
       visuals.push(ws.highlightRanges(
         ranges,
         {
@@ -582,7 +575,7 @@ export class PresenceManager {
   }
 }
 
-function toSelection(sheetId: string, ranges: IRange[], mode: NonNullable<SheetSelection['mode']>): SheetSelection {
+function toSelection(sheetId: string, ranges: SheetPresenceCoordinates[], mode: NonNullable<SheetSelection['mode']>): SheetSelection {
   const out: SheetSelection = {
     sheet: sheetId,
     ranges: ranges.slice(0, 64).map((r) => [r.startRow, r.startColumn, r.endRow, r.endColumn]),
@@ -593,7 +586,7 @@ function toSelection(sheetId: string, ranges: IRange[], mode: NonNullable<SheetS
   return out
 }
 
-function currentSelection(api: FUniver, mode: NonNullable<SheetSelection['mode']>): SheetSelection | null {
+function currentSelection(api: SheetPresenceHost, mode: NonNullable<SheetSelection['mode']>): SheetSelection | null {
   const ws = api.getActiveWorkbook()?.getActiveSheet()
   if (!ws) return null
   const r = ws.getSelection()?.getActiveRange()?.getRange()

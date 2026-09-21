@@ -47,6 +47,7 @@
     "test:release-packages": "node --test scripts/release-packages.test.mjs",
     "test:declaration-specifiers": "node --test scripts/fix-declaration-specifiers.test.mjs",
     "check:typescript-version": "node scripts/check-typescript-version.mjs",
+    "check:collab-consumer": "node scripts/smoke-collab-consumer.mjs",
     "check:consumer": "node scripts/smoke-consumer.mjs",
     "qualify:office-performance": "node scripts/qualify-office-performance.mjs",
     "qualify:office-reproducibility": "node scripts/qualify-native-office-repro.mjs",

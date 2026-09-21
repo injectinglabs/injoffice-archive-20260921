@@ -112,8 +112,17 @@ root `package.json`, then run `npm install` and `npm audit`:
 
 This addresses the identified NanoID advisory, not every future dependency issue.
 The blank-consumer smoke test uses the same explicit mitigation. Published 0.1.0
-tarballs are unchanged. Removing unnecessary editor peers or adopting a qualified
-Univer upgrade belongs in a subsequent package release.
+tarballs are unchanged. The unreleased collaboration package now uses an
+InjOffice-owned `SheetPresenceHost` contract and no longer declares a Univer
+peer. A dedicated isolated-consumer gate checks its packed runtime, strict
+TypeScript declarations, and dependency tree without root overrides. This avoids
+automatically installing a sheet editor for document/PDF collaboration, but hosts
+that install affected Univer versions still need the mitigation above.
+
+A fresh registry install verified on 2026-09-21 resolves
+`@injoffice/collab@0.1.0` → `@univerjs/core@0.25.2` → `nanoid@5.1.11` and reports
+three related high-severity audit entries. The fix in source needs a subsequent
+package release; it is not a retroactive repair of 0.1.0.
 
 The online advisory snapshot is not part of the deterministic license/SBOM gate.
 Rerun it before release because registry advisory state changes over time, and

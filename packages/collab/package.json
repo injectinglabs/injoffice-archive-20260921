@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "license": "Apache-2.0",
   "author": "Injecting Inc.",
-  "description": "Real-time collaboration for Univer OSS sheets: presence (who has the file open, coloured remote selections) and live followers, over a host-supplied transport.",
+  "description": "Client-side document collaboration: presence, ordered-operation synchronization, and live followers over a host-supplied transport, with a compatible sheet-editor adapter.",
   "engines": { "node": ">=22" },
   "type": "module",
   "main": "./dist/index.js",
@@ -29,7 +29,6 @@
     "test": "vitest run"
   },
   "peerDependencies": {
-    "@univerjs/core": "^0.25.1",
     "react": ">=18"
   },
   "devDependencies": {
