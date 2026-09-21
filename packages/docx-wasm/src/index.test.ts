@@ -377,6 +377,35 @@ describe('DOCX WASM package client', () => {
     expect(() => client.apply(new Uint8Array([1]), fixtureDocument, mixed)).toThrow(/may not mix text replacements/)
   })
 
+  it('carries paragraph alignment on its own paragraph anchor', async () => {
+    const worker = new FakeWorker()
+    const client = createDocxWasmClient({ workerFactory: () => worker })
+    const aligned = { ...envelope(), payload: { mutations: [{
+      target_kind: 'paragraph' as const,
+      target_id: fixtureParagraph.id,
+      expected_xml_sha256: fixtureParagraph.anchor.xml_sha256,
+      properties: { alignment: 'center' as const },
+    }] } }
+    await expect(client.apply(new Uint8Array([1]), fixtureDocument, aligned)).resolves.toEqual(new Uint8Array([4, 5, 6]))
+    const alignment = (properties: unknown, extra: Record<string, unknown> = {}) => ({ ...envelope(), payload: { mutations: [{
+      target_kind: 'paragraph' as const,
+      target_id: fixtureParagraph.id,
+      expected_xml_sha256: fixtureParagraph.anchor.xml_sha256,
+      properties,
+      ...extra,
+    }] } } as unknown as NativeDocxOfficeMutationEnvelopeV1)
+    expect(() => client.apply(new Uint8Array([1]), fixtureDocument, alignment({ alignment: 'middle' }))).toThrow(/alignment is outside/)
+    expect(() => client.apply(new Uint8Array([1]), fixtureDocument, alignment({ alignment: 'center', bold: true }))).toThrow(/alignment on its own/)
+    expect(() => client.apply(new Uint8Array([1]), fixtureDocument, alignment({ alignment: 'center' }, { range: { start_utf16: 0, end_utf16: 2 } }))).toThrow(/takes no range/)
+    const onRun = { ...envelope(), payload: { mutations: [{
+      target_kind: 'run' as const,
+      target_id: fixtureRun.id,
+      expected_xml_sha256: fixtureRun.anchor.xml_sha256,
+      properties: { alignment: 'center' },
+    }] } } as unknown as NativeDocxOfficeMutationEnvelopeV1
+    expect(() => client.apply(new Uint8Array([1]), fixtureDocument, onRun)).toThrow(/needs a paragraph target/)
+  })
+
   it('refuses paragraph targets with multiple runs and paragraph/run overlap', () => {
     const client = createDocxWasmClient({ workerFactory: () => new FakeWorker() })
     const unsupported = envelope(multiRunDocument)

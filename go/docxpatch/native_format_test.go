@@ -234,3 +234,80 @@ func TestApplyNativeMutationPayloadV1RoutesBothPayloadShapes(t *testing.T) {
 		t.Fatal("an unknown mutation field was accepted")
 	}
 }
+
+func TestApplyNativeFormatMutationsV1AlignsAParagraph(t *testing.T) {
+	for name, testCase := range map[string]struct{ body, want string }{
+		"no paragraph properties": {
+			`<w:p w14:paraId="01020304"><w:r><w:t>Quarterly report</w:t></w:r></w:p>`,
+			`<w:p w14:paraId="01020304"><w:pPr><w:jc w:val="center"/></w:pPr><w:r><w:t>Quarterly report</w:t></w:r></w:p>`,
+		},
+		"existing properties keep their order": {
+			`<w:p w14:paraId="01020304"><w:pPr><w:pStyle w:val="Keep"/><w:keepNext/></w:pPr><w:r><w:t>Quarterly report</w:t></w:r></w:p>`,
+			`<w:p w14:paraId="01020304"><w:pPr><w:pStyle w:val="Keep"/><w:keepNext/><w:jc w:val="center"/></w:pPr><w:r><w:t>Quarterly report</w:t></w:r></w:p>`,
+		},
+		"existing alignment is replaced in place": {
+			`<w:p w14:paraId="01020304"><w:pPr><w:jc w:val="right"/><w:keepLines/></w:pPr><w:r><w:t>Quarterly report</w:t></w:r></w:p>`,
+			`<w:p w14:paraId="01020304"><w:pPr><w:jc w:val="center"/><w:keepLines/></w:pPr><w:r><w:t>Quarterly report</w:t></w:r></w:p>`,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			source, doc := nativeFormatSource(t, testCase.body)
+			paragraph := doc.Body.Blocks[0].Paragraph
+			center := "center"
+			result, err := ApplyNativeFormatMutationsV1(source, doc.Source.PackageSHA256, []NativeDOCXFormatMutationV1{{
+				TargetKind: "paragraph", TargetID: paragraph.ID, ExpectedXMLSHA256: paragraph.Anchor.XMLSHA256,
+				ParagraphProperties: &NativeDOCXParagraphPropertyPatchV1{Alignment: &center},
+			}})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := string(readNativeZipPart(t, result.Package, "word/document.xml")); got != nativeMutationMain(testCase.want) {
+				t.Fatalf("alignment patch was not exact:\n got %s\nwant %s", got, nativeMutationMain(testCase.want))
+			}
+			if after := result.Document.Body.Blocks[0].Paragraph.Properties; after.Alignment == nil || *after.Alignment != "center" {
+				t.Fatalf("re-extracted paragraph properties = %#v", after)
+			}
+		})
+	}
+}
+
+func TestApplyNativeMutationPayloadV1AlignsAndRefusesMisplacedAlignment(t *testing.T) {
+	source, doc := nativeFormatSource(t, `<w:p w14:paraId="01020304"><w:r><w:t>Quarterly report</w:t></w:r></w:p>`)
+	paragraph := doc.Body.Blocks[0].Paragraph
+	run := paragraph.Runs[0]
+	aligned, err := ApplyNativeMutationPayloadV1(source, []byte(`{"mutations":[{"target_kind":"paragraph","target_id":"`+paragraph.ID+`","expected_xml_sha256":"`+paragraph.Anchor.XMLSHA256+`","properties":{"alignment":"both"}}]}`), doc.Source.PackageSHA256)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := aligned.Document.Body.Blocks[0].Paragraph.Properties.Alignment; got == nil || *got != "both" {
+		t.Fatalf("aligned paragraph = %#v", aligned.Document.Body.Blocks[0].Paragraph.Properties)
+	}
+	for name, payload := range map[string]string{
+		"run target":          `{"mutations":[{"target_kind":"run","target_id":"` + run.ID + `","expected_xml_sha256":"` + run.Anchor.XMLSHA256 + `","properties":{"alignment":"center"}}]}`,
+		"mixed with run bold": `{"mutations":[{"target_kind":"paragraph","target_id":"` + paragraph.ID + `","expected_xml_sha256":"` + paragraph.Anchor.XMLSHA256 + `","properties":{"alignment":"center","bold":true}}]}`,
+		"unmodeled value":     `{"mutations":[{"target_kind":"paragraph","target_id":"` + paragraph.ID + `","expected_xml_sha256":"` + paragraph.Anchor.XMLSHA256 + `","properties":{"alignment":"middle"}}]}`,
+		"with a range":        `{"mutations":[{"target_kind":"paragraph","target_id":"` + paragraph.ID + `","expected_xml_sha256":"` + paragraph.Anchor.XMLSHA256 + `","properties":{"alignment":"center"},"range":{"start_utf16":0,"end_utf16":4}}]}`,
+	} {
+		if _, err := ApplyNativeMutationPayloadV1(source, []byte(payload), doc.Source.PackageSHA256); err == nil {
+			t.Fatalf("%s: alignment request was accepted", name)
+		}
+	}
+}
+
+// The schema position matters for elements Word writes after w:jc, which this
+// tier preserves but does not model, so exercise the writer on its own.
+func TestNativeFormatParagraphPropertiesInsertsAtItsSchemaPosition(t *testing.T) {
+	part := []byte(`<w:p xmlns:w="` + testW + `"><w:pPr><w:pStyle w:val="Keep"/><w:outlineLvl w:val="0"/></w:pPr><w:r><w:t>text</w:t></w:r></w:p>`)
+	root, err := parseNativeXML("word/document.xml", part)
+	if err != nil {
+		t.Fatal(err)
+	}
+	splice, err := nativeFormatParagraphProperties(part, root, "right")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `<w:pPr><w:pStyle w:val="Keep"/><w:jc w:val="right"/><w:outlineLvl w:val="0"/></w:pPr>`
+	if got := string(splice.text); got != want {
+		t.Fatalf("alignment insertion =\n got %s\nwant %s", got, want)
+	}
+}
