@@ -200,3 +200,40 @@ test('SpreadsheetEditor arranges its controls as an Excel ribbon with labelled g
     delete globalThis.__xlsxClient;
   }
 });
+
+test('the sheet area is the only scroller and renders rows continuously instead of paging', async () => {
+  const css = fs.readFileSync(path.resolve(__dirname, '../src/spreadsheet.css'), 'utf8');
+  const rule = name => css.match(new RegExp(`\\${name}\\s*\\{([^}]*)\\}`))[1];
+  assert.match(rule('.sheet-editor'), /height:\s*100%/, 'the editor is bounded by the workspace');
+  assert.match(rule('.sheet-content'), /flex:\s*1/);
+  assert.match(rule('.sheet-content'), /min-height:\s*0/, 'the sheet area is a height-bounded flex child');
+  assert.match(rule('.sheet-grid-scroll'), /overflow:\s*auto/);
+  assert.match(rule('.sheet-grid-scroll'), /min-height:\s*0/);
+  assert.match(rule('.sheet-bottom'), /flex-shrink:\s*0/, 'sheet tabs stay pinned at the bottom');
+  assert.match(rule('.sheet-status'), /flex-shrink:\s*0/, 'the status row stays pinned at the bottom');
+  assert.match(css, /\.sheet-grid thead th\{position:sticky;top:0/, 'column headers pin to the top');
+  assert.match(css, /\.sheet-grid tbody th\{position:sticky;left:0/, 'row headers pin to the left');
+  assert.equal(/sheet-window-controls/.test(css), false, 'the row pager is gone');
+
+  const client = mockClient();
+  globalThis.__xlsxClient = client;
+  const SpreadsheetEditor = await loadEditor();
+  const busy = [];
+  let view;
+  try {
+    await act(async () => {
+      view = create(React.createElement(SpreadsheetEditor, { name: 'Book.xlsx', bytes: new Uint8Array([1]), onChange: () => {}, onBusyChange: value => busy.push(value) }));
+    });
+    await until(() => busy.at(-1) === false && view.root.findAllByProps({ className: 'sheet-grid' }).length > 0);
+    const rows = view.root.findAllByType('tr').filter(node => node.props['data-sheet-row'] !== undefined);
+    assert.ok(rows.length >= 200, `initial rows rendered: ${rows.length}`);
+    assert.equal(rows[0].props['data-sheet-row'], 0);
+    for (const label of ['Next rows', 'Previous rows', 'Next columns', 'Previous columns']) {
+      assert.equal(view.root.findAllByProps({ 'aria-label': label }).length, 0, `${label} pager button is gone`);
+    }
+    assert.equal(view.root.findAllByType('div').some(node => typeof node.props.onScroll === 'function' && node.props.className === 'sheet-grid-scroll'), true, 'the grid grows as it is scrolled');
+  } finally {
+    if (view) await act(async () => view.unmount());
+    delete globalThis.__xlsxClient;
+  }
+});

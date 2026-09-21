@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { createXlsxWasmClient, adaptWorkbookMutationBatchV1 } from '@injoffice/xlsx-wasm';
 import type { NativeWorkbookV2, StyleDelta } from '@injoffice/sheets/browser';
 import ContextMenu, { contextMenuCellKey, spreadsheetContextMenu, useContextMenu } from './ContextMenu';
@@ -20,6 +20,12 @@ export interface OfficeEditorProps { registerHistory?: (commands: { undo(): void
 
 type Snapshot = { bytes: Uint8Array; workbook: NativeWorkbookV2; calculation?: LocalCalculationResult; calculationRevision?: string; charts: unknown[]; chartError?: string };
 const initialSelection: Selection = { anchor: { row: 0, column: 0 }, end: { row: 0, column: 0 } };
+/** Excel scrolls the grid continuously; rows and columns are rendered in blocks that
+    grow as the scroller approaches their edge and slide once the rendered window is full. */
+type SheetView = { row: number; rows: number; column: number; columns: number };
+const ROW_BLOCK = 200, MAX_RENDERED_ROWS = 600, COLUMN_BLOCK = 20, MAX_RENDERED_COLUMNS = 60;
+const initialView: SheetView = { row: 0, rows: ROW_BLOCK, column: 0, columns: COLUMN_BLOCK + 10 };
+function viewAt(position: Position): SheetView { return { row: position.row, rows: ROW_BLOCK, column: position.column, columns: initialView.columns }; }
 const HISTORY_LIMIT = 20, HISTORY_BYTES = 128 * 1024 * 1024;
 function historyPush(list: Snapshot[], entry: Snapshot): Snapshot[] {
   const result = [...list, entry].slice(-HISTORY_LIMIT); let bytes = result.reduce((sum, item) => sum + item.bytes.byteLength, 0);
@@ -36,7 +42,8 @@ export function SpreadsheetEditor(props: OfficeEditorProps & { initialRecoveryDr
   const current = useRef<Snapshot | null>(null), emitted = useRef<Uint8Array | null>(null), mounted = useRef(false), locked = useRef(false);
   const undo = useRef<Snapshot[]>([]), redo = useRef<Snapshot[]>([]);
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null), [busy, setBusy] = useState(true), [error, setError] = useState('');
-  const [sheetId, setSheetId] = useState(''), [selection, setSelection] = useState<Selection>(initialSelection), [origin, setOrigin] = useState({ row: 0, column: 0 });
+  const [sheetId, setSheetId] = useState(''), [selection, setSelection] = useState<Selection>(initialSelection), [view, setView] = useState<SheetView>(initialView);
+  const scrollTarget = useRef<string | null>(null), scrollAnchor = useRef<{ row: string; top: number; scrollTop: number; address?: string; left: number; scrollLeft: number } | null>(null);
   const draftTarget = useRef<SpreadsheetRecoveryDraft | null>(null), composing = useRef(false), commitLatest = useRef<() => Promise<boolean>>(async () => false);
   const [draft, setDraft] = useState<string | null>(null), draftRef = useRef<string | null>(null), [inline, setInline] = useState(false);
   const [borderLine, setBorderLine] = useState<NonNullable<StyleDelta['border_top']>['style']>('thin'), [borderColor, setBorderColor] = useState('#28764f');
@@ -73,11 +80,11 @@ export function SpreadsheetEditor(props: OfficeEditorProps & { initialRecoveryDr
       const chartState = await readChartState(props.bytes, workbook);
       if (cancelled) return;
       const next = { bytes: props.bytes.slice(), workbook, ...chartState }; current.current = next; setSnapshot(next); undo.current = []; redo.current = [];
-      setSheetId(workbook.sheets.find(sheet => sheet.state === 'visible')?.id ?? workbook.sheets[0]?.id ?? ''); setSelection(initialSelection); setOrigin({ row: 0, column: 0 }); setLocation('A1'); setNotice('');
+      setSheetId(workbook.sheets.find(sheet => sheet.state === 'visible')?.id ?? workbook.sheets[0]?.id ?? ''); setSelection(initialSelection); resetView(); setLocation('A1'); setNotice('');
       if (pendingRecovery != null) {
         try {
           const recovered = validateRecoveryDraft(workbook, pendingRecovery), position = { row: recovered.row, column: recovered.column };
-          draftTarget.current = recovered; draftRef.current = recovered.value; setDraft(recovered.value); setInline(true); setSheetId(recovered.sheetId); setSelection({ anchor: position, end: position }); setLocation(address(position)); setOrigin({ row: Math.floor(position.row / 60) * 60, column: Math.floor(position.column / 20) * 20 });
+          draftTarget.current = recovered; draftRef.current = recovered.value; setDraft(recovered.value); setInline(true); setSheetId(recovered.sheetId); setSelection({ anchor: position, end: position }); setLocation(address(position)); setView(viewAt(position)); scrollTarget.current = address(position);
           callbacks.current.onDraftChange?.(true); callbacks.current.onRecoveryDraftChange?.(recovered); setNotice('Recovered pending cell input. Apply or cancel to continue.');
         } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); callbacks.current.onRecoveryDraftChange?.(null); }
       }
@@ -97,13 +104,73 @@ export function SpreadsheetEditor(props: OfficeEditorProps & { initialRecoveryDr
     if(locked.current||draftRef.current!==null)return;
     if(name.editable)setDefinedNameText(name.name);
     if(!name.target_sheet_id||!name.ref||!workbook?.sheets.some(sheet=>sheet.id===name.target_sheet_id&&sheet.state==='visible'))return;
-    try{const next=parseSelection(name.ref);setSheetId(name.target_sheet_id);setSelection(next);setLocation(name.ref);setOrigin({row:next.anchor.row,column:next.anchor.column});}catch(reason){setError(String(reason));}
+    try{const next=parseSelection(name.ref);setSheetId(name.target_sheet_id);setSelection(next);setLocation(name.ref);setView(viewAt(next.anchor));scrollTarget.current=address(next.anchor);}catch(reason){setError(String(reason));}
   }
   const disabled = busy || draft !== null || !sheet?.editable;
   const addSheetReason=sheetLifecycleReason(workbook,sheetId,'add'), deleteSheetReason=sheetLifecycleReason(workbook,sheetId,'delete');
+  /** Keep the rendered window over the position and scroll it into view after the next paint. */
   function reveal(position: Position) {
-    setOrigin(previous => ({ row: position.row >= (sheet?.frozen_rows ?? 0) && (position.row < previous.row || position.row >= previous.row + 60) ? Math.floor(position.row / 60) * 60 : previous.row, column: position.column >= (sheet?.frozen_columns ?? 0) && (position.column < previous.column || position.column >= previous.column + 20) ? Math.floor(position.column / 20) * 20 : previous.column }));
+    setView(previous => {
+      let next = previous;
+      if (position.row < previous.row) next = { ...next, row: Math.max(0, position.row) };
+      else if (position.row >= previous.row + previous.rows) {
+        const wanted = position.row - previous.row + 1;
+        next = wanted <= MAX_RENDERED_ROWS ? { ...next, rows: Math.min(MAX_RENDERED_ROWS, Math.max(wanted, previous.rows + ROW_BLOCK)) } : { ...next, row: position.row, rows: ROW_BLOCK };
+      }
+      if (position.column < next.column) next = { ...next, column: Math.max(0, position.column) };
+      else if (position.column >= next.column + next.columns) {
+        const wanted = position.column - next.column + 1;
+        next = wanted <= MAX_RENDERED_COLUMNS ? { ...next, columns: Math.min(MAX_RENDERED_COLUMNS, Math.max(wanted, next.columns + COLUMN_BLOCK)) } : { ...next, column: position.column, columns: initialView.columns };
+      }
+      return next === previous ? previous : next;
+    });
+    scrollTarget.current = address(position);
   }
+  function resetView() { setView(initialView); scrollTarget.current = address({ row: 0, column: 0 }); }
+  /** Grow (then slide) the rendered window as the scroller nears its edges — Excel has no row pager.
+      A wheel at a pinned edge moves nothing, so it has to ask for the next block itself. */
+  function growView(element: HTMLDivElement, wheel?: { x: number; y: number }) {
+    const down = element.scrollTop + element.clientHeight >= element.scrollHeight - 240 && (wheel ? wheel.y > 0 : true);
+    const across = element.scrollLeft + element.clientWidth >= element.scrollWidth - 160 && (wheel ? wheel.x > 0 : true);
+    const up = element.scrollTop <= 120 && view.row > 0 && (wheel ? wheel.y < 0 : true);
+    const back = element.scrollLeft <= 80 && view.column > 0 && (wheel ? wheel.x < 0 : true);
+    let next = view;
+    if (down) {
+      if (next.rows < MAX_RENDERED_ROWS) next = { ...next, rows: Math.min(MAX_RENDERED_ROWS, next.rows + ROW_BLOCK) };
+      else if (next.row + next.rows < MAX_ROWS) next = { ...next, row: Math.min(MAX_ROWS - next.rows, next.row + ROW_BLOCK) };
+    } else if (up) next = { ...next, row: Math.max(0, next.row - ROW_BLOCK) };
+    if (across) {
+      if (next.columns < MAX_RENDERED_COLUMNS) next = { ...next, columns: Math.min(MAX_RENDERED_COLUMNS, next.columns + COLUMN_BLOCK) };
+      else if (next.column + next.columns < MAX_COLUMNS) next = { ...next, column: Math.min(MAX_COLUMNS - next.columns, next.column + COLUMN_BLOCK) };
+    } else if (back) next = { ...next, column: Math.max(0, next.column - COLUMN_BLOCK) };
+    if (next === view) return;
+    // Sliding the window keeps the cells under the pointer where they are: remember one
+    // rendered row (and cell) and put the scroll offset back on it after the next paint.
+    if (next.row !== view.row || next.column !== view.column) {
+      const anchorRow = [...element.querySelectorAll<HTMLTableRowElement>('tr[data-sheet-row]')].find(row => row.offsetTop + row.offsetHeight > element.scrollTop);
+      const anchorCell = [...(anchorRow?.querySelectorAll<HTMLTableCellElement>('td[data-address]') ?? [])].find(cell => cell.offsetLeft + cell.offsetWidth > element.scrollLeft);
+      scrollAnchor.current = anchorRow ? { row: anchorRow.dataset.sheetRow!, top: anchorRow.offsetTop, scrollTop: element.scrollTop, address: anchorCell?.dataset.address, left: anchorCell?.offsetLeft ?? 0, scrollLeft: element.scrollLeft } : null;
+    }
+    setView(next);
+  }
+  useLayoutEffect(() => {
+    const scroller = grid.current; if (!scroller) return;
+    const anchor = scrollAnchor.current; scrollAnchor.current = null;
+    if (anchor) {
+      const row = scroller.querySelector<HTMLTableRowElement>(`tr[data-sheet-row="${anchor.row}"]`);
+      if (row) scroller.scrollTop = Math.max(0, anchor.scrollTop + (row.offsetTop - anchor.top));
+      const cell = anchor.address ? scroller.querySelector<HTMLTableCellElement>(`td[data-address="${anchor.address}"]`) : null;
+      if (cell) scroller.scrollLeft = Math.max(0, anchor.scrollLeft + (cell.offsetLeft - anchor.left));
+    }
+    const target = scrollTarget.current; if (!target) return; scrollTarget.current = null;
+    const cell = scroller.querySelector<HTMLElement>(`[data-address="${target}"]`); if (!cell) return;
+    const box = scroller.getBoundingClientRect(), rect = cell.getBoundingClientRect();
+    const head = scroller.querySelector('thead')?.getBoundingClientRect().height ?? 0, gutter = (cell.parentElement?.firstElementChild as HTMLElement | null)?.getBoundingClientRect().width ?? 0;
+    if (rect.top < box.top + head) scroller.scrollTop -= box.top + head - rect.top;
+    else if (rect.bottom > box.bottom) scroller.scrollTop += rect.bottom - box.bottom;
+    if (rect.left < box.left + gutter) scroller.scrollLeft -= box.left + gutter - rect.left;
+    else if (rect.right > box.right) scroller.scrollLeft += rect.right - box.right;
+  });
   function select(position: Position, extend = false) {
     if (locked.current || draftRef.current !== null) return;
     const merged = sheet?.merged_ranges.find(value => contains(value, position));
@@ -171,11 +238,11 @@ export function SpreadsheetEditor(props: OfficeEditorProps & { initialRecoveryDr
       if (allowDraft) { updateDraft(null); setInline(false); }
       if (operations.some(operation => ['sheet.add','sheet.rename','sheet.delete'].includes(operation.kind))) {
         const nextSheet = operations[0]?.kind === 'sheet.add' ? next.workbook.sheets.at(-1) : next.workbook.sheets.find(value => value.id === sheetId) ?? next.workbook.sheets.find(value => value.state === 'visible');
-        if (nextSheet) setSheetId(nextSheet.id); setSelection(initialSelection); setLocation('A1'); setOrigin({ row: 0, column: 0 }); setSheetAction(null);
+        if (nextSheet) setSheetId(nextSheet.id); setSelection(initialSelection); setLocation('A1'); resetView(); setSheetAction(null);
       }
       if (operations.some(operation=>operation.kind==='sheet.filter')) {
         const filteredSheet=next.workbook.sheets.find(value=>value.id===sheetId);
-        if (filteredSheet?.rows.some(row=>row.hidden&&row.row===selection.anchor.row)) {const start={row:range.row,column:range.column};setSelection({anchor:start,end:start});setOrigin({row:range.row,column:range.column});}
+        if (filteredSheet?.rows.some(row=>row.hidden&&row.row===selection.anchor.row)) {const start={row:range.row,column:range.column};setSelection({anchor:start,end:start});setView(viewAt(start));scrollTarget.current=address(start);}
       }
       callbacks.current.onChange(next.bytes); setStructureAction(null); setSortOpen(false); setFilterOpen(false); setNotice(message); return true;
     } catch (reason) { if (mounted.current) setError(reason instanceof Error ? reason.message : String(reason)); return false; }
@@ -201,7 +268,7 @@ export function SpreadsheetEditor(props: OfficeEditorProps & { initialRecoveryDr
     if (locked.current || draftRef.current !== null || !current.current) return;
     const source = direction === 'undo' ? undo : redo, destination = direction === 'undo' ? redo : undo, next = source.current.pop();
     if (!next) return;
-    destination.current = historyPush(destination.current, current.current); current.current = next; setSnapshot(next); emitted.current = next.bytes; if (!next.workbook.sheets.some(value => value.id === sheetId)) { setSheetId(next.workbook.sheets.find(value => value.state === 'visible')?.id ?? ''); setSelection(initialSelection); setLocation('A1'); setOrigin({ row: 0, column: 0 }); } callbacks.current.onChange(next.bytes); historyVersion(value => value + 1); setNotice(direction === 'undo' ? 'Change undone' : 'Change restored'); setError('');
+    destination.current = historyPush(destination.current, current.current); current.current = next; setSnapshot(next); emitted.current = next.bytes; if (!next.workbook.sheets.some(value => value.id === sheetId)) { setSheetId(next.workbook.sheets.find(value => value.state === 'visible')?.id ?? ''); setSelection(initialSelection); setLocation('A1'); resetView(); } callbacks.current.onChange(next.bytes); historyVersion(value => value + 1); setNotice(direction === 'undo' ? 'Change undone' : 'Change restored'); setError('');
   }
   historyLatest.current = restore;
   const canUndo = !disabled && undo.current.length > 0, canRedo = !disabled && redo.current.length > 0;
@@ -246,15 +313,15 @@ export function SpreadsheetEditor(props: OfficeEditorProps & { initialRecoveryDr
   const freezeSupported = (sheet?.frozen_rows ?? 0) <= 50 && (sheet?.frozen_columns ?? 0) <= 10;
   const frozenRows = freezeSupported ? sheet?.frozen_rows ?? 0 : 0, frozenColumns = freezeSupported ? sheet?.frozen_columns ?? 0 : 0;
   const hiddenRows = useMemo(() => new Set(sheet?.rows.filter(row=>row.hidden).map(row=>row.row) ?? []), [sheet]);
-  const rows = [...new Set([...Array.from({ length: frozenRows }, (_, index) => index), ...visibleRowWindow(origin.row, 60, hiddenRows)])].filter(row => !hiddenRows.has(row));
-  const columns = [...new Set([...Array.from({ length: frozenColumns }, (_, index) => index), ...Array.from({ length: Math.min(20, MAX_COLUMNS - origin.column) }, (_, index) => index + origin.column)])].filter(column => !sheet?.columns.find(value => column >= value.column && column <= value.end_column)?.hidden);
+  const rows = [...new Set([...Array.from({ length: frozenRows }, (_, index) => index), ...visibleRowWindow(view.row, view.rows, hiddenRows)])].filter(row => !hiddenRows.has(row));
+  const columns = [...new Set([...Array.from({ length: frozenColumns }, (_, index) => index), ...Array.from({ length: Math.min(view.columns, MAX_COLUMNS - view.column) }, (_, index) => index + view.column)])].filter(column => !sheet?.columns.find(value => column >= value.column && column <= value.end_column)?.hidden);
   function columnPixels(column: number) { const width = sheet?.columns.find(value => column >= value.column && column <= value.end_column)?.width ?? 12; return Math.max(24, Math.round(width * 7 + 5)); }
   useEffect(() => {
     if (!grid.current || !frozenRows || typeof ResizeObserver === 'undefined') return;
     const elements = [...grid.current.querySelectorAll<HTMLTableRowElement>('tr[data-sheet-row]')].filter(element => Number(element.dataset.sheetRow) < frozenRows);
     const measure = () => { const next = Object.fromEntries(elements.map(element => [Number(element.dataset.sheetRow), element.offsetHeight])); setFrozenHeights(previous => JSON.stringify(previous) === JSON.stringify(next) ? previous : next); };
     const observer = new ResizeObserver(measure); elements.forEach(element => observer.observe(element)); measure(); return () => observer.disconnect();
-  }, [snapshot, sheetId, origin.row, origin.column, frozenRows]);
+  }, [snapshot, sheetId, view.row, view.rows, view.column, view.columns, frozenRows]);
   function pinnedCellStyle(row: number, column: number): CSSProperties {
     const pinRow = row >= 0 && row < frozenRows, pinColumn = column >= 0 && column < frozenColumns;
     if (!pinRow && !pinColumn) return {};
@@ -313,7 +380,7 @@ Blue"/></label><label><input type="checkbox" checked={filterBlank} onChange={eve
     </form>}
     {!freezeSupported && <div className="sheet-error" role="status">This saved frozen pane exceeds the display limit of 50 rows and 10 columns. Unfreeze or choose a smaller pane to pin it in this editor.</div>}
     {error && <div className="sheet-error" role="alert">{error}</div>}
-    <div className="sheet-content"><div className="sheet-grid-scroll" ref={grid} tabIndex={0} role="grid" aria-label="Worksheet cells" aria-rowcount={MAX_ROWS} aria-colcount={MAX_COLUMNS} aria-activedescendant={`sheet-cell-${sheetId}-${address(selection.anchor)}`} onKeyDown={gridKeys}
+    <div className="sheet-content"><div className="sheet-grid-scroll" ref={grid} tabIndex={0} role="grid" aria-label="Worksheet cells" aria-rowcount={MAX_ROWS} aria-colcount={MAX_COLUMNS} aria-activedescendant={`sheet-cell-${sheetId}-${address(selection.anchor)}`} onKeyDown={gridKeys} onScroll={event => growView(event.currentTarget)} onWheel={event => growView(event.currentTarget, { x: event.deltaX, y: event.deltaY })}
       onPointerUp={() => { dragging.current = false; }} onPointerLeave={() => { dragging.current = false; }}
       onContextMenu={event => { const key = contextMenuCellKey(event.target); if (key) { const cell = parseAddress(key); if (!contains(range, cell)) select(cell); } menu.open(event); }}
       onPaste={event => { if (event.target !== event.currentTarget || draftRef.current !== null || locked.current) return; event.preventDefault(); try { const pasted = pasteOperations(selection.anchor, event.clipboardData.getData('text/plain')); void execute(pasted.operations, 'Pasted cells applied').then(applied => { if (applied) { setSelection(pasted.selection); setLocation(selectionLabel(pasted.selection)); } }); } catch (reason) { setError(String(reason)); } }}
@@ -330,14 +397,14 @@ Blue"/></label><label><input type="checkbox" checked={filterBlank} onChange={eve
           const stroke=side as {style:string;color:string}, width=stroke.style==='thick'||stroke.style==='double'?3:stroke.style.startsWith('medium')?2:1;
           (css as Record<string,unknown>)[`border${edge[0]!.toUpperCase()}${edge.slice(1)}`]=`${width}px ${stroke.style==='double'?'double':stroke.style.includes('dott')?'dotted':stroke.style.toLowerCase().includes('dash')?'dashed':'solid'} ${stroke.color}`;
         }
-        return <td key={column} id={`sheet-cell-${sheetId}-${key}`} role="gridcell" aria-colindex={column + 1} aria-selected={selected} aria-readonly={!sheet?.editable || Boolean(merged) || cell?.editable === false} className={`${selected ? 'is-selected' : ''} ${isActive ? 'is-active' : ''} ${cell?.formula ? 'has-formula' : ''}`} style={css} rowSpan={merged ? rows.filter(value => value >= merged.row && value <= merged.end_row).length : undefined} colSpan={merged ? columns.filter(value => value >= merged.column && value <= merged.end_column).length : undefined} title={`${key}${merged ? ` · merged ${merged.ref}` : ''}${display.note ? ` · ${display.note}` : ''}`} onPointerDown={event => { if (event.button !== 0) return; event.preventDefault(); dragging.current = true; select(source, event.shiftKey); grid.current?.focus(); }} onPointerEnter={event => { if (dragging.current && event.buttons === 1) select(position, true); }} onDoubleClick={() => { if (address(selection.anchor) === key) startEdit(); }}>
+        return <td key={column} id={`sheet-cell-${sheetId}-${key}`} data-address={key} role="gridcell" aria-colindex={column + 1} aria-selected={selected} aria-readonly={!sheet?.editable || Boolean(merged) || cell?.editable === false} className={`${selected ? 'is-selected' : ''} ${isActive ? 'is-active' : ''} ${cell?.formula ? 'has-formula' : ''}`} style={css} rowSpan={merged ? rows.filter(value => value >= merged.row && value <= merged.end_row).length : undefined} colSpan={merged ? columns.filter(value => value >= merged.column && value <= merged.end_column).length : undefined} title={`${key}${merged ? ` · merged ${merged.ref}` : ''}${display.note ? ` · ${display.note}` : ''}`} onPointerDown={event => { if (event.button !== 0) return; event.preventDefault(); dragging.current = true; select(source, event.shiftKey); grid.current?.focus(); }} onPointerEnter={event => { if (dragging.current && event.buttons === 1) select(position, true); }} onDoubleClick={() => { if (address(selection.anchor) === key) startEdit(); }}>
           {isActive && inline && draft !== null ? <input ref={inlineInput} aria-label={`Edit ${key}`} className="sheet-inline-input" maxLength={32767} onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }} value={draft} disabled={busy} onPointerDown={event => event.stopPropagation()} onChange={event => updateDraft(event.target.value)} onKeyDown={editKeys}/> : <span className="sheet-cell-content">{display.text}</span>}
         </td>;
       })}</tr>)}</tbody></table>}
     </div>
     {menu.anchor && <ContextMenu anchor={menu.anchor} label="Worksheet" onClose={menu.close} items={spreadsheetContextMenu({ anchor: menu.anchor, disabled, onClear: () => { try { void execute(clearOperations(selection), 'Selection cleared'); } catch (reason) { setError(String(reason)); } } })} />}
     </div>
-    <div className="sheet-bottom"><div className="sheet-tab-tools"><button aria-label="Add worksheet" title={addSheetReason} disabled={disabled || Boolean(addSheetReason)} onClick={() => { let number = 1; while (workbook?.sheets.some(value => value.name.toLowerCase() === `sheet${number}`)) number++; setSheetName(`Sheet${number}`); setSheetAction('add'); }}>+</button><button disabled={disabled} onClick={() => { setSheetName(sheet?.name ?? ''); setSheetAction('rename'); }}>Rename</button><button title={deleteSheetReason} disabled={disabled || Boolean(deleteSheetReason)} onClick={() => setSheetAction('delete')}>Delete</button></div><nav aria-label="Worksheets">{workbook?.sheets.filter(value => value.state === 'visible').map(value => <button key={value.id} aria-current={value.id === sheetId ? 'page' : undefined} disabled={busy || draft !== null} onClick={() => { setSheetId(value.id); setSelection(initialSelection); setLocation('A1'); setOrigin({ row: 0, column: 0 }); }}>{value.name}{!value.editable ? ' · read-only' : ''}</button>)}</nav><div className="sheet-window-controls"><button aria-label="Previous rows" disabled={busy || draft !== null || origin.row === 0} onClick={() => select({ row: Math.max(0, origin.row - 60), column: origin.column })}>↑</button><button aria-label="Previous columns" disabled={busy || draft !== null || origin.column === 0} onClick={() => select({ row: origin.row, column: Math.max(0, origin.column - 20) })}>←</button><span>Rows {origin.row + 1}–{Math.min(MAX_ROWS, origin.row + 60)}</span><button aria-label="Next rows" disabled={busy || draft !== null || origin.row + 60 >= MAX_ROWS} onClick={() => select({ row: origin.row + 60, column: origin.column })}>↓</button><button aria-label="Next columns" disabled={busy || draft !== null || origin.column + 20 >= MAX_COLUMNS} onClick={() => select({ row: origin.row, column: origin.column + 20 })}>→</button></div></div>
+    <div className="sheet-bottom"><div className="sheet-tab-tools"><button aria-label="Add worksheet" title={addSheetReason} disabled={disabled || Boolean(addSheetReason)} onClick={() => { let number = 1; while (workbook?.sheets.some(value => value.name.toLowerCase() === `sheet${number}`)) number++; setSheetName(`Sheet${number}`); setSheetAction('add'); }}>+</button><button disabled={disabled} onClick={() => { setSheetName(sheet?.name ?? ''); setSheetAction('rename'); }}>Rename</button><button title={deleteSheetReason} disabled={disabled || Boolean(deleteSheetReason)} onClick={() => setSheetAction('delete')}>Delete</button></div><nav aria-label="Worksheets">{workbook?.sheets.filter(value => value.state === 'visible').map(value => <button key={value.id} aria-current={value.id === sheetId ? 'page' : undefined} disabled={busy || draft !== null} onClick={() => { setSheetId(value.id); setSelection(initialSelection); setLocation('A1'); resetView(); }}>{value.name}{!value.editable ? ' · read-only' : ''}</button>)}</nav></div>
     <div className="sheet-status"><span>{busy ? 'Applying native change…' : activeStatus}</span><span role="status">{notice || 'Enter / F2 to edit · Shift + arrows to select · paste a range'}</span><span>{snapshot?.calculation ? `Local calculation · ${snapshot.calculation.cells.filter(cell => cell.status === 'unsupported' || cell.status === 'circular').length} unresolved` : 'Formula caches: stored, unverified'}</span></div>
   </section>;
 }
