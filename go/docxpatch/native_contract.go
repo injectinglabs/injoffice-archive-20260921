@@ -410,9 +410,9 @@ var (
 	nativeNegativeZero          = regexp.MustCompile(`^-0(?:\.0*)?(?:[eE][+-]?[0-9]+)?$`)
 	nativeOperations            = map[string]bool{
 		"text.replace": true, "properties.patch": true, "block.insert_after": true,
-		"block.delete": true, "drawing.replace": true,
+		"block.delete": true, "drawing.replace": true, "paragraph.split": true,
 	}
-	nativeParagraphOperations = map[string]bool{"text.replace": true, "properties.patch": true, "block.insert_after": true, "block.delete": true}
+	nativeParagraphOperations = map[string]bool{"paragraph.split": true, "text.replace": true, "properties.patch": true, "block.insert_after": true, "block.delete": true}
 	nativeTableOperations     = map[string]bool{"properties.patch": true, "block.insert_after": true, "block.delete": true}
 	nativeDrawingOperations   = map[string]bool{"drawing.replace": true}
 )
