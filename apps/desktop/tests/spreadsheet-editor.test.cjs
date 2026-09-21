@@ -249,7 +249,7 @@ test('typing edits the selected cell, Enter commits and moves down, and the stat
   const SpreadsheetEditor = await loadEditor();
   const busy = [];
   let view;
-  const status = () => view.root.findByProps({ className: 'sheet-status' }).findAllByType('span').map(text);
+  const status = () => view.root.findByProps({ 'aria-label': 'Spreadsheet status' }).findAllByType('span').map(text);
   const grid = () => view.root.findByProps({ className: 'sheet-grid-scroll' });
   const press = async (key, extra = {}) => {
     const node = grid();
