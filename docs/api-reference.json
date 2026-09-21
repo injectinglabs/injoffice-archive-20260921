@@ -12848,7 +12848,17 @@
             {
               "name": "PptxNativeMutationV1",
               "kind": "type",
-              "signature": "export type PptxNativeMutationV1 = PptxNativeTextReplaceMutationV1 | PptxNativeAutoShapeUpdateMutationV1"
+              "signature": "export type PptxNativeMutationV1 = PptxNativeTextReplaceMutationV1 | PptxNativeAutoShapeUpdateMutationV1 | PptxNativeSlideInsertMutationV1 | PptxNativeSlideBackgroundMutationV1"
+            },
+            {
+              "name": "PptxNativeSlideBackgroundMutationV1",
+              "kind": "interface",
+              "signature": "export interface PptxNativeSlideBackgroundMutationV1"
+            },
+            {
+              "name": "PptxNativeSlideInsertMutationV1",
+              "kind": "interface",
+              "signature": "export interface PptxNativeSlideInsertMutationV1"
             },
             {
               "name": "PptxNativeTextReplaceMutationV1",
