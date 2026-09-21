@@ -405,3 +405,55 @@ test('Focus mode strips the chrome and Esc leaves it unless a draft is being edi
     assert.ok(focused());
   } finally { if (renderer) await act(async () => renderer.unmount()); delete global.window; }
 });
+
+test('footer exposes only supported views and applies Focus, Normal and fit zoom per document', async () => {
+  const App = await loadApp(); let menu;
+  global.window = { localStorage: { getItem: () => null, setItem() {} }, document: { title: '' }, addEventListener() {}, removeEventListener() {}, injDesktop: {
+    recent: async () => [], recovery: async () => [], nextExternal: async () => null, setDirty() {}, setBusy() {}, onMenuAction(callback) { menu = callback; return () => {}; }, checkpoint: async () => {},
+    create: async format => ({ id: `views-${format}`, name: `Untitled.${format}`, bytes: new Uint8Array([0x50, 0x4b, 3, 4]), untitled: true }),
+  } };
+  let renderer;
+  const modes = () => renderer.root.findByProps({ 'aria-label': 'Document views' }).findAllByType('button');
+  const editor = () => renderer.root.findAllByType('test-editor').at(-1);
+  try {
+    await act(async () => { renderer = create(React.createElement(App)); });
+    for (const [format, labels] of [['docx', ['Print Layout', 'Focus']], ['xlsx', ['Normal']], ['pptx', ['Normal', 'Fit slide to window']], ['pdf', []]]) {
+      if (format !== 'docx') await act(async () => menu('new'));
+      await act(async () => renderer.root.findByType('test-start').props.onCreate(format));
+      assert.equal(renderer.root.findAllByProps({ className: 'app-status' }).length, 1);
+      if (!labels.length) { assert.equal(renderer.root.findAllByProps({ 'aria-label': 'Document views' }).length, 0); continue; }
+      assert.deepEqual(modes().map(button => button.children.join('')), labels);
+      if (format === 'docx') {
+        await act(async () => modes()[1].props.onClick());
+        assert.equal(editor().props.viewOptions.focus, true);
+        assert.equal(modes()[1].props['aria-pressed'], true);
+        await act(async () => modes()[0].props.onClick());
+        assert.equal(editor().props.viewOptions.focus, false);
+      }
+      if (format === 'pptx') {
+        await act(async () => renderer.root.findByProps({ 'aria-label': 'Document zoom' }).props.onChange({ target: { value: '175' } }));
+        await act(async () => modes()[1].props.onClick());
+        assert.equal(editor().props.viewOptions.zoom, 100);
+      }
+    }
+  } finally { if (renderer) await act(async () => renderer.unmount()); delete global.window; }
+});
+
+test('status slot routes only the active session and removes its content on close', async () => {
+  const { rolldown } = await import('rolldown');
+  const bundle = await rolldown({ input: path.resolve(__dirname, '../src/EditorStatus.tsx'), platform: 'node', external: id => /^react(?:-dom)?(?:\/|$)/.test(id), transform: { jsx: { runtime: 'automatic' } } });
+  let view;
+  try {
+    const { output } = await bundle.generate({ format: 'cjs' }); const mod = { exports: {} };
+    new Function('require', 'module', 'exports', output[0].code)(id => id === 'react-dom' ? { createPortal: (children, target) => React.createElement('test-portal', { target }, children) } : require(id), mod, mod.exports);
+    const { EditorStatus, EditorStatusContext } = mod.exports; const target = {};
+    const tree = active => React.createElement(React.Fragment, null, ...['docx', 'xlsx'].map(format => React.createElement(EditorStatusContext, { key: format, value: active === format ? target : null }, React.createElement(EditorStatus, { label: format }, format))));
+    await act(async () => { view = create(tree('docx')); });
+    assert.equal(view.root.findByType('test-portal').props.target, target);
+    assert.deepEqual(view.root.findAllByProps({ className: 'editor-status-segment' }).map(node => node.children.join('')), ['docx']);
+    await act(async () => view.update(tree('xlsx')));
+    assert.deepEqual(view.root.findAllByProps({ className: 'editor-status-segment' }).map(node => node.children.join('')), ['xlsx']);
+    await act(async () => view.update(tree(null)));
+    assert.equal(view.root.findAllByType('test-portal').length, 0);
+  } finally { if (view) await act(async () => view.unmount()); await bundle.close(); }
+});

@@ -1,3 +1,4 @@
+import { EditorStatus } from './EditorStatus';
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createDocxWasmClient } from '@injoffice/docx-wasm'
 import type { NativeDocxDocumentV1 } from '../../../packages/docs/src/nativeContract'
@@ -576,11 +577,11 @@ export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDr
       <SelectionToolbar values={toolbarValues} disabled={busy||composing} onChange={patch=>void changeFormatting(patch)} />
       {menu.anchor&&<ContextMenu anchor={menu.anchor} label="Document" onClose={menu.close} items={documentContextMenu({anchor:menu.anchor,target:!!target,values:toolbarValues,disabled:busy||composing,link:!!docxSelection(snapshot.preview.document,selected)?.run.can_edit_hyperlink&&!textRange?.unsupported&&!(textRange&&textRange.start_utf16!==textRange.end_utf16),table:paragraphOperations(snapshot.preview.document,selected).includes('block.insert_after'),onFormat:patch=>void changeFormatting(patch),onFind:()=>{setSearchOpen(true);requestAnimationFrame(()=>searchInput.current?.focus())},onRibbonTab:setRibbonTab})} />}
     </>}
-    {statistics&&snapshot&&<footer className="office-document-status" aria-label="Document status">
+    {statistics&&snapshot&&<EditorStatus label="Document status">
       <span>Page {pageMetrics.page.toLocaleString()} of {pageMetrics.pages.toLocaleString()} · {statistics.words.toLocaleString()} {statistics.words===1?'word':'words'}</span>
       <span className="office-status-info" tabIndex={0} role="note" aria-label="About these counts" title={`${statistics.characters.toLocaleString()} characters. Counts cover body text including tables; headers, footers, notes and hidden text are excluded. Pages are measured from the flowing preview — the original page layout is preserved in the file.`}>i</span>
       <span>{paragraphStyleName(snapshot.preview.document, selection?.paragraph ?? snapshot.preview.document.body.blocks.find(block=>block.paragraph)?.paragraph)}</span>
-    </footer>}
+    </EditorStatus>}
     {!snapshot && !busy && <div className="office-empty">This file could not be opened. Choose another file to continue.</div>}
   </div>
 }

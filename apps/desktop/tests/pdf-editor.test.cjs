@@ -267,7 +267,7 @@ test('the PDF editor uses the shared Office ribbon: tabs, icons, find toggle and
     await act(async () => renderer.root.findByType('dialog').props.onCancel({ preventDefault() {} }));
 
     // One status row: the page on the left, the tool hint on the right, and no Editing support disclosure.
-    const status = renderer.root.findByProps({ className: 'pdf-status' });
+    const status = renderer.root.findByProps({ 'aria-label': 'PDF status' });
     const parts = status.children.map(child => child.children.join(''));
     assert.deepEqual(parts, ['Page 1 of 3', 'Choose a tool to add content or arrange pages.']);
     assert.equal(status.findAllByType('details').length, 0);
