@@ -2,7 +2,10 @@ import { useEffect, useId, useRef, useState, type CSSProperties, type PointerEve
 import { applyPdfCommand, inspectPdf, PdfHistory, findPdfTextMatches, importPdfPages, exportPdfPages, parsePdfPageRange, type PdfCommand, type PdfAnnotationTarget, type PdfSummary } from './pdf-commands'
 import { parsePdfRecoveryDraft, type PdfRecoveryDraft } from './pdf-recovery'
 import {searchPdfDocument,type PdfSearchResult} from './pdf-search'
+import Ribbon, { RibbonButton, RibbonRows, visibleRibbonTabs, type RibbonTabSpec } from './Ribbon'
+import RibbonIcon, { type RibbonIconName } from './RibbonIcons'
 import type {PDFDocumentProxy} from 'pdfjs-dist'
+import './ribbon.css'
 import './pdf-editor.css'
 
 type Tool = 'edit-note' | 'replace' | 'view' | 'text' | 'note' | 'highlight' | 'underline' | 'strikeout' | 'rectangle' | 'ellipse' | 'line' | 'arrow' | 'form'
@@ -53,6 +56,10 @@ export default function PdfEditor({ name, bytes, onChange, onBusyChange, onDraft
   const [openNote, setOpenNote] = useState<string>()
   const [viewport, setViewport] = useState<PdfViewport>()
   const [exportRange, setExportRange] = useState('')
+  const [ribbonTab, setRibbonTab] = useState('Home')
+  const [findOpen, setFindOpen] = useState(false)
+  const [allPages, setAllPages] = useState(false)
+  const [exportOpen, setExportOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [loaded,setLoaded] = useState<{bytes:Uint8Array;pdf:PDFDocumentProxy;pdfjs:typeof import('pdfjs-dist/legacy/build/pdf.mjs')}>()
   const [searchResult,setSearchResult] = useState<PdfSearchResult>()
@@ -153,6 +160,23 @@ export default function PdfEditor({ name, bytes, onChange, onBusyChange, onDraft
     if(busy||hasDraft)return
     if(hit.page===page)setMatchIndex(hit.match)
     else {pendingSearchHit.current=hit;setPage(hit.page)}
+  }
+  // The Find popover owns the caret: opening it (ribbon button or Ctrl/⌘F) focuses the query.
+  useEffect(() => { if (findOpen) { searchInput.current?.focus(); searchInput.current?.select() } }, [findOpen])
+  // "All pages" is a toggle: while it is on, every edited query re-runs the document-wide search.
+  useEffect(() => {
+    if (!allPages || !findOpen || !query.trim() || !loaded) return
+    const timer = setTimeout(() => { void searchAllPages() }, 300)
+    return () => clearTimeout(timer)
+  }, [allPages, findOpen, query, loaded])
+  function toggleAllPages() {
+    const next = !allPages
+    setAllPages(next)
+    if (!next) { searchAbort.current?.abort(); setSearching(false); setSearchResult(undefined) }
+  }
+  function openFind(open: boolean) {
+    setFindOpen(open)
+    if (!open) { searchAbort.current?.abort(); setSearching(false); setSearchResult(undefined) }
   }
   useEffect(() => {
     textDivs.current.forEach((element, index) => {
@@ -285,20 +309,76 @@ export default function PdfEditor({ name, bytes, onChange, onBusyChange, onDraft
   const count = summary?.pages.length ?? 0
   const displayStart = placement && viewport?.convertToViewportPoint(...placement.at)
   const displayEnd = placement?.end && viewport?.convertToViewportPoint(...placement.end)
+  const toolDisabled = busy || hasDraft || !summary?.editable
+  const pageDisabled = disabled || !summary?.editable
+  const toolButton = (value: Exclude<Tool, 'edit-note'>, icon: RibbonIconName, label: string, options: { title?: string; labelHidden?: boolean } = {}) =>
+    <RibbonButton icon={icon} label={label} {...options} aria-pressed={tool === value} disabled={value === 'view' ? busy || hasDraft : toolDisabled} onClick={() => pickTool(value)} />
+  // Office's ribbon, applied to the tools this editor already has: the same shell as
+  // the DOCX, XLSX and PPTX editors, with File contributed by the workspace context.
+  const ribbonTabs: RibbonTabSpec[] = [
+    { id: 'Home', label: 'Home', groups: [
+      { id: 'tools', label: 'Tools', children: <>
+        {toolButton('view', 'select', 'Select', { title: 'Select page text to read or copy' })}
+        {toolButton('replace', 'replace', 'Edit text', { title: 'Edit existing text' })}
+        {toolButton('form', 'form', 'Fill forms')}
+      </> },
+      { id: 'editing', label: 'Editing', children: <RibbonButton icon="find" label="Find" shortcut="find" aria-expanded={findOpen} onClick={() => openFind(!findOpen)} /> },
+    ] },
+    { id: 'Insert', label: 'Insert', groups: [
+      { id: 'text', label: 'Text', children: <>{toolButton('text', 'textbox', 'Add text')}{toolButton('note', 'note', 'Note')}</> },
+      { id: 'markup', label: 'Markup', children: <>
+        {toolButton('highlight', 'highlight', 'Highlight area')}
+        {toolButton('underline', 'underline', 'Underline area', { labelHidden: true })}
+        {toolButton('strikeout', 'strikethrough', 'Strike through', { labelHidden: true })}
+      </> },
+      { id: 'shapes', label: 'Shapes', children: <>
+        {toolButton('rectangle', 'rectangle', 'Rectangle', { labelHidden: true })}
+        {toolButton('ellipse', 'ellipse', 'Ellipse', { labelHidden: true })}
+        {toolButton('line', 'line', 'Line', { labelHidden: true })}
+        {toolButton('arrow', 'arrow', 'Arrow', { labelHidden: true })}
+      </> },
+      { id: 'illustrations', label: 'Illustrations', children: bridge?.pickAsset && <RibbonButton icon="image" label="Image…" title="Insert image…" disabled={pageDisabled} onClick={() => void importAsset('image')} /> },
+      { id: 'pages', label: 'Pages', children: <RibbonRows>
+        <div>
+          <RibbonButton icon="newDocument" label="Add page" title="Add a blank page after this one" disabled={pageDisabled} onClick={() => void command({ kind: 'add-page', page }, page + 1)} />
+          {bridge?.pickAsset && <RibbonButton icon="import" label="Import pages…" disabled={pageDisabled} onClick={() => void importAsset('pdf')} />}
+        </div>
+        <div><RibbonButton icon="pageDelete" label="Delete page" disabled={pageDisabled || count < 2} onClick={() => void command({ kind: 'delete-page', page }, Math.max(1, Math.min(page, count - 1)))} /></div>
+      </RibbonRows> },
+      { id: 'arrange', label: 'Arrange', children: <>
+        <RibbonButton icon="rotate" label="Rotate 90°" disabled={pageDisabled} onClick={() => void command({ kind: 'rotate', page })} />
+        <RibbonButton icon="moveEarlier" label="Move page earlier" labelHidden disabled={pageDisabled || page === 1} onClick={() => void command({ kind: 'move-page', page, to: page - 1 }, page - 1)} />
+        <RibbonButton icon="moveLater" label="Move page later" labelHidden disabled={pageDisabled || page === count} onClick={() => void command({ kind: 'move-page', page, to: page + 1 }, page + 1)} />
+      </> },
+    ] },
+    { id: 'View', label: 'View', groups: [
+      { id: 'navigation', label: 'Page Navigation', children: <>
+        <RibbonButton icon="pagePrevious" label="Previous page" labelHidden disabled={disabled || page <= 1} onClick={() => { setPage(page - 1); setNotice('') }} />
+        <RibbonButton icon="pageNext" label="Next page" labelHidden disabled={disabled || page >= count} onClick={() => { setPage(page + 1); setNotice('') }} />
+        <label className="pdf-page-field"><RibbonIcon name="goToPage" />Page<input type="number" aria-label="Go to page" min={1} max={Math.max(count, 1)} value={page} disabled={disabled || !count} onChange={event => { const next = Number(event.target.value); if (Number.isInteger(next) && next >= 1 && next <= count) { setPage(next); setNotice('') } }} /></label>
+        <span className="ribbon-note">of {count || '…'}</span>
+      </> },
+      { id: 'export', label: 'Export', children: bridge?.exportBytes && <RibbonButton icon="export" label="Export pages…" title="Export a page range as a new PDF" aria-expanded={exportOpen} disabled={disabled} onClick={() => setExportOpen(true)} /> },
+    ] },
+  ]
+  const activeRibbonTab = ['File', ...visibleRibbonTabs(ribbonTabs).map(tab => tab.id)].includes(ribbonTab) ? ribbonTab : 'Home'
   const drawStyle = displayStart && { left: Math.min(displayStart[0], displayEnd?.[0] ?? displayStart[0]), top: Math.min(displayStart[1], displayEnd?.[1] ?? displayStart[1]), width: Math.max(3, Math.abs((displayEnd?.[0] ?? displayStart[0]) - displayStart[0])), height: Math.max(3, Math.abs((displayEnd?.[1] ?? displayStart[1]) - displayStart[1])) }
 
   return <section className="pdf-workspace" aria-label={`PDF editor: ${name}`} onKeyDown={event => {
-    if (event.key.toLowerCase() === 'f' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); searchInput.current?.focus(); searchInput.current?.select() }
+    if (event.key.toLowerCase() === 'f' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); setRibbonTab('Home'); if (findOpen) { searchInput.current?.focus(); searchInput.current?.select() } else setFindOpen(true) }
     if (event.key === 'Escape' && hasDraft) { event.preventDefault(); cancel() }
     if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !event.nativeEvent.isComposing && hasDraft) { event.preventDefault(); apply() }
   }}>
-    <div className="pdf-tools" role="toolbar" aria-label="PDF tools">
-      {(['view', 'replace', 'text', 'note', 'highlight', 'underline', 'strikeout', 'rectangle', 'ellipse', 'line', 'arrow', 'form'] as Exclude<Tool,'edit-note'>[]).map(value => <button key={value} aria-pressed={tool === value} disabled={busy || hasDraft || (value !== 'view' && !summary?.editable)} onClick={() => pickTool(value)}>{({ view: 'Select', replace: 'Edit existing text', text: 'Add text', note: 'Note', highlight: 'Highlight area', underline:'Underline area', strikeout:'Strike through', rectangle: 'Rectangle', ellipse:'Ellipse', line:'Line', arrow:'Arrow', form: 'Fill forms' })[value]}</button>)}
-      <button disabled={disabled || !summary?.editable || !bridge?.pickAsset} onClick={() => void importAsset('image')}>Insert image…</button>
-      <span className="pdf-toolbar-spacer" />
-      <div className="pdf-search"><input ref={searchInput} aria-label="Find PDF text" placeholder="Find text" value={query} maxLength={500} onChange={event => { searchAbort.current?.abort(); setSearching(false); setSearchResult(undefined); setQuery(event.target.value); setMatchIndex(0) }} /><span aria-live="polite">{query ? `${matches.length ? matchIndex + 1 : 0} / ${matches.length}` : ''}</span><button disabled={!query.trim() || searching || !loaded} onClick={() => void searchAllPages()}>All pages</button><button aria-label="Previous match" disabled={!matches.length} onClick={() => setMatchIndex((matchIndex - 1 + matches.length) % matches.length)}>‹</button><button aria-label="Next match" disabled={!matches.length} onClick={() => setMatchIndex((matchIndex + 1) % matches.length)}>›</button></div>
-      <button disabled={disabled || !history.current?.canUndo} onClick={() => restore('undo')}>Undo</button><button disabled={disabled || !history.current?.canRedo} onClick={() => restore('redo')}>Redo</button>
-    </div>
+    <Ribbon label="PDF tools" tabs={ribbonTabs} active={activeRibbonTab} onChange={setRibbonTab} />
+    {/* `.pdf-search` keeps the shell's undo/redo routing for a focused search field (App.tsx). */}
+    {findOpen && <div className="pdf-search" role="group" aria-label="Find text in this PDF">
+      <input ref={searchInput} aria-label="Find PDF text" placeholder="Find text" value={query} maxLength={500} onChange={event => { searchAbort.current?.abort(); setSearching(false); setSearchResult(undefined); setQuery(event.target.value); setMatchIndex(0) }} />
+      <span aria-live="polite">{query ? `${matches.length ? matchIndex + 1 : 0} / ${matches.length}` : ''}</span>
+      <RibbonButton icon="pagePrevious" label="Previous match" labelHidden disabled={!matches.length} onClick={() => setMatchIndex((matchIndex - 1 + matches.length) % matches.length)} />
+      <RibbonButton icon="pageNext" label="Next match" labelHidden disabled={!matches.length} onClick={() => setMatchIndex((matchIndex + 1) % matches.length)} />
+      <RibbonButton icon="pdf" label="All pages" title="Search every page of the document" aria-pressed={allPages} disabled={!loaded} onClick={toggleAllPages} />
+      <RibbonButton icon="close" label="Close find" labelHidden onClick={() => openFind(false)} />
+    </div>}
     {searching && <div className="pdf-search-results" role="status">Searching page {searchPage + 1}… <button onClick={() => {searchAbort.current?.abort();setSearching(false)}}>Cancel search</button></div>}
     {searchResult && <div className="pdf-search-results" aria-label="Document search results"><span role="status">{searchResult.hits.length} matches across {searchResult.pagesScanned} of {searchResult.totalPages} pages{searchResult.limited ? ' · Search limit reached; narrow your query' : ''}</span>{[...new Set(searchResult.hits.map(hit=>hit.page))].slice(0,100).map(number => <button key={number} disabled={busy||hasDraft} onClick={()=>jumpToSearchHit(searchResult.hits.find(hit=>hit.page===number)!)}>Page {number} · {searchResult.hits.filter(hit=>hit.page===number).length}</button>)}{new Set(searchResult.hits.map(hit=>hit.page)).size>100 && <span>Showing the first 100 matching pages.</span>}</div>}
     {error && <p className="pdf-message pdf-error" role="alert">{error}</p>}
@@ -309,18 +389,7 @@ export default function PdfEditor({ name, bytes, onChange, onBusyChange, onDraft
         <div className="pdf-page-list">{summary?.pages.map((info, index) => <button key={index} className="pdf-page-button" disabled={disabled} aria-current={page === index + 1 ? 'page' : undefined} onClick={() => { setPage(index + 1); setNotice('') }}><span className="pdf-page-symbol" aria-hidden="true">{index + 1}</span><span>Page {index + 1}<small>{Math.round(info.width)} × {Math.round(info.height)} pt</small></span></button>)}</div>
       </aside>}
       <div className="pdf-main">
-        <div className="pdf-page-actions" role="toolbar" aria-label="Page controls">
-          <button disabled={disabled || page <= 1} onClick={() => setPage(page - 1)} aria-label="Previous PDF page">‹</button><span>Page {page} of {count || '…'}</span><button disabled={disabled || page >= count} onClick={() => setPage(page + 1)} aria-label="Next PDF page">›</button>
-          <span className="pdf-action-divider" />
-          <button disabled={disabled || !summary?.editable} onClick={() => void command({ kind: 'add-page', page }, page + 1)}>Add page</button>
-          <button disabled={disabled || !summary?.editable || !bridge?.pickAsset} onClick={() => void importAsset('pdf')}>Import pages…</button>
-          <button disabled={disabled || !summary?.editable || count < 2} onClick={() => void command({ kind: 'delete-page', page }, Math.max(1, Math.min(page, count - 1)))}>Delete page</button>
-          <button disabled={disabled || !summary?.editable} onClick={() => void command({ kind: 'rotate', page })}>Rotate 90°</button>
-          <button disabled={disabled || !summary?.editable || page === 1} onClick={() => void command({ kind: 'move-page', page, to: page - 1 }, page - 1)}>Move earlier</button>
-          <button disabled={disabled || !summary?.editable || page === count} onClick={() => void command({ kind: 'move-page', page, to: page + 1 }, page + 1)}>Move later</button>
-        </div>
         {!!summary?.pages[page-1]?.annotations.length && <details className="pdf-annotation-list"><summary>Page annotations ({summary.pages[page-1].annotations.length})</summary>{summary.pages[page-1].annotations.map(annotation=><div key={annotation.ref}><span>{annotation.subtype==='Text'?'Note':annotation.subtype}{annotation.contents?`: ${annotation.contents.slice(0,140)}`:''}</span>{annotation.subtype==='Text'&&<button disabled={disabled||!summary.editable||annotation.contents.length>10000} onClick={()=>editNote(annotation)}>Edit note</button>}<button disabled={disabled||!summary.editable} aria-label={`Delete ${annotation.subtype} annotation ${annotation.ref}`} onClick={()=>void command({kind:'annotation.delete',page,target:annotation})}>Delete</button></div>)}</details>}
-        <div className="pdf-export-row"><label>Export pages<input aria-label="PDF pages to export" value={exportRange} placeholder={String(page)} disabled={disabled} onChange={event => setExportRange(event.target.value)} maxLength={1000} /></label><button disabled={disabled || !bridge?.exportBytes} onClick={() => void exportPages()}>Export PDF…</button><span>For example: 1-3, 5</span></div>
         <div className="pdf-canvas-scroll" aria-busy={rendering}>
           <div className={`pdf-page-surface pdf-tool-${tool}`} style={{ width: viewport?.width, height: viewport?.height }} onPointerDown={down} onPointerMove={move} onPointerUp={() => { start.current = undefined }} onPointerCancel={() => { start.current = undefined }}>
             <canvas ref={canvas} style={{ width: viewport?.width, height: viewport?.height, visibility: viewport ? 'visible' : 'hidden' }} aria-label={`PDF page ${page}`} />
@@ -356,6 +425,14 @@ export default function PdfEditor({ name, bytes, onChange, onBusyChange, onDraft
         {hasDraft && <p className="pdf-draft-hint">Apply or cancel before changing pages. Save also applies the draft.</p>}
       </aside>}
     </div>
+    {exportOpen && <dialog className="pdf-export-dialog" aria-labelledby={`${arrowMarkerId}-export`} ref={node => { node?.showModal?.() }} onCancel={event => { event.preventDefault(); setExportOpen(false) }}>
+      <h2 id={`${arrowMarkerId}-export`}>Export pages</h2>
+      <form onSubmit={event => { event.preventDefault(); setExportOpen(false); void exportPages() }}>
+        <label>Pages<input autoFocus aria-label="PDF pages to export" value={exportRange} placeholder={String(page)} disabled={disabled} maxLength={1000} onChange={event => setExportRange(event.target.value)} /></label>
+        <p>Leave empty to export page {page}. For example: 1-3, 5</p>
+        <div className="pdf-export-actions"><button type="button" onClick={() => setExportOpen(false)}>Cancel</button><button type="submit" className="pdf-primary" disabled={disabled}>Export PDF…</button></div>
+      </form>
+    </dialog>}
     <div className="pdf-status"><span role="status">{working ? 'Applying change…' : rendering ? 'Rendering page…' : notice || (tool === 'view' ? 'Choose a tool to add content or arrange pages.' : 'Press Esc to cancel. Ctrl / ⌘ + Enter applies.')}</span><details><summary>Editing support</summary><p>Adds text, annotations, and form values. Existing text replacement uses the original font and refuses unsupported or ambiguous content. Select text to copy it, or search across document pages. Document search is bounded to 2,000 pages, 10 million characters and 10,000 matches. Imported pages retain page content; form PDFs cannot be imported or split. Images are inserted at the center of the page. Added text embeds Liberation Sans and supports available Latin, Greek, and Cyrillic characters. Complex scripts are not yet supported. Text stays on one line. Page changes and additions can be undone until the file is closed.</p></details></div>
   </section>
 }
