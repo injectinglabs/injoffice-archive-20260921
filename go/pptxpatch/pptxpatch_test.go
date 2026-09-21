@@ -717,13 +717,12 @@ func TestParseRealPythonPptxFixture(t *testing.T) {
 						}
 					}
 				}
-				// Regression coverage (round 6): python-pptx's own title
+				// Regression coverage: python-pptx's own title
 				// placeholder carries NO <a:xfrm> at slide OR layout level in
 				// this fixture — position/size lives on the slide MASTER
 				// only. Before layout/master inheritance was resolved, this
 				// read as (0,0,0,0): a real title that Konva/DeckCanvasView
-				// would render as a zero-size, invisible box, exactly the
-				// live-staging "blank white canvas" bug this covers.
+				// would render as a zero-size, invisible box.
 				if sh.Cx > 0 && sh.Cy > 0 {
 					foundTitleGeom = true
 				}
@@ -743,14 +742,14 @@ func TestParseRealPythonPptxFixture(t *testing.T) {
 				if sh.Cx > 0 && sh.Cy > 0 {
 					foundRect = true
 				}
-				// Regression coverage (round 6): python-pptx's own
+				// Regression coverage: python-pptx's own
 				// add_shape() (no explicit .fill.solid() call — the common,
 				// default case) styles the shape ENTIRELY through
 				// <p:style><a:fillRef><a:schemeClr .../></a:fillRef>, no
 				// <a:solidFill> anywhere on the shape itself. Before
 				// <p:style>/schemeClr resolution existed, Fill read as ""
 				// here: an invisible (no fill, no stroke) box on a Konva
-				// renderer, same live-staging bug.
+				// renderer.
 				if sh.Fill != "" {
 					foundShapeFill = true
 				}

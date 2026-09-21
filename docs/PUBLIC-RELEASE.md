@@ -18,7 +18,8 @@ InjOffice is designed as independently consumable TypeScript packages and Go mod
 - XLSX pivot hydration and fail-closed inventory preservation are implemented in the canonical library.
 - Native extract/apply contracts exist for XLSX, DOCX, and PPTX. Native completion remains partial and is not Microsoft Office parity.
 
-Workspace apps (`apps/playground`, `apps/docx-page-paint-worker`) are private and unpublished. The in-repo `injoffice-server` is optional. Browser WASM packages can replace it for supported local workflows and must not become required by other packages.
+Workspace apps under `apps/` are public source but excluded from npm publication
+with `"private": true`. The in-repo `injoffice-server` is optional. Browser WASM packages can replace it for supported local workflows and must not become required by other packages.
 
 ## Charter boundaries
 
@@ -39,7 +40,7 @@ tarballs for versions already published. Existing npm versions are immutable.
 - Apply the [consumer dependency mitigation](DEPENDENCY-TRANSPARENCY.md#security-advisory-snapshot) for Univer 0.25.1. A clean root audit alone does not establish a clean consumer install.
 - Configure and verify stage-only trusted publishing for every package after bootstrap; disallow traditional publishing tokens once OIDC staging is verified.
 - Protect the `npm` GitHub environment with owner approval. A solo maintainer may approve their own deployment; this is separate from npm's publishing approval.
-- Enable private vulnerability reporting when the repository becomes public, and verify the reporting link in SECURITY.md. GitHub does not provide this feature for this private repository.
+- Private vulnerability reporting is enabled for this public repository. Keep the reporting link in SECURITY.md working.
 - Create and test Go submodule release tags such as `go/xlsxpatch/v0.1.0` when releasing the Go modules; npm publication does not release them.
 
 Repository visibility, npm publication, release tags, and Pages deployment remain explicit owner actions. Merging readiness work does not perform them.
@@ -65,9 +66,9 @@ After all packages exist, configure each package's trusted publisher with these 
 
 The tag workflow then builds and validates packages in a job without OIDC permission, records each tarball's SHA-512 digest, and transfers only those tarballs to the protected `stage` job. That job has `id-token: write`, contains no install/build/test step, and runs `npm stage publish`. If a tag is pushed after its bootstrap release, the job instead verifies that every public registry integrity matches and exits successfully. A maintainer must review and approve every newly staged version with 2FA before it becomes public. Once OIDC staging is verified, set each package's publishing access to require 2FA and disallow traditional tokens.
 
-Trusted publishing can still operate while this GitHub repository is private, but npm provenance is unavailable for a private source repository. Provenance will be generated automatically for public packages after the repository becomes public; the release script deliberately does not force `--provenance` while the repository remains private.
+This source repository is public. Eligible trusted-publishing releases can generate npm provenance; verify provenance on each newly published version. Making source public does not add provenance retroactively to existing package versions.
 
-The playground is not an npm package: `apps/playground` is private, and the release script only enumerates publishable manifests under `packages/`. Package allowlists contain compiled ESM, declarations, source maps, package documentation, and explicitly declared runtime/legal assets. Source maps embed library TypeScript sources, so public npm publication exposes the library implementation even if GitHub is still private. CI rejects individual tarballs over 3 MiB compressed or 10 MiB unpacked, except `@injoffice/xlsx-wasm`, whose separate, lazily loaded read-only rich-source WASM module raises its package budget to 3.5 MiB compressed and 12 MiB + 192 KiB unpacked. The native XLSX WASM module has a 7.75 MiB binary ceiling read from `go/xlsxpatch/cmd/xlsxnativewasm/max-bytes.txt` by CI and the local build; the read-only rich-source module retains a 7 MiB bound. CI also rejects a lockstep release set over 15 MiB compressed.
+The playground is not an npm package: `apps/playground` is marked `"private": true`, and the release script only enumerates publishable manifests under `packages/`. Package allowlists contain compiled ESM, declarations, source maps, package documentation, and explicitly declared runtime/legal assets. Source maps embed library TypeScript sources, so they include the library implementation as part of the public distribution. CI rejects individual tarballs over 3 MiB compressed or 10 MiB unpacked, except `@injoffice/xlsx-wasm`, whose separate, lazily loaded read-only rich-source WASM module raises its package budget to 3.5 MiB compressed and 12 MiB + 192 KiB unpacked. The native XLSX WASM module has a 7.75 MiB binary ceiling read from `go/xlsxpatch/cmd/xlsxnativewasm/max-bytes.txt` by CI and the local build; the read-only rich-source module retains a 7 MiB bound. CI also rejects a lockstep release set over 15 MiB compressed.
 
 ## Release validation
 

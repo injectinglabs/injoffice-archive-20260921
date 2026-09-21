@@ -8,41 +8,11 @@ import Konva from 'konva'
 import { shapeText } from './DeckCanvasView'
 import type { WireShape } from './wire'
 
-// Regression coverage for a live-staging bug (round 6 of the Slides OOXML
-// pivot's S9): a REAL uploaded .pptx's shapes went blank in two ways once
-// the earlier read-side fixes (blob URL recovery, the loading hang,
-// placeholder geometry + p:style fill inheritance) were already in place —
-// (1) an autoshape's OWN text ("Drag me" typed inside a rounded-rectangle
-// callout) never painted, even though the shape's fill/stroke now rendered
-// correctly, and (2) a title/body PLACEHOLDER (kind "" — a real .pptx
-// placeholder never carries an explicit prstGeom of its own) rendered as
-// literally nothing at all, text included.
-//
-// Root cause: KonvaShapeInner's entire text-rendering block was gated
-// behind `shape.kind === 'textBox'` — every OTHER kind (or an unresolved
-// "" kind) fell through to a branch that only ever paints an outline
-// (fill/stroke), never text, REGARDLESS of whether shape.paragraphs had
-// real content. This was invisible in every prior round because
-// compile.ts's own textBox()/rect() helpers never produce a non-textBox
-// shape with paragraphs attached — a DeckSpec-driven deck literally cannot
-// exercise this path; only a REAL uploaded .pptx (where a shape commonly
-// carries both an outline AND its own text, or a placeholder carries text
-// with no resolved kind at all) can.
-//
-// Fix: text rendering (shapeText) is now called for every shape that HAS
-// paragraphs, independent of its outline/kind — the two are siblings, not
-// mutually exclusive branches. The property this suite proves is exactly
-// that independence: shapeText's output depends ONLY on shape.paragraphs,
-// never on shape.kind.
-
-// A realistic EMU->px scale (a 960px-wide render of a standard 16:9 slide,
-// cx=12192000 EMU) — NOT 1. shapeText runs a real shape's font size through
-// ptToPx(pt, scale); at scale=1 a 14pt run becomes ptToPx(14,1) = 14*12700 =
-// 177800 "px", so wrapLineToWidth wraps a two-word label onto two lines
-// against ANY reasonably-sized box width — a geometry mistake in an early
-// draft of this test, not a real bug (caught by actually running it: it
-// failed the SAME way regardless of the fix, which is what said "this
-// isn't testing what you think it's testing").
+// OOXML AutoShapes and unresolved placeholders can carry paragraph text
+// independently of their outline kind. Rendering must retain that text even
+// when the shape is not a textBox or has no visible fill/stroke.
+// Use a realistic 960px-wide 16:9 slide scale so point-to-pixel conversion
+// exercises normal font sizes and wrapping thresholds.
 const SCALE = 960 / 12192000
 const BOX_W = 2743200 * SCALE // the real roundRect's own width from the live repro
 const BOX_H = 914400 * SCALE

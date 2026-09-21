@@ -12,14 +12,15 @@ valid samples, or a wrong SUM proves-computation check.
   compatibility 38, date 27, information 25, logical 19, database 12, cube 7,
   meta 7, web 3, array 2).
 - **Curated high-value target set: 142/142 computing** — zero `#NAME?`, zero
-  argument errors. Includes the modern set competitors miss: `LAMBDA`, `LET`,
+  argument errors. The tested set includes: `LAMBDA`, `LET`,
   `XLOOKUP`/`XMATCH`, `TEXTSPLIT`/`TEXTBEFORE`/`TEXTAFTER`, `IFS`/`SWITCH`,
   dynamic arrays (`UNIQUE`, `SORT`, `FILTER`, `SEQUENCE`) with real spill
   behavior, plus the aggregation, text, date, lookup, and core financial
   families.
 
 InjOffice sheets compute through Univer OSS's engine: 535 declared, with
-the 142 that matter proven end-to-end and gated against regression.
+142 curated functions evaluated end-to-end and gated against regression.
+This does not establish conformance for all 535 declared functions.
 
 `ClientFormulaIntegration` is the host-facing bridge for this audited
 vocabulary. The conformance test writes all 142 formulas through its worksheet
@@ -36,10 +37,9 @@ fn, description)` through `ClientFormulaIntegration` — add the function to
 `TARGET_FUNCTIONS` first (the audit turns red), then register the independently
 implemented host function (it turns green).
 
-## Leftovers (tracked in ROADMAP Phase 7)
+## Further coverage
 
 - Agent formula tooling: NL→formula validated against the live workbook,
-  explain-this-formula, plain-language error diagnostics — lands with the
-  agent-integration phase.
+  explain-this-formula, plain-language error diagnostics.
 - Golden value-corpus (expected values per function, not just non-error) —
   grow it as formulas become user-visible surface.

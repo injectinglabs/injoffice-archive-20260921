@@ -4,7 +4,7 @@
   "private": true,
   "license": "Apache-2.0",
   "author": "Injecting Inc.",
-  "description": "InjOffice — web-native office-artifact engine for Injecting agents: charts, pivots, and fail-closed xlsx fidelity on top of Univer OSS.",
+  "description": "Open-source TypeScript and Go libraries for XLSX, DOCX, PPTX, and PDF editing, with agent APIs and browser-local processing.",
   "workspaces": ["packages/*", "apps/*"],
   "scripts": {
     "dev": "npm run dev -w apps/playground",

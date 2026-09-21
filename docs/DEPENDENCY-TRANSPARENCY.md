@@ -35,8 +35,8 @@ can inspect blockers; the release gate fails while a production blocker exists.
 
 ## Current inventory and blockers
 
-At the audited lockfile, the workspace contains 28 npm workspaces and 370 resolved
-npm components. The seven Go modules have no direct third-party Go module: all
+Run `npm run check:dependency-integrity` for workspace and resolved-component
+counts at the current lockfile; use the generated SBOM for the complete inventory. The seven Go modules have no direct third-party Go module: all
 `require` directives point to sibling InjOffice modules through local `replace`
 directives.
 

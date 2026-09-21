@@ -17,49 +17,12 @@ import 'konva/canvas-backend'
 import Konva from 'konva'
 import { canvasFontFamily, estimateTextWidthPx, fitFontSizePx, wrapLineToWidth } from './canvasGeometry'
 
-// Regression coverage for a live-staging bug: on the 'title' SlideKind, a
-// long title ("The Art and Science of Coffee Brewing") rendered past
-// DeckCanvasView's canvas edge.
-//
-// ROUND 4's diagnosis and fix (kept as history — WRONG/INCOMPLETE):
-// theorized the theme's displayFont ("Archivo") never being loaded as a web
-// font, shipped fitFontSizePx + canvasFontFamily + a hard Group clip, and
-// trusted Konva's OWN wrap="word" to make the line-break decision. Nick
-// re-verified on staging: the bug was STILL present, reproduced identically
-// on "terra" (which uses the same font as boardroom, so that was never
-// really the variable), with a precise symptom — title text rendered as
-// ONE long unwrapped line reaching the canvas's own edge, not clipped at
-// the shape's own ~81%-width box. That rules out "Konva's wrap engaged
-// using slightly-wrong metrics" (which would still produce SOME wrapping,
-// just at a different point) — it means wrap="word" effectively did not
-// engage AT ALL for that render, in that browser.
-//
-// ROUND 5's fix stops depending on Konva/canvas's own wrap decision
-// entirely: DeckCanvasView now pre-wraps text itself (wrapLineToWidth, a
-// deterministic character-width heuristic) and renders with wrap="none".
-//
-// Honest scope of THIS file, confirmed by direct experimentation (again —
-// round 4's suite found the same thing): this exact Konva+node-canvas
-// combination self-bounds text painting within its configured `width`
-// REGARDLESS of wrap mode ('word' OR 'none') and regardless of whether the
-// text was pre-wrapped, even for the raw unwrapped repro string and even
-// for a deliberately adversarial unbreakable word. That means this file
-// CANNOT construct a literal "paints outside its box" failure at the Konva-
-// render level to diff against — the browser-specific trigger for the live
-// bug (most likely an async web-font measure-vs-paint mismatch, or some
-// other canvas-measurement quirk this environment doesn't have) does not
-// reproduce headlessly, full stop, and this suite does not claim otherwise.
-// The genuine "before vs after" comparison for THIS bug lives in
-// canvasGeometry.test.ts instead, at the level that IS deterministic and
-// portable: estimateTextWidthPx(wholeRawTitle) is measurably wider than the
-// box (the "before" — what one unwrapped line would require), while every
-// line wrapLineToWidth produces individually fits (the "after"). What THIS
-// file verifies is narrower but still real: fitFontSizePx/canvasFontFamily/
-// wrapLineToWidth integrate correctly with ACTUAL Konva Text objects (not
-// just their own isolated pure-function tests) and the resulting render,
-// for the real reported repro string at the real compiled title-box size,
-// stays within bounds in this environment — a genuine integration check,
-// not a reproduction of the browser bug itself.
+// Integration coverage for manual wrapping, font fallback, and word shrinking
+// with real Konva Text objects at the compiled title-box dimensions.
+// This headless canvas backend bounds text within its configured width even
+// without pre-wrapping, so these tests do not reproduce browser-specific
+// overflow. canvasGeometry.test.ts separately proves that explicit line breaks
+// fit the estimated width while the unwrapped title exceeds it.
 
 function textPaintsOutsideBox(opts: { boxX: number; boxY: number; boxW: number; boxH: number; stageW: number; stageH: number; text: string; fontSize: number }): boolean {
   const stage = new Konva.Stage({ width: opts.stageW, height: opts.stageH })
