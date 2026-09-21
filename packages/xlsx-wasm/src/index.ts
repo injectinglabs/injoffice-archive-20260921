@@ -31,7 +31,7 @@ export type XlsxNativeCellMutationV1 = Extract<SupportedWorkbookMutation, { kind
 export type XlsxNativeStyleMutationV1 = Extract<SupportedWorkbookMutation, { kind: 'style.patch' }>
 export type XlsxNativeLayoutMutationV1 = Extract<SupportedWorkbookMutation, { kind: 'row.set_height' | 'column.set_width' }>
 
-export type XlsxNativeMergeMutationV1 = Extract<SupportedWorkbookMutation, { kind: 'range.merge' | 'range.unmerge' }>
+type XlsxNativeMergeMutationV1 = Extract<SupportedWorkbookMutation, { kind: 'range.merge' | 'range.unmerge' }>
 
 /** Strict JSON shape consumed by Go's NativeWorkbookMutationTransactionV1. */
 export interface XlsxNativeMutationTransactionV1 {
