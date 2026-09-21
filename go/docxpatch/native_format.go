@@ -657,6 +657,17 @@ func nativeFormatParagraphProperties(part []byte, paragraph *nativeXMLNode, alig
 	return nativeMergePropertyContainer(part, paragraph, "pPr", nativeParagraphPropertyOrder, map[string]map[string]*string{"jc": {"val": &alignment}})
 }
 
+// nativeParagraphPropertyRank gives a w:pPr child its position in the
+// CT_PPr sequence, so a merged child lands where the schema expects it.
+func nativeParagraphPropertyRank(local string) int {
+	for rank, name := range nativeParagraphPropertyOrder {
+		if name == local {
+			return rank
+		}
+	}
+	return len(nativeParagraphPropertyOrder)
+}
+
 // nativeFormatRunProperties merges the patch into the source w:rPr, keeping
 // every child the source already carries, in its own position, and inserting
 // a newly written property at its ECMA-376 schema position.
