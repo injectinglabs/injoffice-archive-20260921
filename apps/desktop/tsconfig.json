@@ -20,16 +20,14 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"]
   },
   "include": ["src"],
-  // These modules still need DOCX style catalogs/structural edits, workbook calculation/sheet/name
-  // APIs, or PPTX element/slide mutation types; run formatting and paragraph/page setup now exist.
-  // The first twelve still fail the full check; the four at the end only import them.
-  // Every other src file is type-checked,
-  // and tests/typecheck-scope.test.cjs refuses an exclusion that no longer fails, so the list can only
-  // shrink. Remove a file here once its package APIs land.
+  // Remaining renderer API debt: local workbook calculation/cache exports, DOCX style catalogs
+  // and table mutations, PPTX object/slide mutations and SVG export, XLSX names/sheet lifecycle.
+  // Numbering and run/page formatting APIs now exist; ParagraphToolbar is checked below.
+  // Some modules remain excluded only because they import a failing module. The scope test
+  // checks every exclusion against the full renderer and rejects any that can be removed.
   "exclude": [
     "src/DocumentPreview.tsx",
     "src/OfficeEditor.tsx",
-    "src/ParagraphToolbar.tsx",
     "src/PresentationEditor.tsx",
     "src/SpreadsheetEditor.tsx",
     "src/document-authoring.ts",
