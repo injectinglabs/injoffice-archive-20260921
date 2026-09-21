@@ -7,7 +7,7 @@
     "corpusManifest": {
       "path": "go/officecompat/corpus/manifest.json",
       "protocol": "injoffice-office-compat-corpus/v1",
-      "selectedRecordsSha256": "19091a79889e37225de866fe482fe9309aecfacc6cb30a67a4d8a7b90d0e3b8f"
+      "selectedRecordsSha256": "12e191564413c822e712288ce57f9317a7a1cb0476956d18083a690447c5e24d"
     },
     "completionMatrix": {
       "protocol": "injoffice.native-office-completion/v1",
@@ -100,9 +100,9 @@
       "byteLength": 1941,
       "sha256": "050d8a1d4c594e8ddd7154a73a7ef14652e94865330d651b01a6046a7251f609",
       "expectedPath": "go/officecompat/corpus/generated/expected/docx-inline-png-page-paint.json",
-      "expectedSha256": "789015eac4d56b012683988eccde40b55cac46461cb048c66249242238928092",
+      "expectedSha256": "a6c3382a542443d6a1137a3dbe7e8ca27ab28c6311b73aded8efe52f7469c2bc",
       "canonicalExpectedProfile": "docx-native-canonical-v1",
-      "canonicalExpectedSha256": "b0ce1ea47a0055316093f732085bf212e7688192252c5faa2c08b398c4df4251",
+      "canonicalExpectedSha256": "be09ec7e29c8b5f134f61b2f46612c531d877be436b3357731305b680feee9ea",
       "corpusId": "docx-inline-png-page-paint"
     },
     {
@@ -113,9 +113,9 @@
       "byteLength": 1316,
       "sha256": "47eff90d4080fef9dcc39d66b75f11ff17d052b7c9602b758ea4761e909ce209",
       "expectedPath": "go/officecompat/corpus/generated/expected/docx-transitional-common.json",
-      "expectedSha256": "dc8aaf485874d84233aff93fc73ceba7bdeb133a9373b3d6c212f09e72fad64d",
+      "expectedSha256": "d2f8da816a48a802bc090c829eb7948c575ca0000d24b691c70b99469c184ade",
       "canonicalExpectedProfile": "docx-native-canonical-v1",
-      "canonicalExpectedSha256": "55d3557238f9a1665def9ade45eb11c6d59bc5c066a763a14b83d572dd1392c0",
+      "canonicalExpectedSha256": "2c0315f99fa6be953dd0c3ba4ec7b9ecf778ecf944e36e9deab06134f7a642e3",
       "corpusId": "docx-transitional-common"
     },
     {

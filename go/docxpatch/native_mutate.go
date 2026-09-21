@@ -32,7 +32,53 @@ type NativeDOCXTextMutationV1 struct {
 // shape is {"mutations":[...]}; duplicate or unknown fields, non-string
 // scalars, trailing JSON, and oversized batches are refused before mutation.
 func DecodeNativeDOCXTextMutationPayloadV1(data []byte) ([]NativeDOCXTextMutationV1, error) {
-	invalid := func(message string) ([]NativeDOCXTextMutationV1, error) {
+	decoded, err := decodeNativeDOCXMutationPayloadV1(data)
+	if err != nil {
+		return nil, err
+	}
+	mutations := make([]NativeDOCXTextMutationV1, 0, len(decoded))
+	for index, mutation := range decoded {
+		if mutation.Properties != nil {
+			return nil, nativeMutationError("INVALID_PAYLOAD", "", fmt.Sprintf("mutation %d: this payload replaces text and may not carry run properties", index))
+		}
+		mutations = append(mutations, mutation.NativeDOCXTextMutationV1)
+	}
+	return mutations, nil
+}
+
+// DecodeNativeDOCXFormatMutationPayloadV1 is the same strict payload boundary
+// for the run-property shape: every mutation must carry "properties" and none
+// may carry replacement text.
+func DecodeNativeDOCXFormatMutationPayloadV1(data []byte) ([]NativeDOCXFormatMutationV1, error) {
+	decoded, err := decodeNativeDOCXMutationPayloadV1(data)
+	if err != nil {
+		return nil, err
+	}
+	mutations := make([]NativeDOCXFormatMutationV1, 0, len(decoded))
+	for index, mutation := range decoded {
+		if mutation.Properties == nil || mutation.HasText {
+			return nil, nativeMutationError("INVALID_PAYLOAD", "", fmt.Sprintf("mutation %d: this payload patches run properties and may not replace text", index))
+		}
+		formatting := NativeDOCXFormatMutationV1{TargetKind: mutation.TargetKind, TargetID: mutation.TargetID, ExpectedXMLSHA256: mutation.ExpectedXMLSHA256, Properties: *mutation.Properties, Range: mutation.Range}
+		if err := validateNativeDOCXFormatMutation(&formatting); err != nil {
+			return nil, nativeMutationError("INVALID_PAYLOAD", "", fmt.Sprintf("mutation %d: %s", index, err.Error()))
+		}
+		mutations = append(mutations, formatting)
+	}
+	return mutations, nil
+}
+
+// nativeDOCXMutationV1 is the decoded union of the two payload shapes the
+// envelope carries: an exact text replacement, or a run-property patch.
+type nativeDOCXMutationV1 struct {
+	NativeDOCXTextMutationV1
+	HasText    bool
+	Properties *NativeDOCXRunPropertyPatchV1
+	Range      *NativeDOCXTextRangeV1
+}
+
+func decodeNativeDOCXMutationPayloadV1(data []byte) ([]nativeDOCXMutationV1, error) {
+	invalid := func(message string) ([]nativeDOCXMutationV1, error) {
 		return nil, nativeMutationError("INVALID_PAYLOAD", "", message)
 	}
 	if len(data) == 0 || len(data) > NativeDOCXMaxMutationPayloadBytes {
@@ -47,7 +93,7 @@ func DecodeNativeDOCXTextMutationPayloadV1(data []byte) ([]NativeDOCXTextMutatio
 		return invalid("payload must be one JSON object")
 	}
 	seenMutations := false
-	var mutations []NativeDOCXTextMutationV1
+	var mutations []nativeDOCXMutationV1
 	for decoder.More() {
 		fieldToken, tokenErr := decoder.Token()
 		if tokenErr != nil {
@@ -76,7 +122,7 @@ func DecodeNativeDOCXTextMutationPayloadV1(data []byte) ([]NativeDOCXTextMutatio
 			if mutationErr != nil {
 				return nil, mutationErr
 			}
-			if selectorErr := validateNativeDOCXTextMutationSelector(mutation); selectorErr != nil {
+			if selectorErr := validateNativeDOCXTextMutationSelector(mutation.NativeDOCXTextMutationV1); selectorErr != nil {
 				return invalid(fmt.Sprintf("mutation %d: %s", len(mutations), selectorErr.Error()))
 			}
 			mutations = append(mutations, mutation)
@@ -113,9 +159,10 @@ func ApplyNativeTextMutationPayloadV1(packageBytes, payload []byte, outerExpecte
 	return ApplyNativeTextMutationsV1(packageBytes, outerExpectedRevision, mutations)
 }
 
-func decodeNativeDOCXTextMutationV1(decoder *json.Decoder, index int) (NativeDOCXTextMutationV1, error) {
-	invalid := func(message string) (NativeDOCXTextMutationV1, error) {
-		return NativeDOCXTextMutationV1{}, nativeMutationError("INVALID_PAYLOAD", "", fmt.Sprintf("mutation %d: %s", index, message))
+func decodeNativeDOCXTextMutationV1(decoder *json.Decoder, index int) (nativeDOCXMutationV1, error) {
+	mutation := nativeDOCXMutationV1{}
+	invalid := func(message string) (nativeDOCXMutationV1, error) {
+		return nativeDOCXMutationV1{}, nativeMutationError("INVALID_PAYLOAD", "", fmt.Sprintf("mutation %d: %s", index, message))
 	}
 	first, err := decoder.Token()
 	if err != nil {
@@ -126,7 +173,7 @@ func decodeNativeDOCXTextMutationV1(decoder *json.Decoder, index int) (NativeDOC
 	}
 	seen := map[string]bool{}
 	values := map[string]string{}
-	allowed := map[string]bool{"target_kind": true, "target_id": true, "expected_xml_sha256": true, "text": true}
+	allowed := map[string]bool{"target_kind": true, "target_id": true, "expected_xml_sha256": true, "text": true, "properties": true, "range": true}
 	for decoder.More() {
 		fieldToken, tokenErr := decoder.Token()
 		if tokenErr != nil {
@@ -144,6 +191,14 @@ func decodeNativeDOCXTextMutationV1(decoder *json.Decoder, index int) (NativeDOC
 		if valueErr := decoder.Decode(&rawValue); valueErr != nil {
 			return invalid(fmt.Sprintf("field %q contains invalid JSON", field))
 		}
+		if field == "properties" || field == "range" {
+			patch, span, structuredErr := decodeNativeDOCXStructuredMutationField(field, rawValue)
+			if structuredErr != nil {
+				return invalid(fmt.Sprintf("field %q %s", field, structuredErr.Error()))
+			}
+			mutation.Properties, mutation.Range = nativeFirstPatch(mutation.Properties, patch), nativeFirstRange(mutation.Range, span)
+			continue
+		}
 		value, valueErr := decodeNativeMutationJSONString(rawValue)
 		if valueErr != nil {
 			return invalid(fmt.Sprintf("field %q must be a string", field))
@@ -153,15 +208,38 @@ func decodeNativeDOCXTextMutationV1(decoder *json.Decoder, index int) (NativeDOC
 	if _, closeErr := decoder.Token(); closeErr != nil {
 		return invalid("object is unterminated")
 	}
-	for _, field := range []string{"target_kind", "target_id", "expected_xml_sha256", "text"} {
+	required := []string{"target_kind", "target_id", "expected_xml_sha256", "text"}
+	if mutation.Properties != nil {
+		required = required[:3]
+	}
+	for _, field := range required {
 		if !seen[field] {
 			return invalid(fmt.Sprintf("field %q is required", field))
 		}
 	}
-	return NativeDOCXTextMutationV1{
+	if seen["range"] && mutation.Properties == nil {
+		return invalid("field \"range\" is only meaningful beside run properties")
+	}
+	mutation.HasText = seen["text"]
+	mutation.NativeDOCXTextMutationV1 = NativeDOCXTextMutationV1{
 		TargetKind: values["target_kind"], TargetID: values["target_id"],
 		ExpectedXMLSHA256: values["expected_xml_sha256"], Text: values["text"],
-	}, nil
+	}
+	return mutation, nil
+}
+
+func nativeFirstPatch(current, next *NativeDOCXRunPropertyPatchV1) *NativeDOCXRunPropertyPatchV1 {
+	if next != nil {
+		return next
+	}
+	return current
+}
+
+func nativeFirstRange(current, next *NativeDOCXTextRangeV1) *NativeDOCXTextRangeV1 {
+	if next != nil {
+		return next
+	}
+	return current
 }
 
 // encoding/json deliberately repairs malformed UTF-8 and unpaired UTF-16
@@ -377,6 +455,17 @@ func ApplyNativeTextMutationsV1(packageBytes []byte, expectedRevision string, mu
 		expectedByPath[nativeMutationPathKey(target.kind, target.partName, target.path)] = mutation.Text
 	}
 
+	return writeNativeMutationSplices(packageBytes, pkg, doc, exactRevision, splicesByPart, func(after *NativeDocumentV1) error {
+		return validateNativeMutationResults(doc, after, expectedByPath)
+	})
+}
+
+// writeNativeMutationSplices is the shared write boundary for every guarded
+// native DOCX mutation: it splices the verified byte ranges, refuses a batch
+// that changes no payload, rewrites the OPC, re-extracts with identity
+// continuity, revalidates the contract, and hands the re-extracted document to
+// the caller's own readback before returning preservation evidence.
+func writeNativeMutationSplices(packageBytes []byte, pkg *nativePackage, doc *NativeDocumentV1, exactRevision string, splicesByPart map[string][]nativeTextSplice, readback func(after *NativeDocumentV1) error) (*NativeDOCXMutationResultV1, error) {
 	replacements := map[string][]byte{}
 	changedNames := make([]string, 0, len(splicesByPart))
 	projectedTotal := int64(0)
@@ -418,7 +507,7 @@ func ApplyNativeTextMutationsV1(packageBytes []byte, expectedRevision string, mu
 	if issues := ValidateNativeDocumentV1(after); len(issues) > 0 {
 		return nil, fmt.Errorf("docxpatch: native mutation post-write validation: %w", &NativeValidationError{Issues: issues})
 	}
-	if err := validateNativeMutationResults(doc, after, expectedByPath); err != nil {
+	if err := readback(after); err != nil {
 		return nil, err
 	}
 	sort.Strings(changedNames)
@@ -493,32 +582,37 @@ func indexNativeTextTargets(doc *NativeDocumentV1) map[string]nativeTextTarget {
 			targets["paragraph\x00"+paragraph.ID] = nativeTextTarget{kind: "paragraph", partName: paragraph.Anchor.PartName, path: run.Anchor.Path, anchor: paragraph.Anchor, splice: run.Anchor, text: *run.Text, paragraph: paragraph}
 		}
 	}
-	var indexStory func(*NativeStoryV1)
-	indexStory = func(story *NativeStoryV1) {
+	forEachNativeParagraph(doc, indexParagraph)
+	return targets
+}
+
+// forEachNativeParagraph visits every modeled paragraph of every story, body
+// and table cells included, in authored order.
+func forEachNativeParagraph(doc *NativeDocumentV1, visit func(*NativeParagraphV1)) {
+	visitStory := func(story *NativeStoryV1) {
 		for index := range story.Blocks {
 			block := &story.Blocks[index]
 			if block.Paragraph != nil {
-				indexParagraph(block.Paragraph)
+				visit(block.Paragraph)
 			}
 			if block.Table != nil {
 				for rowIndex := range block.Table.Rows {
 					for cellIndex := range block.Table.Rows[rowIndex].Cells {
 						cell := &block.Table.Rows[rowIndex].Cells[cellIndex]
 						for paragraphIndex := range cell.Paragraphs {
-							indexParagraph(&cell.Paragraphs[paragraphIndex])
+							visit(&cell.Paragraphs[paragraphIndex])
 						}
 					}
 				}
 			}
 		}
 	}
-	indexStory(&doc.Body)
+	visitStory(&doc.Body)
 	for _, stories := range [][]NativeStoryV1{doc.Headers, doc.Footers, doc.Notes, doc.CommentStories} {
 		for index := range stories {
-			indexStory(&stories[index])
+			visitStory(&stories[index])
 		}
 	}
-	return targets
 }
 
 func replaceNativeTextElement(raw []byte, text string) ([]byte, error) {

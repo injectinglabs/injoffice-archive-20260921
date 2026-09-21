@@ -1,9 +1,10 @@
-import { useEffect, useId, useRef, useState, type CSSProperties, type PointerEvent } from 'react'
+import { useEffect, useId, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type PointerEvent } from 'react'
 import { applyPdfCommand, inspectPdf, PdfHistory, findPdfTextMatches, importPdfPages, exportPdfPages, parsePdfPageRange, type PdfCommand, type PdfAnnotationTarget, type PdfSummary } from './pdf-commands'
 import { parsePdfRecoveryDraft, type PdfRecoveryDraft } from './pdf-recovery'
 import {searchPdfDocument,type PdfSearchResult} from './pdf-search'
 import Ribbon, { RibbonButton, RibbonRows, visibleRibbonTabs, type RibbonTabSpec } from './Ribbon'
 import RibbonIcon, { type RibbonIconName } from './RibbonIcons'
+import ContextMenu, { SHORTCUTS, useContextMenu, type ContextMenuItem } from './ContextMenu'
 import type {PDFDocumentProxy} from 'pdfjs-dist'
 import './ribbon.css'
 import './pdf-editor.css'
@@ -60,6 +61,9 @@ export default function PdfEditor({ name, bytes, onChange, onBusyChange, onDraft
   const [findOpen, setFindOpen] = useState(false)
   const [allPages, setAllPages] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
+  const [supportOpen, setSupportOpen] = useState(false)
+  const menu = useContextMenu()
+  const menuPoint = useRef<[number, number] | undefined>(undefined)
   const [query, setQuery] = useState('')
   const [loaded,setLoaded] = useState<{bytes:Uint8Array;pdf:PDFDocumentProxy;pdfjs:typeof import('pdfjs-dist/legacy/build/pdf.mjs')}>()
   const [searchResult,setSearchResult] = useState<PdfSearchResult>()
@@ -242,6 +246,40 @@ export default function PdfEditor({ name, bytes, onChange, onBusyChange, onDraft
     persistDraft({tool:'edit-note',text:target.contents,oldText:target.contents,annotationRef:target.ref,annotationSignature:target.signature,placement})
   }
   function pickTool(next: Tool) { if (hasDraft || busy) return; setTool(next); setText(''); setFieldName(''); setError(''); setNotice(''); if (next === 'highlight') setColor('#ffcd38') }
+  /** Right-click on the page: remember where it happened, in PDF coordinates, for "Add text here". */
+  function openPageMenu(event: ReactMouseEvent<HTMLDivElement>) {
+    const rect = event.currentTarget.getBoundingClientRect()
+    menuPoint.current = viewport ? viewport.convertToPdfPoint(Math.max(0, Math.min(viewport.width, event.clientX - rect.left)), Math.max(0, Math.min(viewport.height, event.clientY - rect.top))) as [number, number] : undefined
+    menu.open(event)
+  }
+  /** Picks a placed tool and drops its placement where the menu was opened, like a click with the tool would. */
+  function placeToolAt(next: 'text' | 'note') {
+    const at = menuPoint.current
+    if (!at || hasDraft || busy || !summary?.editable) return
+    pickTool(next)
+    setPlacement({ at }); notifyDraft(true); persistDraft({ tool: next, text: '', placement: { at } })
+  }
+  const pageSelection = () => typeof window !== 'undefined' && !!window.getSelection()?.toString().trim()
+  function pageContextMenu(): ContextMenuItem[] {
+    const editable = !!summary?.editable, blocked = busy || hasDraft
+    const tools: ContextMenuItem[] = ([['view', 'Select'], ['replace', 'Edit text'], ['highlight', 'Highlight']] as const).map(([value, label]) => ({
+      id: value, label, checked: tool === value,
+      disabled: blocked || (value !== 'view' && !editable),
+      title: value === 'highlight' ? 'Drag across the page to highlight an area' : value === 'replace' ? 'Click an existing text span to replace it' : undefined,
+      run: () => pickTool(value),
+    }))
+    const placed = (id: 'text' | 'note', label: string): ContextMenuItem => ({
+      id, label, disabled: blocked || !editable || !menuPoint.current,
+      title: editable ? undefined : 'This PDF cannot be edited', run: () => placeToolAt(id),
+    })
+    return [
+      ...tools.slice(0, 2),
+      { separator: true },
+      placed('text', 'Add text here'), placed('note', 'Add note'), tools[2],
+      { separator: true },
+      { id: 'copy', label: 'Copy', shortcut: SHORTCUTS.copy, disabled: !pageSelection(), title: pageSelection() ? undefined : 'Select page text with the Select tool to copy it', run: () => { if (typeof window !== 'undefined') window.document.execCommand('copy') } },
+    ]
+  }
   function point(event: PointerEvent<HTMLDivElement>): Placement | undefined {
     if (!viewport) return
     const rect = event.currentTarget.getBoundingClientRect()
@@ -359,6 +397,7 @@ export default function PdfEditor({ name, bytes, onChange, onBusyChange, onDraft
         <span className="ribbon-note">of {count || '…'}</span>
       </> },
       { id: 'export', label: 'Export', children: bridge?.exportBytes && <RibbonButton icon="export" label="Export pages…" title="Export a page range as a new PDF" aria-expanded={exportOpen} disabled={disabled} onClick={() => setExportOpen(true)} /> },
+      { id: 'help', label: 'Help', children: <RibbonButton icon="more" label="Editing support" title="What this editor can change in a PDF" aria-expanded={supportOpen} onClick={() => setSupportOpen(true)} /> },
     ] },
   ]
   const activeRibbonTab = ['File', ...visibleRibbonTabs(ribbonTabs).map(tab => tab.id)].includes(ribbonTab) ? ribbonTab : 'Home'
@@ -391,7 +430,7 @@ export default function PdfEditor({ name, bytes, onChange, onBusyChange, onDraft
       <div className="pdf-main">
         {!!summary?.pages[page-1]?.annotations.length && <details className="pdf-annotation-list"><summary>Page annotations ({summary.pages[page-1].annotations.length})</summary>{summary.pages[page-1].annotations.map(annotation=><div key={annotation.ref}><span>{annotation.subtype==='Text'?'Note':annotation.subtype}{annotation.contents?`: ${annotation.contents.slice(0,140)}`:''}</span>{annotation.subtype==='Text'&&<button disabled={disabled||!summary.editable||annotation.contents.length>10000} onClick={()=>editNote(annotation)}>Edit note</button>}<button disabled={disabled||!summary.editable} aria-label={`Delete ${annotation.subtype} annotation ${annotation.ref}`} onClick={()=>void command({kind:'annotation.delete',page,target:annotation})}>Delete</button></div>)}</details>}
         <div className="pdf-canvas-scroll" aria-busy={rendering}>
-          <div className={`pdf-page-surface pdf-tool-${tool}`} style={{ width: viewport?.width, height: viewport?.height }} onPointerDown={down} onPointerMove={move} onPointerUp={() => { start.current = undefined }} onPointerCancel={() => { start.current = undefined }}>
+          <div className={`pdf-page-surface pdf-tool-${tool}`} style={{ width: viewport?.width, height: viewport?.height }} onContextMenu={openPageMenu} onPointerDown={down} onPointerMove={move} onPointerUp={() => { start.current = undefined }} onPointerCancel={() => { start.current = undefined }}>
             <canvas ref={canvas} style={{ width: viewport?.width, height: viewport?.height, visibility: viewport ? 'visible' : 'hidden' }} aria-label={`PDF page ${page}`} />
             <div ref={textContainer} className="pdf-text-layer" style={{ '--total-scale-factor': zoom * 96 / 72, pointerEvents: tool === 'view' || tool === 'replace' ? 'auto' : 'none' } as CSSProperties} onClick={event => selectExistingSpan(event.target)} />
             {notes.map(note => {
@@ -408,6 +447,7 @@ export default function PdfEditor({ name, bytes, onChange, onBusyChange, onDraft
             {placement && tool !== 'line' && tool !== 'arrow' && <div className={`pdf-placement pdf-placement-${tool}`} style={drawStyle ? {...drawStyle,color} : undefined}>{(tool === 'text' || tool === 'note') && <span style={{ color, fontSize: tool === 'text' ? size * zoom * 96 / 72 : 16 }}>{tool === 'text' ? text || 'Text' : 'Note'}</span>}</div>}
           </div>
         </div>
+        {menu.anchor && <ContextMenu anchor={menu.anchor} label="PDF page" onClose={menu.close} items={pageContextMenu()} />}
       </div>
       {tool !== 'view' && <aside className="pdf-inspector" aria-label="Tool settings">
         <h2>{({ 'edit-note':'Edit note', replace: 'Edit existing text', text: 'Add text', note: 'Add a note', highlight: 'Highlight an area', underline:'Underline an area', strikeout:'Strike through an area', rectangle: 'Draw a rectangle', ellipse:'Draw an ellipse', line:'Draw a line', arrow:'Draw an arrow', form: 'Fill form fields' })[tool]}</h2>
@@ -433,6 +473,12 @@ export default function PdfEditor({ name, bytes, onChange, onBusyChange, onDraft
         <div className="pdf-export-actions"><button type="button" onClick={() => setExportOpen(false)}>Cancel</button><button type="submit" className="pdf-primary" disabled={disabled}>Export PDF…</button></div>
       </form>
     </dialog>}
-    <div className="pdf-status"><span role="status">{working ? 'Applying change…' : rendering ? 'Rendering page…' : notice || (tool === 'view' ? 'Choose a tool to add content or arrange pages.' : 'Press Esc to cancel. Ctrl / ⌘ + Enter applies.')}</span><details><summary>Editing support</summary><p>Adds text, annotations, and form values. Existing text replacement uses the original font and refuses unsupported or ambiguous content. Select text to copy it, or search across document pages. Document search is bounded to 2,000 pages, 10 million characters and 10,000 matches. Imported pages retain page content; form PDFs cannot be imported or split. Images are inserted at the center of the page. Added text embeds Liberation Sans and supports available Latin, Greek, and Cyrillic characters. Complex scripts are not yet supported. Text stays on one line. Page changes and additions can be undone until the file is closed.</p></details></div>
+    {supportOpen && <dialog className="pdf-export-dialog pdf-support-dialog" aria-labelledby={`${arrowMarkerId}-support`} ref={node => { node?.showModal?.() }} onCancel={event => { event.preventDefault(); setSupportOpen(false) }}>
+      <h2 id={`${arrowMarkerId}-support`}>Editing support</h2>
+      <p>Adds text, annotations, and form values. Existing text replacement uses the original font and refuses unsupported or ambiguous content. Select text to copy it, or search across document pages. Document search is bounded to 2,000 pages, 10 million characters and 10,000 matches. Imported pages retain page content; form PDFs cannot be imported or split. Images are inserted at the center of the page. Added text embeds Liberation Sans and supports available Latin, Greek, and Cyrillic characters. Complex scripts are not yet supported. Text stays on one line. Page changes and additions can be undone until the file is closed.</p>
+      <div className="pdf-export-actions"><button type="button" autoFocus className="pdf-primary" onClick={() => setSupportOpen(false)}>Close</button></div>
+    </dialog>}
+    {/* One status row: the page on the left, what the tool expects on the right. The app footer keeps the save state and zoom. */}
+    <div className="pdf-status"><span>Page {page} of {count || '…'}</span><span role="status">{working ? 'Applying change…' : rendering ? 'Rendering page…' : notice || (tool === 'view' ? 'Choose a tool to add content or arrange pages.' : 'Press Esc to cancel. Ctrl / ⌘ + Enter applies.')}</span></div>
   </section>
 }
