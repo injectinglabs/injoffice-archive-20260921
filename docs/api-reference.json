@@ -18130,6 +18130,11 @@
               "signature": "export type XlsxNativeCellMutationV1 = Extract<SupportedWorkbookMutation,"
             },
             {
+              "name": "XlsxNativeChartMutationV1",
+              "kind": "type",
+              "signature": "export type XlsxNativeChartMutationV1 = Extract<SupportedWorkbookMutation,"
+            },
+            {
               "name": "XlsxNativeFilterMutationV1",
               "kind": "type",
               "signature": "export type XlsxNativeFilterMutationV1 = Extract<SupportedWorkbookMutation,"
