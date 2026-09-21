@@ -8,6 +8,10 @@ export interface StartPageProps {
   available: boolean;
   onOpen: () => void;
   onUpdates?: () => void;
+  /** Opens the command search; rendered as the Office-style search box at the top of the page. */
+  onSearch?: () => void;
+  searchLabel?: string;
+  searchTitle?: string;
   onImportText?:()=>void;
   onCreate: (format: 'docx' | 'xlsx' | 'pptx' | 'pdf') => void;
   onOpenRecent: (id: string) => void;
@@ -52,7 +56,7 @@ function recentDate(timestamp: number) {
   return sameDay ? `Today, ${date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : date.toLocaleDateString([], { month: 'short', day: 'numeric', ...(date.getFullYear() !== now.getFullYear() ? { year: 'numeric' } : {}) });
 }
 
-export default function StartPage({ recentFiles, busy, available, onOpen, onUpdates, onImportText, onCreate, onOpenRecent, onRemoveRecent, onResume, currentName }: StartPageProps) {
+export default function StartPage({ recentFiles, busy, available, onOpen, onUpdates, onSearch, searchLabel, searchTitle, onImportText, onCreate, onOpenRecent, onRemoveRecent, onResume, currentName }: StartPageProps) {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState('all');
   const visibleFiles = useMemo(() => recentFiles.filter(file => {
@@ -77,6 +81,7 @@ export default function StartPage({ recentFiles, busy, available, onOpen, onUpda
 
     <main className="start-main">
       <div className="start-main-inner">
+        {onSearch && <div className="start-command-search"><button onClick={onSearch} disabled={busy} title={searchTitle} aria-label={searchTitle ?? 'Search commands'}><Icon name="search" /><span>{searchLabel ?? 'Search'}</span></button></div>}
         <section className="start-intro" aria-labelledby="start-title">
           <div><h1 id="start-title">Your next idea starts here.</h1><p>Create something new, or pick up where you left off.</p></div>
           <div className="start-open-existing"><button className="start-open-primary" onClick={onOpen} disabled={disabled}><Icon name="open" />Open existing file…</button><span>DOCX, XLSX, PPTX &amp; PDF</span></div>

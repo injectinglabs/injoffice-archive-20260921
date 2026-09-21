@@ -264,7 +264,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .command-palette [aria-disabled="true"] { opacity: .45; cursor: default; }
 .command-palette small { color: var(--muted); }
 .command-empty { padding: 12px 20px; color: var(--muted); }
-.home-command-button { align-self: flex-end; margin: 10px 24px 0; }
 .preferences-dialog { width: min(480px, calc(100vw - 40px)); padding: 26px; border: 1px solid var(--line); border-radius: 12px; color: var(--ink); background: var(--surface-raised); box-shadow: 0 24px 80px var(--shadow); }
 .preferences-dialog::backdrop { background: var(--backdrop); }
 .preferences-dialog h2 { margin: 0 0 10px; font-size: 20px; }
