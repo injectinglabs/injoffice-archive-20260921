@@ -46,7 +46,10 @@
 .presentation-fidelity p { margin: 10px 0; }
 .presentation-fidelity ul { padding-left: 17px; }
 .presentation-inspector { flex: 0 0 244px; overflow: auto; border-left: 1px solid var(--border); background: var(--surface); padding: 19px 16px; }
-.presentation-inspector h2 { margin: 0 0 16px; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.presentation-inspector-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin: 0 0 16px; }
+.presentation-inspector h2 { margin: 0; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.presentation-editor .presentation-pane-close { border: 0; border-radius: 4px; background: none; padding: 0 6px; font-size: 17px; line-height: 1.2; color: var(--text-muted); }
+.presentation-editor .presentation-pane-close:hover:enabled { background: var(--hover); border-color: transparent; }
 .presentation-inspector h3 { margin: 9px 0 0; font-size: 11px; font-weight: 600; color: var(--text-muted); }
 .presentation-inspector-tabs { display: flex; gap: 7px; margin: 0 0 16px; }
 .presentation-inspector-tabs button { border: 0; background: var(--surface-muted); padding: 6px 12px; font-size: 12px; }
@@ -96,8 +99,8 @@
 .presentation-background-control { display: flex; align-items: center; gap: 6px; color: var(--text-muted); font-size: 11px; }
 .presentation-background-control select { padding: 5px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: var(--text); }
 
-.presentation-arrange { border-bottom: 1px solid var(--border); padding-bottom: 14px; margin-bottom: 16px; }
-.presentation-arrange summary { cursor: pointer; font-weight: 600; color: var(--accent); }
+.presentation-arrange { border-top: 1px solid var(--border); padding-top: 15px; margin-top: 18px; }
+.presentation-arrange h3 { margin: 0 0 8px; font-size: 11px; font-weight: 600; color: var(--text-muted); }
 .presentation-arrange-list { max-height: 180px; overflow: auto; }
 .presentation-arrange-list label { display: flex; align-items: center; gap: 8px; padding: 5px 0; }
 .presentation-arrange-list input { width: auto; }
