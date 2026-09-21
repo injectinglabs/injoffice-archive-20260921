@@ -113,6 +113,8 @@ function operationPassed(workbook: XlsxNativeWorkbook, operation: SupportedWorkb
       return cells.length === expectedCount && cells.every((cell) => { const style = workbook.styles.find((item) => item.id === cell.style_id)?.effective; return !!style && Object.entries(operation.style).every(([key, value]) => style[key as keyof typeof style] === value) })
     }
   }
+  // New native mutation families require their own readback proof.
+  return false
 }
 
 export function createXlsxAgentAdapter(): AgentArtifactAdapter<XlsxAgentArtifact> {
