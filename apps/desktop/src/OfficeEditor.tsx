@@ -5,7 +5,7 @@ import { buildDocxRunMutation, editableDocxRuns, verifyDocxRoundTrip } from '../
 import DocumentPreview from './DocumentPreview'
 import {loadDocumentImages,type DocumentImageCache} from './document-media'
 import { replaceParagraphLines, insertDocumentImage, deleteDocumentImage, replaceDocumentImage, replaceEditableDocumentText, mergeWithPreviousParagraph, insertDocumentTable, changeDocumentTable, changeDocumentTableGrid, type TableGridOperation } from './document-authoring'
-import {paragraphStyleName, runAppearance} from './document-style'
+import {canFormatParagraphRange, canFormatRun, paragraphStyleName, runAppearance} from './document-style'
 import {paragraphTextOffset, type DocumentTextRange} from './document-range'
 import {createHiddenApplyScheduler} from './hidden-apply'
 import HyperlinkControl from './HyperlinkControl'
@@ -504,7 +504,7 @@ export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDr
   useEffect(() => { registerHistory?.({ undo: () => historyCommands.current.undo(), redo: () => historyCommands.current.redo(), canUndo, canRedo }) }, [registerHistory, canUndo, canRedo])
   const zoom = Math.max(50, Math.min(200, viewOptions?.zoom ?? 100)) / 100
   const toolbarValues=snapshot && (textRange?.paragraph_id?documentRangeFormattingValues(snapshot.preview.document,selected,textRange,hasDraft?draft:undefined):formattingValues(snapshot.preview,selected))
-  if(toolbarValues && textRange && (textRange.unsupported || (textRange.paragraph_id&&docxSelection(snapshot!.preview.document,selected)?.paragraph.runs.some(run=>runAppearance(snapshot!.preview.document,docxSelection(snapshot!.preview.document,selected)!.paragraph,run).hidden)) || (textRange.paragraph_id?!docxSelection(snapshot!.preview.document,selected)?.paragraph.can_format_range:!docxSelection(snapshot!.preview.document,selected)?.run.can_format_range)))toolbarValues.characterEditable=false
+  if(toolbarValues && textRange && (textRange.unsupported || (textRange.paragraph_id&&docxSelection(snapshot!.preview.document,selected)?.paragraph.runs.some(run=>runAppearance(snapshot!.preview.document,docxSelection(snapshot!.preview.document,selected)!.paragraph,run).hidden)) || (textRange.paragraph_id?!canFormatParagraphRange(docxSelection(snapshot!.preview.document,selected)!.paragraph):!canFormatRun(docxSelection(snapshot!.preview.document,selected)!.paragraph,docxSelection(snapshot!.preview.document,selected)!.run))))toolbarValues.characterEditable=false
   const selectedTable=snapshot && documentTableSelection(snapshot.preview.document,selected)
   const baseStatistics=useMemo(()=>snapshot?documentStatistics(snapshot.preview.document):undefined,[snapshot])
   const statisticsTarget=snapshot&&hasDraft?docxSelection(snapshot.preview.document,selected):undefined
@@ -534,7 +534,7 @@ export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDr
       { id: 'styles', label: 'Styles', children: paragraphToolbar('styles') },
       { id: 'editing', label: 'Editing', children: <>
         <RibbonButton icon="replace" label="Find / replace" shortcut="find" aria-expanded={searchOpen} onClick={() => setSearchOpen(value => !value)} />
-        <RibbonButton icon="select" label="Select paragraph text" disabled={blocked || hasDraft || !selection?.paragraph.can_format_range || hiddenRun || !selection.paragraph.runs.some(run => run.text?.length)} onClick={() => { const paragraph = selection!.paragraph; setTextRange({ paragraph_id: paragraph.id, start_utf16: 0, end_utf16: paragraph.runs.reduce((length, run) => length + (run.text ?? '').length, 0) }) }} />
+        <RibbonButton icon="select" label="Select paragraph text" disabled={blocked || hasDraft || !selection||!canFormatParagraphRange(selection.paragraph) || hiddenRun || !selection.paragraph.runs.some(run => run.text?.length)} onClick={() => { const paragraph = selection!.paragraph; setTextRange({ paragraph_id: paragraph.id, start_utf16: 0, end_utf16: paragraph.runs.reduce((length, run) => length + (run.text ?? '').length, 0) }) }} />
       </> },
     ] },
     { id: 'Insert', label: 'Insert', groups: [

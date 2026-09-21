@@ -2,7 +2,7 @@ import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties
 import {isPreviewImageUrl} from './document-media'
 import type { NativeDocxDocumentV1, NativeDocxParagraphV1, NativeDocxRunV1, NativeDocxStoryV1 } from '../../../packages/docs/src/nativeContract'
 import { captureParagraphSelection, restoreParagraphSelection, type DocumentTextRange } from './document-range'
-import { paragraphAppearance, paragraphListLabels, runAppearance } from './document-style'
+import { canFormatParagraphRange, paragraphAppearance, paragraphListLabels, runAppearance } from './document-style'
 import { editableDocxRuns } from '../../playground/src/docxRoundTrip'
 import { nativeDocxParagraphText, nativeDocxRunText } from '../../playground/src/docsNativePreview'
 
@@ -92,7 +92,7 @@ export default function DocumentPreview(props: DocumentPreviewProps) {
       lineHeight: properties.line_spacing === undefined ? undefined : properties.line_rule && properties.line_rule !== 'auto' ? `${properties.line_spacing / 20}pt` : properties.line_spacing / 240,
     }
     return <p key={runIdentity(value.anchor.part_name, value.id)} id={paragraphId(value)} onMouseUp={event=>{
-      const selection=window.getSelection();if(busy||!value.can_format_range||value.runs.some(run=>runAppearance(document,value,run).hidden)||!selection?.rangeCount)return
+      const selection=window.getSelection();if(busy||!canFormatParagraphRange(value)||value.runs.some(run=>runAppearance(document,value,run).hidden)||!selection?.rangeCount)return
       const range=selection.getRangeAt(0);if(!event.currentTarget.contains(range.commonAncestorContainer))return
       const captured=captureParagraphSelection(event.currentTarget,range);if(!captured)return
       const first=value.runs.find(run=>targets.has(runIdentity(run.anchor.part_name,run.id)))
@@ -100,7 +100,7 @@ export default function DocumentPreview(props: DocumentPreviewProps) {
       const next={...captured,paragraph_id:value.id}
       if(value.runs.some(run=>targets.get(runIdentity(run.anchor.part_name,run.id))?.key===selected))props.onTextRangeChange(next)
       else choose(targets.get(runIdentity(first.anchor.part_name,first.id))!.key,next)
-    }} data-docx-paragraph={value.id} data-range-editable={value.can_format_range&&!value.runs.some(run=>runAppearance(document,value,run).hidden)?true:undefined} tabIndex={-1} className={`office-paragraph ${level ? `office-heading office-heading-${level}` : ''} ${isTitle ? 'office-doc-title' : ''}`} style={style} role={level ? 'heading' : undefined} aria-level={level}>
+    }} data-docx-paragraph={value.id} data-range-editable={canFormatParagraphRange(value)&&!value.runs.some(run=>runAppearance(document,value,run).hidden)?true:undefined} tabIndex={-1} className={`office-paragraph ${level ? `office-heading office-heading-${level}` : ''} ${isTitle ? 'office-doc-title' : ''}`} style={style} role={level ? 'heading' : undefined} aria-level={level}>
       {label && <span className="office-list-marker" contentEditable={false} style={{fontFamily:label.properties?.font_family,fontSize:label.properties?.font_size_half_points ? `${label.properties.font_size_half_points / 2}pt` : undefined}}>{label.text}{label.suffix === 'nothing' ? '' : '\u00a0'}</span>}
       {value.runs.map(run => {
         const key = runIdentity(run.anchor.part_name, run.id)
