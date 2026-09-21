@@ -364,3 +364,34 @@ test('XLSX Home uses Excel icon controls: six alignment toggles, colour buttons,
     delete globalThis.__xlsxClient;
   }
 });
+
+test('sheet-state notes live in the status row, not as captions over the cells', async () => {
+  const source = fs.readFileSync(path.resolve(__dirname, '../src/SpreadsheetEditor.tsx'), 'utf8');
+  assert.equal(/sheet-filter-status/.test(source), false, 'the filter caption above the grid is gone');
+  assert.equal(/exceeds the display limit[^`']*<\/div>/.test(source), false, 'the frozen-pane caption is no longer a banner');
+
+  const client = mockClient();
+  const model = { ...structuredClone(await client.extract()) };
+  model.sheets[0].auto_filter = { ref: 'A1:C9' };
+  model.sheets[0].frozen_rows = 99;
+  client.extract = async () => structuredClone(model);
+  globalThis.__xlsxClient = client;
+  const SpreadsheetEditor = await loadEditor();
+  const busy = [];
+  let view;
+  try {
+    await act(async () => {
+      view = create(React.createElement(SpreadsheetEditor, { name: 'Book.xlsx', bytes: new Uint8Array([1]), onChange: () => {}, onBusyChange: value => busy.push(value) }));
+    });
+    await until(() => busy.at(-1) === false && view.root.findAllByProps({ className: 'sheet-grid' }).length > 0);
+    const notes = view.root.findAllByProps({ className: 'sheet-note' });
+    assert.deepEqual(notes.map(text), ['Filter Mode', 'Panes not pinned']);
+    assert.match(notes[0].props.title, /Text filter on A1:C9/);
+    assert.match(notes[1].props.title, /exceeds the display limit/);
+    const sheetArea = view.root.findByProps({ className: 'sheet-content' });
+    assert.deepEqual(sheetArea.findAllByType('p'), [], 'nothing is captioned inside the sheet area');
+  } finally {
+    if (view) await act(async () => view.unmount());
+    delete globalThis.__xlsxClient;
+  }
+});
