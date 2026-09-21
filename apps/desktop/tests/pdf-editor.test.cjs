@@ -233,7 +233,7 @@ test('the PDF editor uses the shared Office ribbon: tabs, icons, find toggle and
     const label = node => typeof node === 'string' ? node : (node.children ?? []).map(label).join('');
     assert.deepEqual(renderer.root.findAllByProps({ role: 'tab' }).map(label), ['Home', 'Insert', 'View'], 'Office tab strip (File comes from the workspace context)');
     assert.deepEqual(renderer.root.findAllByProps({ role: 'group' }).map(group => group.props['aria-label']),
-      ['Tools', 'Editing', 'Text', 'Markup', 'Shapes', 'Illustrations', 'Pages', 'Arrange', 'Page Navigation', 'Export']);
+      ['Tools', 'Editing', 'Text', 'Markup', 'Shapes', 'Illustrations', 'Pages', 'Arrange', 'Page Navigation', 'Export', 'Help']);
 
     // Every command button carries a glyph and a tooltip; the title-bar Quick Access owns undo/redo.
     const commands = renderer.root.findAllByType('button').filter(button => (button.props.className ?? '').includes('ribbon-button'));
@@ -264,6 +264,86 @@ test('the PDF editor uses the shared Office ribbon: tabs, icons, find toggle and
     assert.equal(dialog.props.className, 'pdf-export-dialog');
     assert.match(label(dialog), /For example: 1-3, 5/);
     assert.equal(renderer.root.findByProps({ 'aria-label': 'PDF pages to export' }).props.placeholder, '1');
+    await act(async () => renderer.root.findByType('dialog').props.onCancel({ preventDefault() {} }));
+
+    // One status row: the page on the left, the tool hint on the right, and no Editing support disclosure.
+    const status = renderer.root.findByProps({ className: 'pdf-status' });
+    const parts = status.children.map(child => child.children.join(''));
+    assert.deepEqual(parts, ['Page 1 of 3', 'Choose a tool to add content or arrange pages.']);
+    assert.equal(status.findAllByType('details').length, 0);
+    await act(async () => ribbonButton(renderer, 'Editing support').props.onClick());
+    assert.match(label(renderer.root.findByType('dialog')), /Editing support/);
+    await act(async () => renderer.unmount());
+    renderer = undefined;
+  } finally {
+    if (renderer) await act(async () => renderer.unmount());
+    delete globalThis.__pdfView;
+    delete globalThis.__inspectPdf;
+    delete globalThis.__applyPdfCommand;
+    delete global.document;
+    delete global.window;
+  }
+});
+
+test('right-clicking the PDF page opens the shared context menu with the page commands', async () => {
+  let renderer;
+  const bytes = new Uint8Array([0x25, 0x50, 0x44, 0x46]);
+  const listeners = [];
+  global.document = { baseURI: 'https://injoffice.invalid/' };
+  global.window = {
+    devicePixelRatio: 1,
+    innerWidth: 1440, innerHeight: 900,
+    getSelection: () => null,
+    addEventListener() {}, removeEventListener() {},
+    document: { addEventListener: (...args) => listeners.push(args[0]), removeEventListener() {}, activeElement: null },
+  };
+  globalThis.__inspectPdf = async () => summary(1);
+  globalThis.__applyPdfCommand = async current => current;
+  globalThis.__pdfView = {
+    getDocument: () => ({
+      promise: Promise.resolve({
+        numPages: 1,
+        getPage: async () => ({
+          getViewport: () => ({ width: 400, height: 500, convertToPdfPoint: (x, y) => [x, 500 - y], convertToViewportPoint: (x, y) => [x, y] }),
+          getAnnotations: async () => [],
+          getTextContent: async () => ({ items: [{ str: 'Page text' }] }),
+          render: () => ({ promise: Promise.resolve(), cancel() {} }),
+        }),
+      }),
+      destroy: async () => {},
+    }),
+  };
+  try {
+    const Editor = await loadEditor();
+    await act(async () => {
+      renderer = create(React.createElement(Editor, { name: 'Test.pdf', bytes, onChange() {}, viewOptions: { zoom: 100, navigation: true, focus: false } }), {
+        createNodeMock: element => element.props.className?.startsWith('pdf-page-surface') ? { getBoundingClientRect: () => ({ left: 0, top: 0, width: 400, height: 500 }) } : nodeMock(element),
+      });
+    });
+    await until(() => renderer.root.findAllByProps({ className: 'pdf-text-layer' }).length > 0);
+    const surface = renderer.root.findAll(node => typeof node.type === 'string' && (node.props.className ?? '').startsWith('pdf-page-surface'))[0];
+    assert.equal(renderer.root.findAllByProps({ role: 'menu' }).length, 0);
+
+    await act(async () => surface.props.onContextMenu({
+      preventDefault() {}, clientX: 40, clientY: 60,
+      currentTarget: { getBoundingClientRect: () => ({ left: 0, top: 0, width: 400, height: 500 }) },
+    }));
+    const menu = renderer.root.findByProps({ role: 'menu' });
+    assert.equal(menu.props['aria-label'], 'PDF page');
+    const items = menu.findAllByType('button').map(button => button.findByProps({ className: 'context-menu-label' }).children.join(''));
+    assert.deepEqual(items, ['Select', 'Edit text', 'Add text here', 'Add note', 'Highlight', 'Copy']);
+    assert.equal(menu.findAllByProps({ role: 'separator' }).length, 2);
+    // Copy needs a page selection; the tools do not.
+    const entry = label => menu.findAllByType('button').find(button => button.findByProps({ className: 'context-menu-label' }).children.join('') === label);
+    assert.equal(entry('Copy').props['aria-disabled'], true);
+    assert.equal(entry('Select').props['aria-checked'], true);
+    assert.equal(entry('Add text here').props['aria-disabled'], undefined);
+
+    // "Add text here" picks the tool and places the draft where the menu was opened.
+    await act(async () => entry('Add text here').props.onClick());
+    assert.equal(renderer.root.findAllByProps({ role: 'menu' }).length, 0, 'the menu closes when an entry runs');
+    assert.equal(renderer.root.findByProps({ 'aria-label': 'Tool settings' }) != null, true);
+    assert.equal(renderer.root.findByProps({ 'aria-label': 'New PDF text' }) != null, true);
     await act(async () => renderer.unmount());
     renderer = undefined;
   } finally {

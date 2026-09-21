@@ -73,9 +73,25 @@ size=$(wc -c < "$output_dir/docxnative.wasm" | tr -d ' ')
 # (region w:tcBorders over the table's own borders, shared edges settled
 # between neighbours). Measured locally: 7,138,716 -> 7,176,573 bytes
 # (+37,857), 381 bytes over the previous gate before the CI margin.
-max_size=$((13 * 1024 * 1024 / 2 + 416 * 1024))
+#
+# A further 128 KiB covers guarded run formatting: the run-property patch
+# payload shape, the run split at a selection's boundaries, the ECMA-376 rPr
+# merge and the post-write readback. This one is mostly not its own code.
+# Measured on this branch, local darwin/arm64:
+#   main                                        7,176,573
+#   main + a ten-line probe function            7,177,271  (+698)
+#   + the whole formatting engine, decode stubbed 7,187,844  (+11,271)
+#   + a ten-line probe body on top of that      7,276,314  (+88,470)
+#   + this lane, complete                       7,293,805  (+117,232)
+# The engine itself is ~29 KiB; the remaining ~88 KiB is a link-layout step
+# this module crosses just past 7,188,000 bytes, reproducible with a ten-line
+# function that costs 698 bytes below the step. Sizing the module smaller is
+# not available to a change of this shape: the step falls inside the smallest
+# useful version of it. The gate moves two 64 KiB steps rather than one so the
+# result is not 8 KiB from the gate once the CI toolchain adds its own ~5.4 KiB.
+max_size=$((13 * 1024 * 1024 / 2 + 544 * 1024))
 if (( size > max_size )); then
-  echo "docxnative.wasm $size bytes exceeds the 6.5 MiB + 416 KiB size ceiling ($max_size bytes)" >&2
+  echo "docxnative.wasm $size bytes exceeds the 6.5 MiB + 544 KiB size ceiling ($max_size bytes)" >&2
   exit 1
 fi
 echo "docxnative.wasm $size bytes" >&2

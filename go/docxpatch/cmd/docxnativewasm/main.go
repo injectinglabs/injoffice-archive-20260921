@@ -117,7 +117,7 @@ func jsApply(_ js.Value, args []js.Value) any {
 	if expectedRevision == "" {
 		return fail("expectedRevision is required (sha256:<digest>)")
 	}
-	result, err := docxpatch.ApplyNativeTextMutationPayloadV1(original, payload, expectedRevision)
+	result, err := docxpatch.ApplyNativeMutationPayloadV1(original, payload, expectedRevision)
 	if err != nil {
 		return fail(err.Error())
 	}
