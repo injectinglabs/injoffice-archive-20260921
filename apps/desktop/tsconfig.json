@@ -33,7 +33,6 @@
     "src/SpreadsheetCharts.tsx",
     "src/SpreadsheetEditor.tsx",
     "src/document-authoring.ts",
-    "src/document-media.ts",
     "src/document-style.ts",
     "src/formatting.ts",
     "src/presentationCommands.ts",

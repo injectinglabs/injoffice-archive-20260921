@@ -27,6 +27,7 @@ async function loadEditor(client) {
     const mod = { exports: {} };
     const req = id => {
       if (id === '@injoffice/docx-wasm') return { createDocxWasmClient: () => client };
+      if (id.includes('docxPreviewImages')) return { extractDocxPreviewImages: async () => new Map() };
       if (id.includes('docxRoundTrip')) return {
         editableDocxRuns: document => document._targets ?? [],
         buildDocxRunMutation: (document, target, text, mutationId) => ({
@@ -402,7 +403,7 @@ test('OfficeEditor arranges its controls as a Word ribbon with labelled groups, 
     const panels = view.root.findAllByProps({ role: 'tabpanel' });
     const groups = panel => panel.findAllByProps({ role: 'group' }).map(group => group.props['aria-label']);
     assert.deepEqual(groups(panels[0]), ['Font', 'Paragraph', 'Styles', 'Editing']);
-    assert.deepEqual(groups(panels[1]), ['Tables', 'Links', 'Text']);
+    assert.deepEqual(groups(panels[1]), ['Pages', 'Tables', 'Links', 'Text']);
     assert.deepEqual(groups(panels[2]), ['Paragraph'], 'Page Setup is dropped when the document has no single section');
     assert.equal(view.root.findAllByProps({ role: 'toolbar' }).filter(toolbar => toolbar.props['aria-label'] === 'Quick access').length, 0, 'Undo/Redo live in the shell title bar, not in the ribbon');
     const commandButtons = view.root.findAllByProps({ role: 'group' }).flatMap(group => group.findAllByType('button'));

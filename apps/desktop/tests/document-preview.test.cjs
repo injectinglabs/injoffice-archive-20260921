@@ -17,6 +17,7 @@ async function loadPreview() {
     const { output } = await bundle.generate({ format: 'cjs', codeSplitting: false });
     const mod = { exports: {} };
     const req = id => {
+      if (id.includes('docxPreviewImages')) return {extractDocxPreviewImages: async () => new Map()};
       if (id.includes('docxRoundTrip')) return { editableDocxRuns: document => document._targets ?? [] };
       if (id.includes('docsNativePreview')) return { nativeDocxRunText: run => run.text ?? '', nativeDocxParagraphText: () => '' };
       return require(id);

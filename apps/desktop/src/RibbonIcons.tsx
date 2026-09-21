@@ -28,6 +28,7 @@ const paths = {
   table: 'M3 5h18v14H3zM3 10h18M3 15h18M9 5v14M15 5v14',
   image: 'M3 5h18v14H3zM8 9a1 1 0 1 1 0 2 1 1 0 0 1 0-2ZM21 15l-5-5-8 8',
   link: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1.5 1.5M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1.5-1.5',
+  pageBreak: 'M5 3h14v6H5zM5 15h14v6H5zM3 12h3M9 12h3M15 12h3M21 12h1',
   paragraphInsert: 'M4 5h16M4 9h10M4 13h12M4 17h6M17 15v6M14 18h6',
   paragraphDelete: 'M4 5h16M4 9h10M4 13h12M4 17h6M14 15l6 6M20 15l-6 6',
   pdf: 'M6 3h9l5 5v13H6zM15 3v5h5M9 17v-6h2.5a1.5 1.5 0 0 1 0 3H9',

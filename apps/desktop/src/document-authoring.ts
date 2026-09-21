@@ -141,7 +141,7 @@ export async function insertDocumentImage(client:Client,source:Uint8Array,docume
   const target=selected.paragraph
   const bytes=await client.apply(source,document,{protocol:'injoffice.office.mutations',version:1,format:'docx',mutation_id:id(),expected_revision:document.source.package_sha256,payload:{mutations:[{target_kind:'paragraph',target_id:target.id,expected_xml_sha256:target.anchor.xml_sha256,operation:'block.insert_after',image:{data_base64:btoa(binary),content_type:dimensions.contentType,width_emu:Math.max(1,Math.round(dimensions.width*scale)),height_emu:Math.max(1,Math.round(dimensions.height*scale)),alt_text:name.replace(/[\r\n\t]/g,' ').slice(0,255)}}]}})
   const model=await client.extract(bytes),picture=model.body.blocks[index+1]?.paragraph?.runs.find(run=>run.drawing)?.drawing,paragraph=model.body.blocks[index+2]?.paragraph
-  if(!picture?.raster||picture.raster.pixel_width!==dimensions.width||picture.raster.pixel_height!==dimensions.height||!paragraph)throw new Error('The image insertion did not pass readback.')
+  if(!picture?.media_part||picture.content_type!==dimensions.contentType||picture.width_emu!==Math.max(1,Math.round(dimensions.width*scale))||picture.height_emu!==Math.max(1,Math.round(dimensions.height*scale))||!paragraph)throw new Error('The image insertion did not pass readback.')
   const focus=editableDocxRuns(model).find(run=>run.paragraphId===paragraph.id)
   if(!focus||focus.text!=='')throw new Error('The paragraph after the image is not editable.')
   return {bytes,document:model,key:focus.key,text:focus.text}
@@ -168,4 +168,27 @@ export async function replaceDocumentImage(client:Client,source:Uint8Array,docum
   const model=await client.extract(bytes),picture=model.body.blocks[index]?.paragraph?.runs.find(run=>run.drawing)?.drawing
   if(model.body.blocks.length!==document.body.blocks.length||!picture?.raster||picture.raster.pixel_width!==dimensions.width||picture.raster.pixel_height!==dimensions.height||picture.width_emu!==width||picture.height_emu!==height)throw new Error('The picture replacement did not pass readback.')
   return {bytes,document:model}
+}
+
+export function canInsertDocumentPageBreak(document: NativeDocxDocumentV1, key: string): boolean {
+  const selected = docxSelection(document, key)
+  if (!selected || selected.run.hyperlink || !selected.paragraph.edit_policy.allowed_operations.includes('page_break.insert')) return false
+  const owner = (path: string) => path.slice(0, path.lastIndexOf('/'))
+  return selected.paragraph.runs.every(run => run.id === selected.run.id || owner(run.anchor.path) !== owner(selected.run.anchor.path))
+}
+
+export async function insertDocumentPageBreak(client: Client, source: Uint8Array, document: NativeDocxDocumentV1, key: string, offset: number, id: () => string) {
+  const selected = docxSelection(document, key)
+  if (!selected || !canInsertDocumentPageBreak(document, key)) throw new Error('Place the caret in a supported body text run to insert a page break.')
+  const index = document.body.blocks.findIndex(block => block.paragraph?.id === selected.paragraph.id)
+  if (index < 0 || !Number.isSafeInteger(offset) || offset < 0 || offset > selected.target.text.length) throw new Error('Choose a caret inside body text.')
+  const runIndex = selected.paragraph.runs.findIndex(run => run.id === selected.run.id)
+  const target = selected.paragraph
+  const bytes = await client.apply(source, document, { protocol: 'injoffice.office.mutations', version: 1, format: 'docx', mutation_id: id(), expected_revision: document.source.package_sha256, payload: { mutations: [{ target_kind: 'paragraph', target_id: target.id, expected_xml_sha256: target.anchor.xml_sha256, operation: 'page_break.insert', split: { run_id: selected.run.id, offset_utf16: offset } }] } })
+  const model = await client.extract(bytes)
+  const paragraph = model.body.blocks[index]?.paragraph
+  const after = paragraph?.runs[runIndex + 2]
+  const focus = after && editableDocxRuns(model).find(run => run.runId === after.id && run.partName === after.anchor.part_name)
+  if (paragraph?.runs[runIndex + 1]?.control !== 'page-break' || !focus || focus.text !== selected.target.text.slice(offset)) throw new Error('The page break did not pass readback.')
+  return { bytes, document: model, key: focus.key, text: focus.text }
 }
