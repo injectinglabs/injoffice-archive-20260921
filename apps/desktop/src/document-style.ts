@@ -63,3 +63,28 @@ export function paragraphListLabels(document: NativeDocxDocumentV1, paragraphs: 
   }
   return labels;
 }
+
+/**
+ * Whether the native engine can format part of this paragraph, or part of one
+ * of its runs, without rewriting anything it cannot split exactly. It mirrors
+ * the engine's own refusals: the paragraph must admit the run-property patch,
+ * and each run the selection can touch must be a modeled text run that is the
+ * only content of a `w:r` sitting directly under the paragraph. Hyperlinked,
+ * wrapped and revision-tracked runs, and a run sharing its `w:r` with a tab or
+ * a break, are all out.
+ */
+export function canFormatRun(paragraph: NativeDocxParagraphV1, run: NativeDocxRunV1): boolean {
+  // A preview built from partial inspection can omit the policy; absence is a refusal, never a grant.
+  if (paragraph.edit_policy?.mode !== 'read-write' || !paragraph.edit_policy.allowed_operations.includes('properties.patch')) return false;
+  if (run.kind !== 'text' || run.anchor.part_name !== paragraph.anchor.part_name) return false;
+  const owner = run.anchor.path.slice(0, run.anchor.path.lastIndexOf('/'));
+  const prefix = `${paragraph.anchor.path}/`;
+  if (!owner.startsWith(prefix) || owner.slice(prefix.length).includes('/') || !/(^|:)r\[\d+\]$/.test(owner.slice(prefix.length))) return false;
+  return paragraph.runs.filter(sibling => sibling.anchor.path.slice(0, sibling.anchor.path.lastIndexOf('/')) === owner).length === 1;
+}
+
+/** Whether a selection spanning this paragraph's runs can be formatted. */
+export function canFormatParagraphRange(paragraph: NativeDocxParagraphV1): boolean {
+  const text = paragraph.runs.filter(run => run.kind === 'text');
+  return text.length > 0 && text.every(run => canFormatRun(paragraph, run));
+}
