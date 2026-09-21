@@ -348,11 +348,11 @@ test('XLSX Home uses Excel icon controls: six alignment toggles, colour buttons,
 
     const font = group('Font');
     const colors = font.findAllByType('input').filter(node => node.props.type === 'color');
-    assert.deepEqual(colors.map(node => node.props['aria-label']), ['Text color', 'Fill color']);
+    assert.deepEqual(colors.map(node => node.props['aria-label']), ['Text color', 'Fill color', 'Border color']);
     assert.equal(font.findAllByProps({ className: 'sheet-color-underline' }).length, 2, 'each colour button shows its colour underline');
     const borders = font.findByProps({ 'aria-label': 'Borders' });
     assert.equal(borders.findAllByType('svg').length, 1, 'Borders is an icon control');
-    assert.match(borders.props.title, /not supported by the native XLSX transaction/);
+    assert.equal(borders.props.title, 'Borders');
 
     const cells = group('Cells');
     const cellCommands = [...cells.findAllByType('button'), ...cells.findAllByType('summary')].map(node => node.props['aria-label']).filter(Boolean);
