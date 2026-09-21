@@ -51,7 +51,8 @@ function mockClient() {
   const compatibility = { status: 'editable', diagnostics: [] };
   const size = { cx: 9144000, cy: 5143500 };
   let revision = 'rev-1';
-  let slides = [{ id: 's1', elements: [], compatibility }];
+  const source = { partName: 'ppt/slides/slide1.xml', objectId: 'slide', fingerprintSha256: 'a'.repeat(64) };
+  let slides = [{ id: 's1', elements: [], compatibility, source }];
   function deck() {
     return {
       contractVersion: 'pptx-native/v1',
@@ -69,8 +70,13 @@ function mockClient() {
     apply: async (_bytes, _deck, request) => {
       applied.push(request);
       if (request.operations[0]?.kind === 'slide.insert') {
-        slides = [...slides, { id: `s${slides.length + 1}`, elements: [], compatibility }];
+        slides = [...slides, { id: `s${slides.length + 1}`, elements: [], compatibility, source }];
         revision = `rev-${slides.length}`;
+      }
+      if (request.operations[0]?.kind === 'slide.background.set') {
+        const op = request.operations[0];
+        slides = slides.map(slide => slide.id === op.slideId ? { ...slide, background: op.fill } : slide);
+        revision += '-background';
       }
       return new Uint8Array([slides.length]);
     },
@@ -115,6 +121,15 @@ test('PresentationEditor reports busy, applies a slide insert, and Present mount
     await act(async () => button(view, 'New slide').props.onClick());
     await until(() => changes.length === 1 && busy.at(-1) === false && view.root.findAllByProps({ 'aria-label': 'Show slide 2' }).length > 0);
     assert.equal(client.applied[0].operations[0].kind, 'slide.insert');
+    assert.equal(client.applied[0].operations[0].slideId, 's1');
+    assert.equal(client.applied[0].operations[0].expectedFingerprintSha256, 'a'.repeat(64));
+    assert.equal(Object.hasOwn(client.applied[0].operations[0], 'elementId'), false);
+    await act(async () => view.root.findByProps({ 'aria-label': 'Accent background' }).props.onClick());
+    await until(() => changes.length === 2 && busy.at(-1) === false);
+    assert.equal(client.applied[1].operations[0].kind, 'slide.background.set');
+    assert.equal(client.applied[1].operations[0].slideId, 's2');
+    assert.equal(client.applied[1].operations[0].fill, '2459AD');
+    assert.equal(view.root.findByProps({ 'aria-label': 'Slide canvas' }).props.style.background, '#2459AD');
     assert.deepEqual([...changes[0]], [2]);
     await act(async () => button(view, 'From Beginning').props.onClick());
     assert.equal(globalThis.__presentationPlayer.initial.index, 0, 'From Beginning starts at the first slide');
