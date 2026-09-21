@@ -948,6 +948,20 @@ func (v *nativeValidator) paragraph(paragraph *NativeParagraphV1, path string, t
 		v.add("REQUIRED", path+"/properties", "field is required")
 		properties = &NativeParagraphPropertiesV1{}
 	}
+
+	for _, field := range []struct {
+		name  string
+		value *int64
+	}{
+		{"spacing_before_twips", properties.SpacingBeforeTwips}, {"spacing_after_twips", properties.SpacingAfterTwips}, {"first_line_twips", properties.FirstLineTwips}, {"hanging_twips", properties.HangingTwips}, {"line_spacing", properties.LineSpacing},
+	} {
+		v.optionalNonnegative(field.value, path+"/properties/"+field.name)
+	}
+	v.optionalSafe(properties.IndentLeftTwips, path+"/properties/indent_left_twips")
+	v.optionalSafe(properties.IndentRightTwips, path+"/properties/indent_right_twips")
+	if properties.LineRule != nil {
+		v.oneOf(*properties.LineRule, path+"/properties/line_rule", "auto", "exact", "atLeast")
+	}
 	v.optionalID(properties.ParagraphStyleID, path+"/properties/paragraph_style_id")
 	if properties.Numbering != nil {
 		v.requiredID(properties.Numbering.NumID, path+"/properties/numbering/num_id")

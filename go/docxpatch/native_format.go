@@ -624,57 +624,14 @@ func nativeFormatRunProperties(part []byte, owner, properties *nativeXMLNode, pa
 		}
 		written["rFonts"] = fonts
 	}
-	children := []struct {
-		local string
-		raw   []byte
-	}{}
 	if properties != nil {
-		for _, child := range properties.Children {
-			local := child.Name.Local
-			if child.Name.Space != owner.Name.Space {
-				local = ""
-			}
-			raw := part[child.Start:child.End]
-			if replacement, ok := written[local]; ok && local != "" {
-				raw = replacement
-				delete(written, local)
-			}
-			children = append(children, struct {
-				local string
-				raw   []byte
-			}{local, raw})
-		}
+		return nativeMergeRawLayoutChildren(part, properties, nativeRunPropertyOrder, written)
 	}
-	pending := make([]string, 0, len(written))
-	for local := range written {
-		pending = append(pending, local)
+	output := []byte("<" + prefix + "rPr>")
+	for _, local := range nativeRunPropertyOrder {
+		output = append(output, written[local]...)
 	}
-	sort.Slice(pending, func(i, j int) bool {
-		return nativeRunPropertyRank(pending[i]) < nativeRunPropertyRank(pending[j])
-	})
-	for _, local := range pending {
-		index := len(children)
-		for position, child := range children {
-			if nativeRunPropertyRank(child.local) > nativeRunPropertyRank(local) {
-				index = position
-				break
-			}
-		}
-		children = append(children, struct {
-			local string
-			raw   []byte
-		}{})
-		copy(children[index+1:], children[index:])
-		children[index] = struct {
-			local string
-			raw   []byte
-		}{local, written[local]}
-	}
-	output := []byte(`<` + prefix + `rPr>`)
-	for _, child := range children {
-		output = append(output, child.raw...)
-	}
-	return append(output, []byte(`</`+prefix+`rPr>`)...), nil
+	return append(output, []byte("</"+prefix+"rPr>")...), nil
 }
 
 // nativeFormatRunFonts rewrites the ascii and hAnsi slots of an existing
@@ -714,15 +671,6 @@ func nativeFormatToggle(prefix, local string, on bool) string {
 		return `<` + prefix + local + `/>`
 	}
 	return `<` + prefix + local + ` ` + prefix + `val="0"/>`
-}
-
-func nativeRunPropertyRank(local string) int {
-	for rank, name := range nativeRunPropertyOrder {
-		if name == local {
-			return rank
-		}
-	}
-	return len(nativeRunPropertyOrder)
 }
 
 // nativeFormatTextElement reuses the source w:t element for a new text value,

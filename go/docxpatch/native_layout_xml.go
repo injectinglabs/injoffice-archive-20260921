@@ -43,6 +43,19 @@ func nativeMergePropertyContainer(part []byte, owner *nativeXMLNode, local strin
 }
 
 func nativeMergeLayoutChildren(part []byte, container *nativeXMLNode, order []string, written map[string]map[string]*string, prefix string) ([]byte, error) {
+	rawChildren := map[string][]byte{}
+	for key, changes := range written {
+		node := firstDirectNativeChild(container, container.Name.Space, key)
+		child, err := nativeMergeLayoutAttributes(part, node, prefix, key, changes)
+		if err != nil {
+			return nil, err
+		}
+		rawChildren[key] = child
+	}
+	return nativeMergeRawLayoutChildren(part, container, order, rawChildren)
+}
+
+func nativeMergeRawLayoutChildren(part []byte, container *nativeXMLNode, order []string, written map[string][]byte) ([]byte, error) {
 	rank := func(local string) int {
 		for i, name := range order {
 			if name == local {
@@ -64,11 +77,7 @@ func nativeMergeLayoutChildren(part []byte, container *nativeXMLNode, order []st
 	if raw[tagEnd-2] == '/' {
 		expanded := string(raw[:tagEnd-2]) + ">"
 		for _, key := range keys {
-			child, err := nativeMergeLayoutAttributes(nil, nil, prefix, key, written[key])
-			if err != nil {
-				return nil, err
-			}
-			expanded += string(child)
+			expanded += string(written[key])
 		}
 		return []byte(expanded + "</" + nativeFormatQName(part, container) + ">"), nil
 	}
@@ -84,10 +93,7 @@ func nativeMergeLayoutChildren(part []byte, container *nativeXMLNode, order []st
 				existing = child
 			}
 		}
-		child, err := nativeMergeLayoutAttributes(part, existing, prefix, key, written[key])
-		if err != nil {
-			return nil, err
-		}
+		child := written[key]
 		if existing != nil {
 			splices = append(splices, nativeTextSplice{start: existing.Start - container.Start, end: existing.End - container.Start, text: child})
 			continue
