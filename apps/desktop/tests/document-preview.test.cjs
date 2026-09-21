@@ -195,6 +195,44 @@ test('DocumentPreview places the caret from a click that missed the text', async
   assert.equal(again.node.focused, true);
 });
 
+test('Enter and paragraph input split at the caret; Shift+Enter refuses a line break', async () => {
+  const DocumentPreview = await loadPreview();
+  const node = { textContent: 'Hello', contains: () => true, focus() {} };
+  const range = {
+    cloneRange() {
+      let prefix = true;
+      return { selectNodeContents() {}, setEnd() {}, setStart() { prefix = false; }, toString: () => prefix ? 'He' : 'llo' };
+    },
+    selectNodeContents() {}, collapse() {},
+  };
+  global.window = {
+    getSelection: () => ({ rangeCount: 1, getRangeAt: () => range, removeAllRanges() {}, addRange() {} }),
+    document: { createRange: () => range, addEventListener() {}, removeEventListener() {} },
+  };
+  const splits = [];
+  let view;
+  await act(async () => {
+    view = create(React.createElement(DocumentPreview, {
+      images: {}, imageNotice: '', document: document(), selected: 'run-1', draft: 'Hello',
+      onTextRangeChange() {}, joinPrevious() {}, insertLines: (...args) => splits.push(args), busy: false, hasDraft: false,
+      zoom: 100, navigation: false, choose() {}, updateDraft() {}, commit() {}, notice: '', onCompositionChange() {}, deleteImage() {},
+    }), { createNodeMock: element => element.props.role === 'textbox' ? node : null });
+  });
+  try {
+    const textbox = view.root.findByProps({ role: 'textbox' });
+    const event = { key: 'Enter', preventDefault() {}, nativeEvent: {} };
+    await act(async () => textbox.props.onKeyDown(event));
+    await act(async () => textbox.props.onBeforeInput({ preventDefault() {}, nativeEvent: { inputType: 'insertParagraph' } }));
+    assert.deepEqual(splits, [['He\nllo', 0], ['He\nllo', 0]]);
+    await act(async () => textbox.props.onKeyDown({ ...event, shiftKey: true }));
+    await act(async () => textbox.props.onBeforeInput({ preventDefault() {}, nativeEvent: { inputType: 'insertLineBreak' } }));
+    assert.equal(splits.length, 2, 'line breaks must never become paragraph splits');
+    assert.match(view.root.findByProps({ className: 'office-inline-hint' }).children[0], /Line breaks.*not supported.*DOCX engine/);
+    await act(async () => textbox.props.onCompositionStart());
+    await act(async () => textbox.props.onKeyDown(event));
+    assert.equal(splits.length, 2, 'IME confirmation does not split');
+  } finally { await act(async () => view.unmount()); }
+});
 
 test('flowing page metrics count trailing, repeated and overflow-adjacent hard breaks', async () => {
   const metrics = await loadPreview('flowingPageMetrics');
