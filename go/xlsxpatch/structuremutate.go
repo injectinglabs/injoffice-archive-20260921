@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 type StructureMutation struct {
@@ -27,7 +28,7 @@ func (m StructureMutation) limit() int {
 	return excelMaxColumns
 }
 func validateStructureMutation(m StructureMutation) error {
-	if !restrictedIDPattern.MatchString(m.OperationID) || len(m.OperationID) > maxOperationIDLen || m.SheetID == "" {
+	if !restrictedIDPattern.MatchString(m.OperationID) || len(m.OperationID) > maxOperationIDLen || m.SheetID == "" || strings.TrimSpace(m.SheetID) != m.SheetID || !utf8.ValidString(m.SheetID) || utf16Length(m.SheetID) > maxStableSheetIDLen {
 		return fmt.Errorf("xlsxpatch: structure: invalid operation or sheet id")
 	}
 	if m.Kind != "row.insert" && m.Kind != "row.delete" && m.Kind != "column.insert" && m.Kind != "column.delete" {
@@ -250,13 +251,17 @@ type structureEdit struct {
 }
 
 func applyStructureEdits(data []byte, edits []structureEdit) []byte {
-	sort.Slice(edits, func(i, j int) bool { return edits[i].start > edits[j].start })
-	result := bytes.Clone(data)
-	for _, e := range edits {
-		result = append(result[:e.start], append(e.data, result[e.end:]...)...)
+	sort.Slice(edits, func(i, j int) bool { return edits[i].start < edits[j].start })
+	result := make([]byte, 0, len(data))
+	cursor := 0
+	for _, edit := range edits {
+		result = append(result, data[cursor:edit.start]...)
+		result = append(result, edit.data...)
+		cursor = edit.end
 	}
-	return result
+	return append(result, data[cursor:]...)
 }
+
 func shiftStructureWorksheet(data []byte, sheet *NativeWorkbookSheetV1, m StructureMutation) ([]byte, error) {
 	index, err := indexStyleWorksheet(data)
 	if err != nil {
@@ -401,6 +406,7 @@ func shiftStructureWorksheet(data []byte, sheet *NativeWorkbookSheetV1, m Struct
 func validateStructureWorkbook(data []byte) error {
 	decoder := xml.NewDecoder(bytes.NewReader(data))
 	depth := 0
+	namespace := ""
 	for {
 		token, err := decoder.Token()
 		if err == io.EOF {
@@ -412,7 +418,13 @@ func validateStructureWorkbook(data []byte) error {
 		switch token := token.(type) {
 		case xml.StartElement:
 			depth++
+			if depth == 1 {
+				namespace = token.Name.Space
+			}
 			if depth == 2 {
+				if token.Name.Space != namespace {
+					return fmt.Errorf("xlsxpatch: structure: foreign workbook references")
+				}
 				switch token.Name.Local {
 				case "workbookPr", "bookViews", "sheets", "calcPr":
 				default:

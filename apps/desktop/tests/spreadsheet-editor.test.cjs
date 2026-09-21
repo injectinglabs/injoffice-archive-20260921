@@ -13,9 +13,10 @@ function isExternal(id) {
 function adaptWorkbookMutationBatchV1(workbook, batch) {
   const operations = batch.operations ?? [];
   const cells = operations.filter(operation => String(operation.kind).startsWith('cell.'));
+  const structure = operations.filter(operation => ['row.insert','row.delete','column.insert','column.delete'].includes(operation.kind));
   const merges = operations.filter(operation => ['range.merge', 'range.unmerge'].includes(operation.kind));
   const styles = operations.filter(operation => operation.kind === 'style.patch');
-  return { expected_revision: workbook.revision, ...(merges.length ? { merges } : {}), ...(cells.length ? { cells } : {}), ...(styles.length ? { styles } : {}) };
+  return { expected_revision: workbook.revision, ...(structure.length ? {structure} : {}), ...(merges.length ? { merges } : {}), ...(cells.length ? { cells } : {}), ...(styles.length ? { styles } : {}) };
 }
 
 function stubRequire(id) {
@@ -420,5 +421,25 @@ test('Merge and Unmerge submit native range mutations, including a selected merg
   await until(()=>client.applied.length===2);
   assert.deepEqual(client.applied[1].merges[0].range,{row:0,column:0,end_row:1,end_column:1});
   assert.equal(client.applied[1].merges[0].kind,'range.unmerge');
+ } finally {if(view)await act(async()=>view.unmount());delete globalThis.__xlsxClient;}
+});
+
+test('Rows and columns menu confirms whole-axis mutations for the selected range', async () => {
+ const client=mockClient();globalThis.__xlsxClient=client;const Editor=await loadEditor();let view;
+ try {
+  await act(async()=>{view=create(React.createElement(Editor,{name:'Rows.xlsx',bytes:new Uint8Array([1]),onChange:()=>{}}));});
+  await until(()=>view.root.findAllByProps({'aria-label':'Cell or range address'}).length>0);
+  const location=()=>view.root.findByProps({'aria-label':'Cell or range address'});
+  await act(async()=>location().props.onChange({target:{value:'B2:C3'}}));
+  await act(async()=>location().parent.props.onSubmit({preventDefault(){}}));
+  for (const [label,kind] of [['Insert sheet rows','row.insert'],['Delete sheet columns','column.delete']]) {
+   const component=view.root.findByProps({label});
+   assert.equal(component.props.disabled,false);
+   await act(async()=>component.props.onClick());
+   await act(async()=>view.root.findByProps({'aria-label':'Row and column changes'}).props.onSubmit({preventDefault(){}}));
+   await until(()=>client.applied.some(value=>value.structure?.[0]?.kind===kind));
+   assert.equal(client.applied.at(-1).structure[0].index,1);
+   assert.equal(client.applied.at(-1).structure[0].count,2);
+  }
  } finally {if(view)await act(async()=>view.unmount());delete globalThis.__xlsxClient;}
 });

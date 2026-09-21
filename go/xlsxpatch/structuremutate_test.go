@@ -8,6 +8,9 @@ import (
 func structureFixture(strict bool) map[string]string {
 	entries := nativeMutationFixture(strict)
 	delete(entries, "Sheets/_rels/s1.xml.rels")
+	delete(entries, "Charts/chart1.xml")
+	delete(entries, "Custom/data.bin")
+	entries["[Content_Types].xml"] = strings.Replace(entries["[Content_Types].xml"], `<Override PartName="/Charts/chart1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>`, "", 1)
 	entries["Meta/Strings.xml"] = strings.Replace(entries["Meta/Strings.xml"], `<r><rPr><b/></rPr><t>Rich </t></r><r><t>Text</t></r>`, `<t>Plain</t>`, 1)
 	ns := spreadsheetMLTransitional
 	if strict {
@@ -109,5 +112,33 @@ func TestStructureRefusesBoundaryAndUnmodeledReferences(t *testing.T) {
 	}
 	if _, _, _, err := (StructureMutation{Kind: "row.insert", Index: 0, Count: 1}).shiftCell(excelMaxRows-1, 0); err == nil {
 		t.Fatal("overflow accepted")
+	}
+}
+
+func TestStructureDeletionRemovesValuesAndRepairsReferences(t *testing.T) {
+	for _, axis := range []string{"row", "column"} {
+		original := buildZip(t, structureFixture(false))
+		before, err := ExtractNativeWorkbookV1(original)
+		if err != nil {
+			t.Fatal(err)
+		}
+		result, err := ApplyNativeWorkbookMutationTransactionV1(original, NativeWorkbookMutationTransactionV1{ExpectedRevision: before.Revision, Structure: []StructureMutation{{OperationID: "delete", SheetID: "7", Kind: axis + ".delete", Index: 0, Count: 1}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := `#REF!+SUM('Data Set'!A1:A2)+LOG10(100)`
+		if axis == "column" {
+			want = `#REF!+SUM(#REF!)+LOG10(100)`
+			if got := findNativeCell(t, result.Workbook, "7", "A1").Formula; got == nil || got.Text != "SUM(#REF!)" {
+				t.Fatalf("moved formula: %+v", got)
+			}
+		} else {
+			if got := findNativeCell(t, result.Workbook, "7", "A2").Value; got == nil || got.Lexical == nil || *got.Lexical != "20" {
+				t.Fatal("surviving value lost")
+			}
+		}
+		if got := findNativeCell(t, result.Workbook, "9", "A1").Formula; got == nil || got.Text != want || got.Cached != nil {
+			t.Fatalf("deletion formula: %+v; want %s", got, want)
+		}
 	}
 }
