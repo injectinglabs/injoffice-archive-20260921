@@ -295,3 +295,26 @@ test('typing edits the selected cell, Enter commits and moves down, and the stat
     delete globalThis.__xlsxClient;
   }
 });
+
+test('the sheet follows the dark theme and renders cell text in a sans stack', () => {
+  const css = fs.readFileSync(path.resolve(__dirname, '../src/spreadsheet.css'), 'utf8');
+  const editor = css.match(/\.sheet-editor\{([^}]*)\}/)[1];
+  for (const token of ['--sheet-cell-surface', '--sheet-cell-text', '--sheet-gridline', '--sheet-cell-font']) {
+    assert.ok(editor.includes(`${token}:`), `${token} has a light value on .sheet-editor`);
+  }
+  assert.match(editor, /--sheet-cell-font:[^;]*sans-serif/, 'cell text falls back to a sans face, never the serif default');
+  const systemDark = css.match(/@media\(prefers-color-scheme:dark\)\{:root:not\(\[data-theme="light"\]\) \.sheet-editor\{([^}]*)\}/);
+  const forcedDark = css.match(/:root\[data-theme="dark"\] \.sheet-editor\{([^}]*)\}/);
+  assert.ok(systemDark && forcedDark, 'both dark blocks re-point the sheet tokens');
+  assert.equal(systemDark[1], forcedDark[1], 'the dark blocks agree');
+  for (const token of ['--sheet-cell-surface', '--sheet-cell-text', '--sheet-gridline']) {
+    assert.ok(systemDark[1].includes(`${token}:`), `${token} is darkened`);
+  }
+  assert.match(css, /\.sheet-grid\{[^}]*background:var\(--sheet-cell-surface\)/);
+  assert.match(css, /\.sheet-grid\{[^}]*color:var\(--sheet-cell-text\)/);
+  assert.match(css, /\.sheet-grid th,\.sheet-grid td\{[^}]*border-right:1px solid var\(--sheet-gridline\)/);
+
+  const source = fs.readFileSync(path.resolve(__dirname, '../src/SpreadsheetEditor.tsx'), 'utf8');
+  assert.equal(/'#fff'/.test(source), false, 'pinned cells paint on the sheet surface token');
+  assert.match(source, /var\(--sheet-cell-font\)/, 'authored cell fonts keep a sans fallback');
+});

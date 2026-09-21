@@ -16,6 +16,13 @@ import './spreadsheet.css';
 
 function definedNameCaseKey(value: string): string { return value.toLowerCase(); }
 
+/** Excel's dark mode paints automatic (black) cell text in the theme's colour and keeps an
+    authored colour as it is; text over an authored fill stays dark so the fill keeps working. */
+function cellInk(color?: string, fill?: string): string | undefined {
+  if (color && !/^#?(ff)?0{6}$/i.test(color)) return color;
+  return fill ? 'var(--document-text)' : undefined;
+}
+
 export interface OfficeEditorProps { registerHistory?: (commands: { undo(): void; redo(): void; canUndo?: boolean; canRedo?: boolean }) => void; registerCommit?: (commit: () => Promise<boolean>) => void; initialRecoveryDraft?: unknown; onRecoveryDraftChange?: (draft: unknown | null) => void; name: string; bytes: Uint8Array; onChange: (bytes: Uint8Array) => void; onBusyChange?: (busy: boolean) => void; onDraftChange?: (dirty: boolean) => void; viewOptions?: { zoom: number; navigation: boolean; focus: boolean } }
 
 type Snapshot = { bytes: Uint8Array; workbook: NativeWorkbookV2; calculation?: LocalCalculationResult; calculationRevision?: string; charts: unknown[]; chartError?: string };
@@ -329,7 +336,7 @@ export function SpreadsheetEditor(props: OfficeEditorProps & { initialRecoveryDr
     if (!pinRow && !pinColumn) return {};
     return { position: 'sticky', zIndex: pinRow && pinColumn ? 5 : 3,
       ...(pinRow ? { top: 27 + rows.filter(value => value < row).reduce((sum, value) => sum + (frozenHeights[value] ?? Math.max(27, (sheet?.rows.find(item => item.row === value)?.height_points ?? 20) * 96 / 72)), 0) } : {}),
-      ...(pinColumn ? { left: 48 + columns.filter(value => value < column).reduce((sum,value) => sum + columnPixels(value), 0) } : {}), backgroundColor: '#fff', boxShadow: '1px 1px 0 #8da698' };
+      ...(pinColumn ? { left: 48 + columns.filter(value => value < column).reduce((sum,value) => sum + columnPixels(value), 0) } : {}), backgroundColor: 'var(--sheet-cell-surface)', boxShadow: '1px 1px 0 var(--sheet-gridline)' };
   }
   const activeStatus = draft !== null ? (entry === 'enter' ? 'Enter' : 'Edit') : merge ? 'Merged cell — unmerge to edit' : !canEdit ? 'Read-only cell' : 'Ready';
   const calculationStatus = snapshot?.calculation ? `Local calculation for this revision · ${snapshot.calculation.cells.filter(cell => cell.status === 'unsupported' || cell.status === 'circular').length} formulas unresolved` : 'Formula caches are stored but unverified; recalculate to check them.';
@@ -394,7 +401,7 @@ Blue"/></label><label><input type="checkbox" checked={filterBlank} onChange={eve
         const source = merged ? { row: merged.row, column: merged.column } : position, key = address(source), cell = cells.get(key), display = cellDisplay(workbook!, cell), calculation = calculatedCells.get(`${sheetId}:${source.row}:${source.column}`), effective = workbook?.styles.find(value => value.id === cell?.style_id)?.effective;
         if (calculation) { display.note = calculation.message ?? 'Calculated locally for this workbook revision.'; if (calculation.status === 'unsupported' || calculation.status === 'circular') display.text = calculation.status === 'circular' ? '#CIRCULAR!' : '#UNSUPPORTED'; }
         const selected = contains(range, position), isActive = address(selection.anchor) === key || Boolean(merged && contains(merged, selection.anchor));
-        const css: CSSProperties = { ...pinnedCellStyle(row,column), fontFamily: effective?.font_name, fontSize: effective?.font_size_points ? `${effective.font_size_points}pt` : undefined, fontWeight: effective?.bold ? 700 : undefined, fontStyle: effective?.italic ? 'italic' : undefined, color: effective?.font_color, backgroundColor: effective?.fill_color ?? (row < frozenRows || column < frozenColumns ? '#fff' : undefined), textAlign: effective?.horizontal_alignment === 'general' || !effective?.horizontal_alignment ? cell?.value?.kind === 'number' ? 'right' : 'left' : effective.horizontal_alignment as CSSProperties['textAlign'], verticalAlign: effective?.vertical_alignment === 'middle' ? 'middle' : effective?.vertical_alignment, whiteSpace: effective?.wrap_text ? 'pre-wrap' : 'pre' };
+        const css: CSSProperties = { ...pinnedCellStyle(row,column), fontFamily: effective?.font_name ? `"${effective.font_name}", var(--sheet-cell-font)` : undefined, fontSize: effective?.font_size_points ? `${effective.font_size_points}pt` : undefined, fontWeight: effective?.bold ? 700 : undefined, fontStyle: effective?.italic ? 'italic' : undefined, color: cellInk(effective?.font_color, effective?.fill_color), backgroundColor: effective?.fill_color ?? (row < frozenRows || column < frozenColumns ? 'var(--sheet-cell-surface)' : undefined), textAlign: effective?.horizontal_alignment === 'general' || !effective?.horizontal_alignment ? cell?.value?.kind === 'number' ? 'right' : 'left' : effective.horizontal_alignment as CSSProperties['textAlign'], verticalAlign: effective?.vertical_alignment === 'middle' ? 'middle' : effective?.vertical_alignment, whiteSpace: effective?.wrap_text ? 'pre-wrap' : 'pre' };
         for (const [edge, side] of Object.entries(effective?.border ?? {})) {
           if (!['top','bottom','left','right'].includes(edge) || !side || typeof side !== 'object' || !('style' in side)) continue;
           const stroke=side as {style:string;color:string}, width=stroke.style==='thick'||stroke.style==='double'?3:stroke.style.startsWith('medium')?2:1;
