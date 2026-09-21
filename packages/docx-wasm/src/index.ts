@@ -37,7 +37,7 @@ import {
   type NativeDocxRunPropertyPatchV1,
   type NativeDocxTextMutationPayloadV1,
 } from '@injoffice/docs/native-docx'
-import { numberingPropertyNames, validateNumberingProperties } from './numbering'
+import { numberingPropertyNames, validateNumberingProperties } from './numbering.js'
 
 export const DOCX_WASM_NATIVE_MAX_PACKAGE_BYTES = 128 * 1024 * 1024
 export const DOCX_WASM_NATIVE_MAX_MUTATION_PAYLOAD_BYTES = 8 * 1024 * 1024
