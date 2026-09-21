@@ -593,3 +593,63 @@ test('initial engine parse rejection is reported to the workspace', async () => 
     assert.match(errors[0], /invalid XML in word\/document.xml/);
   } finally { if (renderer) await act(async () => renderer.unmount()); delete global.window; }
 });
+
+// Keep these synthetic: customer documents must never become regression fixtures.
+for (const location of ['body', 'table', 'header', 'footer', 'note', 'comment']) {
+  for (const corrupt of [false, true]) {
+    test(`paragraph formatting readback: ${location}, ${corrupt ? 'reject changed whitespace' : 'preserve multiple runs and a tab, undo/redo'}`, async () => {
+      mockWindow();
+      const model = tinyDocument('Alpha '), paragraph = model.body.blocks[0].paragraph;
+      paragraph.anchor.path = '/w:document[1]/w:body[1]/w:p[1]';
+      paragraph.runs = ['Alpha ', undefined, ' beta'].map((text, index) => ({
+        id: `r${index}`, kind: text === undefined ? 'control' : 'text',
+        ...(text === undefined ? { control: 'tab' } : { text }), properties: {},
+        anchor: { ...paragraph.anchor, path: `${paragraph.anchor.path}/w:r[${index + 1}]/${text === undefined ? 'w:tab' : 'w:t'}[1]` },
+      }));
+      const targets = p => p.runs.filter(run => run.kind === 'text').map(run => ({
+        key: `${encodeURIComponent(run.anchor.part_name)}:${run.id}`, label: 'Synthetic', text: run.text,
+        runId: run.id, paragraphId: p.id, partName: run.anchor.part_name,
+      }));
+      model._targets = targets(paragraph);
+      const table = { id: 'table', edit_policy: { allowed_operations: [] }, rows: [{ cells: [{ paragraphs: [paragraph] }] }] };
+      if (location === 'table') model.body.blocks = [{ table }];
+      else if (location !== 'body') {
+        const field = { header: 'headers', footer: 'footers', note: 'notes', comment: 'comment_stories' }[location];
+        model[field] = [{ id: location, blocks: [{ paragraph }] }];
+        // Same path in a different part must not satisfy readback.
+        model.body.blocks = [{ paragraph: { ...structuredClone(paragraph), id: 'decoy' } }];
+        paragraph.anchor.part_name = `word/${location}.xml`;
+        paragraph.runs.forEach(run => { run.anchor.part_name = paragraph.anchor.part_name; });
+        model._targets = targets(paragraph);
+      }
+      const after = structuredClone(model);
+      const nextParagraph = location === 'body' ? after.body.blocks[0].paragraph : location === 'table' ? after.body.blocks[0].table.rows[0].cells[0].paragraphs[0] : after[{ header: 'headers', footer: 'footers', note: 'notes', comment: 'comment_stories' }[location]][0].blocks[0].paragraph;
+      // Splitting a run changes run IDs/count, but preserves paragraph text and controls.
+      const first = nextParagraph.runs[0];
+      nextParagraph.runs.splice(0, 1, { ...first, id: 'split-a', text: corrupt ? ' Alph' : 'Alpha', properties: { font_size_half_points: 36 } }, { ...first, id: 'split-b', text: ' ' });
+      after._targets = targets(nextParagraph);
+      const originalBytes = new Uint8Array([0x50, 0x4b]), formattedBytes = new Uint8Array([0x50, 0x4b, 1]);
+      const client = { extract: async bytes => bytes === formattedBytes ? after : model, apply: async () => formattedBytes, terminate() {} };
+      let history;
+      const { view, changes, busy } = await mountEditor(client, { bytes: originalBytes, registerHistory: value => { history = value; } });
+      try {
+        await act(async () => documentPreview(view).props.choose(model._targets[0].key, { paragraph_id: paragraph.id, start_utf16: 0, end_utf16: 5 }));
+        const toolbar = view.root.find(node => node.props.section === 'font' && typeof node.props.onChange === 'function');
+        await act(async () => toolbar.props.onChange({ size: 18 }));
+        await settleApply(changes, busy);
+        if (corrupt) {
+          assert.equal(changes.length, 0, 'corrupt bytes are never published');
+          assert.match(JSON.stringify(view.toJSON()), /Formatted paragraph text did not pass readback/);
+        } else {
+          assert.equal(changes.at(-1), formattedBytes);
+          assert.equal(documentPreview(view).props.selected, after._targets[0].key);
+          assert.equal(documentPreview(view).props.textRange.paragraph_id, paragraph.id);
+          await act(async () => history.undo());
+          assert.equal(changes.at(-1), originalBytes, 'undo restores original bytes');
+          await act(async () => history.redo());
+          assert.equal(changes.at(-1), formattedBytes, 'redo restores formatted bytes');
+        }
+      } finally { await act(async () => view.unmount()); }
+    });
+  }
+}

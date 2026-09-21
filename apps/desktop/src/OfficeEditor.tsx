@@ -19,7 +19,7 @@ import FormattingToolbar, { type FormattingPatch } from './FormattingToolbar'
 import Ribbon, { RibbonButton, visibleRibbonTabs, type RibbonTabSpec } from './Ribbon'
 import SelectionToolbar from './SelectionToolbar'
 import ContextMenu, { activateRunAt, documentContextMenu, useContextMenu } from './ContextMenu'
-import { documentRangeFormattingValues, formattingValues, documentFormatting, documentParagraphFormatting, docxSelection, documentTableSelection, paragraphOperations, documentStructure, type ParagraphOperation } from './formatting'
+import { documentRangeFormattingValues, formattingValues, documentFormatting, documentParagraphFormatting, documentParagraphs, docxSelection, documentTableSelection, paragraphOperations, documentStructure, type ParagraphOperation } from './formatting'
 import {documentStatistics,statisticsWithDraft} from './document-statistics'
 import './ribbon.css'
 import './office-editor.css'
@@ -165,7 +165,9 @@ function createEngine(extension: string): LocalEngine {
       const envelope = documentFormatting(document, key, patch, operationId(),range)
       const next=await read(await client.apply(snapshot.bytes, document, envelope))
       if(range?.paragraph_id && patch.alignment===undefined){
-        const before=selection.paragraph,paragraph=next.preview.document.body.blocks.find(block=>block.paragraph?.anchor.path===before.anchor.path)?.paragraph
+        // Formatting can split runs, but preserves the paragraph's source location.
+        // Search table cells and other stories too; a body-only lookup rejects valid edits.
+        const before=selection.paragraph,paragraph=documentParagraphs(next.preview.document).find(value=>value.anchor.part_name===before.anchor.part_name&&value.anchor.path===before.anchor.path)
         if(!paragraph||paragraph.runs.map(run=>run.text??'').join('')!==before.runs.map(run=>run.text??'').join(''))throw new Error('Formatted paragraph text did not pass readback.')
         let offset=0;const first=paragraph.runs.find(run=>{offset+=(run.text??'').length;return offset>range.start_utf16})
         const focus=first&&next.targets.find(target=>target.key===`${encodeURIComponent(first.anchor.part_name)}:${first.id}`)
@@ -173,7 +175,7 @@ function createEngine(extension: string): LocalEngine {
         next.preferredSelection={key:focus.key,range:{...range,paragraph_id:paragraph.id}}
       }else if(range && patch.alignment===undefined){
         const source=selection.paragraph.anchor,model=next.preview.document
-        const paragraphs=[model.body,...model.headers,...model.footers,...model.notes,...model.comment_stories].flatMap(story=>story.blocks.flatMap(block=>block.paragraph?[block.paragraph]:block.table?.rows.flatMap(row=>row.cells.flatMap(cell=>cell.paragraphs))??[]))
+        const paragraphs=documentParagraphs(model)
         const paragraph=paragraphs.find(value=>value.anchor.part_name===source.part_name&&value.anchor.path===source.path)
         const selectedIndex=selection.paragraph.runs.findIndex(run=>run.id===selection.run.id)+(range.start_utf16>0?1:0)
         const run=paragraph?.runs[selectedIndex],focus=run&&editableDocxRuns(model).find(target=>target.runId===run.id&&target.partName===run.anchor.part_name)
