@@ -19,6 +19,7 @@ type NativeWorkbookMutationTransactionV1 struct {
 	Cells            []CellMutation       `json:"cells,omitempty"`
 	Styles           []StylePatchMutation `json:"styles,omitempty"`
 	Layout           []LayoutMutation     `json:"layout,omitempty"`
+	Merges           []MergeMutation      `json:"merges,omitempty"`
 }
 
 // NativeWorkbookMutationResultV1 returns both the exact saved package and its
@@ -110,6 +111,9 @@ func ApplyNativeWorkbookMutationTransactionV1(original []byte, transaction Nativ
 	if before.Revision != transaction.ExpectedRevision {
 		return nil, fmt.Errorf("xlsxpatch: native mutation: extracted revision %q disagrees with expected revision", before.Revision)
 	}
+	if len(transaction.Merges) > 0 {
+		return applyNativeMergeTransaction(original, before, transaction.Merges)
+	}
 	if err := preflightNativeWorkbookMutationTargets(before, transaction); err != nil {
 		return nil, err
 	}
@@ -178,12 +182,18 @@ func validateNativeWorkbookMutationTransaction(transaction NativeWorkbookMutatio
 	if !nativeWorkbookRevision.MatchString(transaction.ExpectedRevision) {
 		return fmt.Errorf("xlsxpatch: native mutation: expected_revision must contain a full SHA-256")
 	}
-	total := len(transaction.Cells) + len(transaction.Styles) + len(transaction.Layout)
+	total := len(transaction.Cells) + len(transaction.Styles) + len(transaction.Layout) + len(transaction.Merges)
 	if total == 0 {
 		return fmt.Errorf("xlsxpatch: native mutation: empty transaction")
 	}
 	if total > maxNativeWorkbookTransactionOperations {
 		return fmt.Errorf("xlsxpatch: native mutation: transaction exceeds %d operations", maxNativeWorkbookTransactionOperations)
+	}
+	if len(transaction.Merges) > 0 {
+		if total != len(transaction.Merges) {
+			return fmt.Errorf("xlsxpatch: merge batches cannot mix with cell/style/layout operations")
+		}
+		return validateMergeMutations(transaction.Merges)
 	}
 	seen := make(map[string]bool, total)
 	for _, group := range [][]string{cellOperationIDs(transaction.Cells), styleOperationIDs(transaction.Styles), layoutOperationIDs(transaction.Layout)} {

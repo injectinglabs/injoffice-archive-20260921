@@ -54,7 +54,7 @@ export default function FormattingToolbar({ kind, values, disabled, onChange, sc
   </>;
   const color = <ColorButton label="Text color" icon="fontColor" disabled={characterInactive} value={values?.color?.toUpperCase()} colors={TEXT_COLORS} onChange={color => onChange({ color })} />;
   const alignment = <AlignmentToggles className="formatting-alignment" kind={kind} horizontal={values?.alignment} disabled={inactive} onHorizontal={alignment => onChange({ alignment })} />;
-  if (section === 'font') return <div className="formatting-toolbar formatting-toolbar-font" aria-label="Font formatting"><RibbonRows><div className="formatting-group">{family}{size}</div><div className="formatting-group">{emphasis}{children}{color}</div></RibbonRows></div>;
+  if (section === 'font') return <div className="formatting-toolbar formatting-toolbar-font" aria-label="Font formatting" title={values?.characterEditable === false ? "Text formatting is not supported in this text structure" : undefined}><RibbonRows><div className="formatting-group">{family}{size}</div><div className="formatting-group">{emphasis}{children}{color}</div></RibbonRows></div>;
   if (section === 'paragraph') return <div className="formatting-toolbar formatting-toolbar-paragraph" aria-label="Paragraph alignment"><div className="formatting-group">{alignment}</div>{children}</div>;
   return <div className="formatting-toolbar" aria-label="Formatting">
     <div className="formatting-group">{family}{size}{emphasis}{color}</div>

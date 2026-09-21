@@ -45,6 +45,16 @@
                   "start_byte": 471,
                   "xml_sha256": "sha256:62029b70a3e2382a4987345163ab37d8230db6143dac7c2df189fac1e607a993"
                 },
+                "hyperlink": {
+                  "anchor": {
+                    "end_byte": 513,
+                    "part_name": "word/document.xml",
+                    "path": "/w:document[1]/w:body[1]/w:p[1]/w:hyperlink[1]",
+                    "start_byte": 440,
+                    "xml_sha256": "sha256:f4ac3cbbd97f4fdc1c7451a572e6b61cd3ddc294d564514b4254bc62a6c35b6d"
+                  },
+                  "url": "https://example.invalid/"
+                },
                 "id": "run:3e6eef753d7f37dfcad04935",
                 "kind": "text",
                 "text": "Linked text"
@@ -213,21 +223,6 @@
         "message": "Body markup outside paragraphs, basic tables, and sections is preserved verbatim",
         "preservation": "refuse-mutation",
         "scope_id": "story:fa41c8769c7e6793060a571d"
-      },
-      {
-        "anchor": {
-          "end_byte": 513,
-          "part_name": "word/document.xml",
-          "path": "/w:document[1]/w:body[1]/w:p[1]/w:hyperlink[1]",
-          "start_byte": 440,
-          "xml_sha256": "sha256:f4ac3cbbd97f4fdc1c7451a572e6b61cd3ddc294d564514b4254bc62a6c35b6d"
-        },
-        "capability": "hyperlinks",
-        "code": "HYPERLINK_SEMANTICS",
-        "id": "unsupported:50be5a5b2f9b6bc988ec3264",
-        "message": "Visible hyperlink text is exposed, while relationship and field semantics remain preserve-only",
-        "preservation": "refuse-mutation",
-        "scope_id": "paragraph:a3f01c186401b8c209d2452f"
       },
       {
         "anchor": {

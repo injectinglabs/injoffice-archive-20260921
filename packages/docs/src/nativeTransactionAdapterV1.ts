@@ -130,6 +130,17 @@ export interface NativeDocxRunFormatPayloadV1 {
   }>
 }
 
+export interface NativeDocxHyperlinkPayloadV1 {
+  mutations: Array<{
+    target_kind: 'paragraph' | 'run'
+    target_id: string
+    expected_xml_sha256: string
+    operation: 'hyperlink.set'
+    hyperlink: {url: string | null; expected_xml_sha256?: string}
+    range?: NativeDocxTextRangeV1
+  }>
+}
+
 export interface NativeDocxStructurePayloadV1 {
   mutations: Array<{
     target_kind: 'paragraph'
@@ -148,7 +159,7 @@ export interface NativeDocxOfficeMutationEnvelopeV1 {
   mutation_id: string
   expected_revision: string
   /** One transaction carries exact text replacements or run-property patches, never both. */
-  payload: NativeDocxTextMutationPayloadV1 | NativeDocxRunFormatPayloadV1 | NativeDocxStructurePayloadV1
+  payload: NativeDocxTextMutationPayloadV1 | NativeDocxRunFormatPayloadV1 | NativeDocxStructurePayloadV1 | NativeDocxHyperlinkPayloadV1
 }
 
 export type NativeDocxTransactionAdapterIssueCode =

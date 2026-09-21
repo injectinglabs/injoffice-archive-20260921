@@ -53,7 +53,7 @@ type TextRange = DocumentTextRange
 interface Snapshot { bytes: Uint8Array; preview: Preview; targets: TextTarget[]; preferredSelection?:{key:string;range:TextRange} }
 interface LocalEngine {
   media(snapshot: Snapshot): PreviewMedia
-  hyperlink(snapshot:Snapshot,key:string,url:string|null):Promise<Snapshot>
+  hyperlink(snapshot:Snapshot,key:string,url:string|null,range?:DocumentTextRange):Promise<Snapshot>
   page(snapshot:Snapshot,patch:PagePatch):Promise<Snapshot>
   replaceImage(snapshot:Snapshot,id:string,bytes:Uint8Array,name:string):Promise<Snapshot>
   deleteImage(snapshot:Snapshot,id:string):Promise<{snapshot:Snapshot;key:string;text:string}>
@@ -108,10 +108,13 @@ function createEngine(extension: string): LocalEngine {
       mediaFor.set(value, { images: media.images, notice: media.notice })
       return value
     }
-    return { read, media(snapshot){ return mediaFor.get(snapshot) ?? EMPTY_MEDIA }, async hyperlink(snapshot,key,url){
-      const document=snapshot.preview.document,run=docxSelection(document,key)?.run
-      if(!run?.can_edit_hyperlink)throw new Error('This text segment cannot be linked safely.')
-      return read(await client.apply(snapshot.bytes,document,{protocol:'injoffice.office.mutations',version:1,format:'docx',mutation_id:operationId(),expected_revision:document.source.package_sha256,payload:{mutations:[{target_kind:'run',target_id:run.id,expected_xml_sha256:run.anchor.xml_sha256,operation:'hyperlink.set',hyperlink:{url,...(run.hyperlink?{expected_xml_sha256:run.hyperlink.anchor.xml_sha256}:{})}}]}}))
+    return { read, media(snapshot){ return mediaFor.get(snapshot) ?? EMPTY_MEDIA }, async hyperlink(snapshot,key,url,range){
+      const document=snapshot.preview.document,selection=docxSelection(document,key),run=selection?.run
+      if(!run?.can_edit_hyperlink||!selection)throw new Error('This text segment cannot be linked safely.')
+      const span=range&&range.start_utf16!==range.end_utf16?range:undefined
+      const paragraphRange=span?.paragraph_id===selection.paragraph.id
+      const target=paragraphRange?selection.paragraph:run
+      return read(await client.apply(snapshot.bytes,document,{protocol:'injoffice.office.mutations',version:1,format:'docx',mutation_id:operationId(),expected_revision:document.source.package_sha256,payload:{mutations:[{target_kind:paragraphRange?'paragraph':'run',target_id:target.id,expected_xml_sha256:target.anchor.xml_sha256,operation:'hyperlink.set',hyperlink:{url,...(!paragraphRange&&run.hyperlink?{expected_xml_sha256:run.hyperlink.anchor.xml_sha256}:{})},...(span?{range:{start_utf16:span.start_utf16,end_utf16:span.end_utf16}}:{})}]}}))
     }, async page(snapshot,patch){
       const document=snapshot.preview.document,section=document.sections[0]
       if(document.sections.length!==1||!section?.edit_policy?.allowed_operations.includes('section.page.patch'))throw new Error('Page settings cannot be changed safely in this document.')
@@ -325,6 +328,7 @@ export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDr
   }
   applyHiddenRef.current = () => apply(true)
   async function changeFormatting(patch: FormattingPatch) {
+    if (patch.alignment === undefined && toolbarValues?.characterEditable === false) return
     if (!snapshot || !engine.current?.format || !target || busy || composing) return
     hiddenApplyRef.current?.cancel()
     setBusy(true); callbacks.current.onBusyChange?.(true); setError('')
@@ -384,9 +388,9 @@ export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDr
     try{await window.injDesktop?.cancelDocxPdf(request)}catch(reason){if(mounted.current)setError(errorMessage(reason))}
   }
   async function changeLink(url:string|null){
-    if(!snapshot||!engine.current||!target||busy||composing||textRange?.unsupported||(textRange&&textRange.start_utf16!==textRange.end_utf16))return
+    if(!snapshot||!engine.current||!target||busy||composing||textRange?.unsupported)return
     setBusy(true);callbacks.current.onBusyChange?.(true);setError('')
-    try{const source=draftPending.current?await engine.current.edit(snapshot,selected,draft):snapshot;const next=await engine.current.hyperlink(source,selected,url);if(mounted.current)accept(next)}
+    try{const source=draftPending.current?await engine.current.edit(snapshot,selected,draft):snapshot;const next=await engine.current.hyperlink(source,selected,url,textRange);if(mounted.current)accept(next)}
     catch(reason){if(mounted.current)setError(errorMessage(reason))}
     finally{if(mounted.current)setBusy(false)}
   }
@@ -542,7 +546,7 @@ export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDr
     { id: 'Insert', label: 'Insert', groups: [
       { id: 'tables', label: 'Tables', children: <InsertTableControl disabled={true} onInsert={(rows, columns) => void insertTable(rows, columns)} /> },
       { id: 'illustrations', label: 'Illustrations', children: canPickAsset && <RibbonButton icon="image" label="Insert image…" title="Image insertion is not supported by the native DOCX engine yet" disabled={true} onClick={() => void insertImage()} /> },
-      { id: 'links', label: 'Links', children: <HyperlinkControl key={selected} url={selection?.run.hyperlink?.url} disabled={blocked || !selection?.run.can_edit_hyperlink || !!textRange?.unsupported || !!(textRange && textRange.start_utf16 !== textRange.end_utf16)} onChange={url => void changeLink(url)} /> },
+      { id: 'links', label: 'Links', children: <HyperlinkControl key={selected} url={selection?.run.hyperlink?.url} disabled={blocked || !selection?.run.can_edit_hyperlink || !(draft.length || selection?.run.text?.length) || !!textRange?.unsupported} onChange={url => void changeLink(url)} /> },
       { id: 'text', label: 'Text', children: <>
         <RibbonButton icon="paragraphInsert" label="Insert paragraph below" disabled={blocked || hasDraft || !canInsertBlock} onClick={() => void changeParagraph('block.insert_after')} />
         <RibbonButton icon="paragraphDelete" label="Delete paragraph" disabled={blocked || hasDraft || !paragraphOps.includes('block.delete')} onClick={() => void changeParagraph('block.delete')} />
@@ -575,7 +579,7 @@ export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDr
         </div>
       </div>
       <SelectionToolbar values={toolbarValues} disabled={busy||composing} onChange={patch=>void changeFormatting(patch)} />
-      {menu.anchor&&<ContextMenu anchor={menu.anchor} label="Document" onClose={menu.close} items={documentContextMenu({anchor:menu.anchor,target:!!target,values:toolbarValues,disabled:busy||composing,link:!!docxSelection(snapshot.preview.document,selected)?.run.can_edit_hyperlink&&!textRange?.unsupported&&!(textRange&&textRange.start_utf16!==textRange.end_utf16),table:false,onFormat:patch=>void changeFormatting(patch),onFind:()=>{setSearchOpen(true);requestAnimationFrame(()=>searchInput.current?.focus())},onRibbonTab:setRibbonTab})} />}
+      {menu.anchor&&<ContextMenu anchor={menu.anchor} label="Document" onClose={menu.close} items={documentContextMenu({anchor:menu.anchor,target:!!target,values:toolbarValues,disabled:busy||composing,link:!!docxSelection(snapshot.preview.document,selected)?.run.can_edit_hyperlink&&!!(draft.length||selection?.run.text?.length)&&!textRange?.unsupported,table:false,onFormat:patch=>void changeFormatting(patch),onFind:()=>{setSearchOpen(true);requestAnimationFrame(()=>searchInput.current?.focus())},onRibbonTab:setRibbonTab})} />}
     </>}
     {statistics&&snapshot&&<EditorStatus label="Document status">
       <span>Page {pageMetrics.page.toLocaleString()} of {pageMetrics.pages.toLocaleString()} · {statistics.words.toLocaleString()} {statistics.words===1?'word':'words'}</span>

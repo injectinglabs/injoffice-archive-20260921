@@ -277,6 +277,21 @@ describe('DOCX WASM package client', () => {
     expect(() => client.apply(new Uint8Array([1]), document, {...request, payload: {mutations: [{...mutation, text: 'unsupported'}]}} as never)).toThrow()
   })
 
+  it('validates hyperlink selections, URLs and wrapper anchors before posting', async () => {
+    const worker = new FakeWorker(), client = createDocxWasmClient({workerFactory: () => worker})
+    const document = structuredClone(fixtureDocument)
+    const paragraph = document.body.blocks.find(block => block.paragraph)!.paragraph!
+    if (!paragraph.edit_policy.allowed_operations.includes('hyperlink.set')) paragraph.edit_policy.allowed_operations.push('hyperlink.set')
+    const run = paragraph.runs.find(run => run.kind === 'text')!
+    run.can_edit_hyperlink = true
+    const mutation = {target_kind: 'run' as const, target_id: run.id, expected_xml_sha256: run.anchor.xml_sha256, operation: 'hyperlink.set' as const, hyperlink: {url: 'https://example.com'}, range: {start_utf16: 0, end_utf16: 1}}
+    const request = {...envelope(document), payload: {mutations: [mutation]}}
+    await client.apply(new Uint8Array([1]), document, request)
+    expect(worker.requests.at(-1)).toMatchObject({payload: JSON.stringify(request.payload)})
+    for (const url of ['javascript:alert(1)', 'file:///tmp/example', 'https://user:password@example.com']) expect(() => client.apply(new Uint8Array([1]), document, {...request, payload: {mutations: [{...mutation, hyperlink: {url}}]}})).toThrow()
+    expect(() => client.apply(new Uint8Array([1]), document, {...request, payload: {mutations: [{...mutation, hyperlink: {url: null, expected_xml_sha256: run.anchor.xml_sha256}}]}})).toThrow(/anchor/)
+  })
+
   it('terminates on extraction JSON that fails the public Docs contract', async () => {
     const worker = new FakeWorker('{"version":1}')
     const client = createDocxWasmClient({ workerFactory: () => worker })

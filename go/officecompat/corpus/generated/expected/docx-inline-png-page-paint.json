@@ -29,7 +29,8 @@
               "allowed_operations": [
                 "text.replace",
                 "properties.patch",
-                "block.insert_after"
+                "block.insert_after",
+                "hyperlink.set"
               ],
               "mode": "read-write"
             },
@@ -44,6 +45,7 @@
                   "start_byte": 394,
                   "xml_sha256": "sha256:535bcf5bc8687d09e949d04fb59af44cb909be3c18245d99d7fd8aa40a1b16ba"
                 },
+                "can_edit_hyperlink": true,
                 "id": "run:3e67489e4da2574806945109",
                 "kind": "text",
                 "text": "Before "
@@ -94,6 +96,7 @@
                   "start_byte": 1019,
                   "xml_sha256": "sha256:2970d01bf50b0aafd9c785b4fdbac75eda67930eaa7eb3281fa10cfb16fe9d1f"
                 },
+                "can_edit_hyperlink": true,
                 "id": "run:58b6dc390c1b650100ae8d7b",
                 "kind": "text",
                 "text": " After"
