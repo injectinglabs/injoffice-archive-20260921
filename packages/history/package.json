@@ -1,6 +1,6 @@
 {
   "name": "@injoffice/history",
-  "version": "0.1.1-rc.0",
+  "version": "0.1.1",
   "license": "Apache-2.0",
   "author": "Injecting Inc.",
   "description": "Host-backed durable edit history with an accessible timeline, isolated previews, restore lineage, and diffs.",

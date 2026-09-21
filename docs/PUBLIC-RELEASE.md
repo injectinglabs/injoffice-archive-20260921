@@ -34,9 +34,9 @@ with `"private": true`. The in-repo `injoffice-server` is optional. Browser WASM
 Registry verification on 2026-09-21 confirms all 26 packages are published at
 0.1.0 under the controlled `@injoffice` scope, including `@injoffice/xlsx-wasm`.
 Existing npm versions are immutable. Source fixes after that release, including
-the collaboration peer removal, are included in the pending `0.1.1-rc.0` release
-candidate. Verify the published candidate from an external consumer before
-promoting the same source to stable `0.1.1`.
+the collaboration peer removal, are included in the `0.1.1` release source.
+The release procedure validates `0.1.1-rc.0` through an external consumer before
+publishing stable `0.1.1`; changing source versions alone does not publish them.
 
 - Preserve the attribution in NOTICE, LICENSE, LICENSE-UNICODE.txt, and package-specific legal assets.
 - Apply the [consumer dependency mitigation](DEPENDENCY-TRANSPARENCY.md#security-advisory-snapshot) for Univer 0.25.1. A clean root audit alone does not establish a clean consumer install.
