@@ -43,3 +43,28 @@
    The chrome-wide --document-* tokens stay light for DOCX pages and PPTX slides. */
 @media(prefers-color-scheme:dark){:root:not([data-theme="light"]) .sheet-editor{--sheet-cell-surface:var(--surface);--sheet-cell-text:var(--text);--sheet-gridline:var(--border-strong)}}
 :root[data-theme="dark"] .sheet-editor{--sheet-cell-surface:var(--surface);--sheet-cell-text:var(--text);--sheet-gridline:var(--border-strong)}
+
+/* Excel's Home controls: alignment toggle icons, colour buttons with the colour
+   underline, Borders and Cells as icon menus. Fixed control widths keep the
+   groups from reflowing when the selection changes. */
+.sheet-alignment-row{display:flex;align-items:center;gap:1px}
+.sheet-group-divider{width:1px;align-self:stretch;margin:2px 5px;background:var(--border-subtle)}
+.sheet-editor .ribbon .sheet-font-name{width:134px}
+.sheet-editor .ribbon .sheet-font-size{width:64px}
+.sheet-editor .ribbon .sheet-number-format select{width:148px;max-width:none}
+.sheet-color-button{position:relative;display:inline-flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;width:30px;height:30px;border:1px solid transparent;border-radius:5px;color:inherit}
+.sheet-color-button:hover:not(.is-disabled){background:var(--xlsx-soft);border-color:var(--xlsx-border)}
+.sheet-color-button.is-disabled{opacity:.45}
+.sheet-color-underline{width:17px;height:4px;border:1px solid var(--border-strong);border-radius:1px}
+.sheet-color-button input{position:absolute;inset:0;width:100%;height:100%;opacity:0;padding:0;border:0;cursor:pointer}
+.sheet-color-button.is-disabled input{cursor:default}
+.sheet-menu{position:relative}
+.sheet-menu>summary{display:inline-flex;align-items:center;gap:2px;justify-content:center;min-height:30px;padding:4px 5px;border:1px solid transparent;border-radius:5px;cursor:pointer;list-style:none}
+.sheet-menu>summary::-webkit-details-marker{display:none}
+.sheet-menu>summary:hover{background:var(--xlsx-soft);border-color:var(--xlsx-border)}
+.sheet-menu[open]>summary{background:var(--xlsx-soft);color:var(--xlsx);border-color:var(--xlsx-border)}
+.sheet-menu-caret{font-size:9px;line-height:1}
+.sheet-menu>div{position:absolute;left:0;top:calc(100% + 4px);z-index:30;display:grid;gap:2px;padding:6px;min-width:190px;background:var(--surface-raised);border:1px solid var(--sheet-line);box-shadow:0 8px 24px var(--shadow)}
+.sheet-editor .sheet-menu>div button{display:flex;align-items:center;gap:8px;justify-content:flex-start;width:100%;text-align:left}
+.sheet-menu>div label{display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--text-muted)}
+.sheet-menu>div input{border:1px solid var(--sheet-line);border-radius:3px;padding:5px;background:var(--surface);color:inherit}
