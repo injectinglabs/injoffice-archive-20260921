@@ -68,13 +68,13 @@ Twenty-six TypeScript packages under `packages/`:
 | `@injoffice/docx-wasm` | Optional browser-worker distribution of the native DOCX extract/apply engine |
 | `@injoffice/univer-sheets` | Configurable composition of the complete public Univer Sheets plugin surface |
 
-Private workspace apps (not published):
+Workspace apps (public source, not published to npm):
 
 | App | Purpose |
 |---|---|
 | `apps/docs` | Standalone developer documentation, tested TypeScript examples, and source-derived references. |
 | `apps/playground` | Browser engine proofs, browser-local native XLSX, DOCX, and PPTX round trips, and collaboration demos. |
-| `apps/desktop` | Local Electron editor host. Current tree is Node file-store, recents, recovery, and URL policy; the shell and editors follow. |
+| `apps/desktop` | Local Electron host with document, spreadsheet, presentation, and PDF editor surfaces, file storage, recents, and recovery. Supported operations remain bounded by each engine’s coverage. |
 | `apps/docx-page-paint-worker` | Native DOCX page-paint worker |
 
 Go modules under `go/` are surgical file writers, native extract/apply engines, validators, an optional in-process collaboration hub, and an optional HTTP server:

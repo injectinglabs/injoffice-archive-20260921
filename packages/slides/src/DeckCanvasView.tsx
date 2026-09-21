@@ -97,29 +97,9 @@ import type { WireDeck, WireShape, WireSlide } from './wire'
 // re-export as a real .pptx) — this is the render-a-real-deck half of S9
 // only, an honest partial start, not a finished round-trip editor.
 
-// shapeText renders a shape's own paragraph text — pulled out of
-// KonvaShapeInner (round 6 fix) because OUTLINE and TEXT are independent in
-// real OOXML: any shape can carry BOTH an outline (fill/stroke/prstGeom) AND
-// its own embedded text (a:txBody) at once — a callout box with a label
-// typed inside it, say — 'textBox' (prstGeom="rect" + txBox="1") is just the
-// one special case where there's conventionally no VISIBLE outline, not the
-// only shape kind that can ever have text. The previous version gated this
-// entire block behind `shape.kind === 'textBox'`, so any other kind's
-// paragraphs (an autoshape's own text, or an unresolved/empty kind — e.g. a
-// real .pptx's title/body placeholder, which never carries an explicit
-// prstGeom of its own) were silently never painted at all, even though
-// compileDeckToWire itself was fine — this only ever showed up parsing a
-// REAL uploaded .pptx (compile.ts's own textBox()/rect() helpers never
-// produce a non-textBox shape with paragraphs, so no DeckSpec-driven deck
-// ever exercised this path). Confirmed live on staging: an autoshape with
-// its own text rendered its fill/stroke correctly but the text inside it
-// was completely absent; a title/body placeholder (kind "", no fill/stroke
-// of its own either) rendered as literally nothing, for the same reason.
-// Exported (not just internal to KonvaShapeInner) so its behavior is
-// directly unit-testable without a full react-konva render: the load-
-// bearing property this fix depends on is that shapeText's output depends
-// ONLY on shape.paragraphs, never on shape.kind — see
-// DeckCanvasView.shapeText.test.ts.
+// OOXML shapes can carry both an outline and paragraph text. Render paragraphs
+// independently of the outline kind, including unresolved placeholders.
+// Exported for direct tests without mounting the full react-konva view.
 export function shapeText(shape: WireShape, w: number, h: number, scale: number) {
   const paras = shape.paragraphs ?? []
   if (paras.length === 0) return null
@@ -129,15 +109,8 @@ export function shapeText(shape: WireShape, w: number, h: number, scale: number)
   const fontStyle = [firstRun?.bold ? 'bold' : '', firstRun?.italic ? 'italic' : ''].filter(Boolean).join(' ') || 'normal'
   const baseFontSize = ptToPx(firstRun?.sizePt || 14, scale)
   const fontSize = fitFontSizePx(flatLines.join('\n'), w, baseFontSize)
-  // Pre-wrap ourselves at fontSize rather than asking Konva/the browser
-  // canvas to decide line breaks (wrap="word" below is intentionally
-  // OFF) — see canvasGeometry.ts's "Text overflow defense" section:
-  // Konva's own width-based wrap depends on the browser canvas's own
-  // text measurement, and a live-staging report showed that not being
-  // trustworthy (title text rendering as one long unwrapped line
-  // reaching the canvas edge) in a way this package's headless test
-  // environment could not reproduce or fully diagnose. wrapLineToWidth
-  // is deterministic and testable, independent of actual font metrics.
+  // Explicit line breaks keep the coarse preview wrap policy independent of
+  // browser font-loading state. Konva renders them with wrap="none" below.
   const wrapped = flatLines.flatMap((line) => wrapLineToWidth(line, w, fontSize))
   return (
     <Text

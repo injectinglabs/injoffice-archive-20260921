@@ -3,13 +3,12 @@
 - **Status:** Accepted
 - **Date:** 2026-09-02
 - **Decision owners:** InjOffice maintainers
-- **Supersedes:** the 2026-08-27 “selective source adaptation” decision recorded in this file
 
 ## Context
 
 InjOffice ships native XLSX, PPTX, and DOCX engines behind InjOffice-owned
-contracts. Earlier evaluation considered adapting third-party Office engine
-source. That is no longer the standing decision.
+contracts. Format authority and persistence must remain independent of optional
+editor shells and rendering hosts.
 
 ## Decision
 
@@ -22,8 +21,8 @@ packages. `scripts/check-office-architecture.mjs` already forbids Electron and
 Mammoth as native authority, and must keep doing so.
 
 Compatibility evidence is InjOffice corpus fixtures and Microsoft-authored
-packages already in this repository. There is no third-party differential
-inventory or “adapt their source” follow-up lane.
+packages already in this repository. Licensed fixture and catalog data retain
+their upstream provenance and notices.
 
 ## Consequences
 

@@ -2,12 +2,9 @@
 
 ## Reporting a vulnerability
 
-Do not open a public issue for a suspected vulnerability. When enabled, use
-[GitHub private vulnerability reporting](https://github.com/injectinglabs/injoffice/security/advisories/new).
-This feature is unavailable while the repository is private. Before making the
-repository public, maintainers must enable it and verify that the reporting link
-works. Collaborators with private repository access should contact a maintainer
-through their existing private communication channel if reporting is unavailable.
+Do not open a public issue for a suspected vulnerability. Use
+[GitHub private vulnerability reporting](https://github.com/injectinglabs/injoffice/security/advisories/new),
+which is enabled for this public repository.
 
 Include the affected package and version or commit, impact, reproduction steps, and any suggested mitigation. Do not include real customer documents or secrets. A minimal synthetic artifact is preferred.
 

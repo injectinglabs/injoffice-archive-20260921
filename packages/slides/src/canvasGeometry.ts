@@ -113,51 +113,14 @@ export function resizeResultEmu(newWidthPx: number, newHeightPx: number, scale: 
   }
 }
 
-// ---- Text overflow defense (fixes a live-staging bug: a long title on the
-// 'title' SlideKind rendered past the canvas's right edge) ----
-//
-// ROUND 4 FIX (WRONG/INCOMPLETE — kept here as history, corrected below):
-// diagnosed as "Archivo" (boardroom's font) never being loaded as a web
-// font, shipped canvasFontFamily's fallback + fitFontSizePx's shrink + a
-// hard Group clip. Nick re-verified on staging and the bug was STILL
-// present — AND reproduced identically on the "terra" theme, which uses
-// the exact same displayFont as boardroom (every BUILTIN_THEME does — see
-// themes.ts), so "which theme" was never actually the variable; the font-
-// loading theory didn't explain why the fix didn't work, it just happened
-// to point at a real (but insufficient) contributing factor. The live
-// symptom, described precisely: text renders fully, bold, correctly
-// sized — it just never wraps at all, running in ONE line all the way to
-// the canvas's own edge with no visible clip boundary. That is NOT what a
-// working clipped-Group + working word-wrap should ever produce (clipping
-// would cut the line off well short of the canvas edge, at the shape's own
-// ~81%-width box, with the background visibly continuing past it) — it is
-// exactly what an UNWRAPPED, UNCLIPPED single line looks like. Conclusion:
-// something about relying on Konva's OWN width-based wrap decision (which
-// ultimately depends on the browser canvas's own text-measurement/font-
-// resolution behavior) is not trustworthy here, in a way this package's
-// headless node-canvas test environment does not reproduce and therefore
-// cannot be fully diagnosed from here.
-//
-// ROUND 5 FIX: stop trusting Konva/canvas measurement for the WRAP
-// DECISION at all. wrapLineToWidth (below) pre-computes line breaks itself,
-// using the SAME coarse character-width heuristic qc.ts's
-// estimateWrappedLines already uses for the DOM renderer — deterministic,
-// testable, and independent of whatever font actually ends up resolving in
-// whatever browser. DeckCanvasView now renders the ALREADY-WRAPPED text
-// with wrap="none" (Konva still respects explicit '\n' breaks in any wrap
-// mode; "none" only disables ITS OWN additional width-based breaking, which
-// is exactly what's being replaced). The round-4 fixes are kept, now as
-// secondary defense layers, not the primary mechanism:
-//  1. canvasFontFamily's generic fallback — still a reasonable robustness
-//     improvement for actual glyph rendering, just no longer load-bearing
-//     for the wrap decision.
-//  2. fitFontSizePx — still shrinks a single word too wide even for
-//     wrapLineToWidth to break (word-wrap, manual or automatic, can't
-//     split inside a word).
-//  3. The hard Group clip (clipX/clipY/clipWidth/clipHeight) — still the
-//     unconditional structural guarantee: nothing can ever PAINT outside a
-//     shape's own box, regardless of ANY wrapping/measurement mechanism's
-//     behavior in ANY browser.
+// ---- Text overflow defense ----
+// Precompute line breaks with the same coarse character-width heuristic as
+// qc.ts. DeckCanvasView renders those explicit breaks with wrap="none", so
+// the wrap decision is deterministic across browser font-loading states.
+// This is approximate preview layout, not supplied-font text measurement.
+// A generic font fallback, shrinking overlong words, and a shape-local Group
+// clip provide additional rendering bounds. Headless Konva tests exercise
+// integration but cannot reproduce every browser font-measurement failure.
 
 const AVG_CHAR_WIDTH_RATIO = 0.55
 

@@ -133,10 +133,7 @@ describe('paragraphLine', () => {
   })
 })
 
-// ---- Text overflow defense (regression coverage for the live-staging bug:
-// a long title on the 'title' SlideKind rendered past the canvas's right
-// edge — see canvasGeometry.ts's own "Text overflow defense" comment for
-// the full root-cause writeup and why it doesn't reproduce headlessly). ----
+// Deterministic wrapping and sizing checks for bounded title previews.
 
 describe('estimateTextWidthPx', () => {
   it('scales linearly with both text length and font size', () => {
@@ -231,18 +228,9 @@ describe('wrapLineToWidth', () => {
 })
 
 describe('title-slide overflow regression (the actual reported repro)', () => {
-  // Round 4's fix (fitFontSizePx alone, trusting Konva's own wrap="word")
-  // did NOT hold on real staging — Nick reproduced the identical bug on
-  // the "terra" theme (which uses the same font as boardroom, so "which
-  // theme" was never the real variable) with a very specific symptom: the
-  // title rendered as ONE long unwrapped line reaching the canvas's own
-  // edge, not clipped at the shape's own ~81%-width box. That is
-  // consistent with Konva's OWN width-based wrap decision not being
-  // trustworthy in that browser, in a way this package's headless
-  // node-canvas environment does not reproduce (confirmed while building
-  // the round-4 fix). Round 5's fix stops depending on it: these tests
-  // cover the manual pre-wrap (wrapLineToWidth) DeckCanvasView now uses
-  // instead of Konva's wrap="word", at the ACTUAL compile.ts numbers.
+  // Exercise manual pre-wrapping at compile.ts's title-box dimensions.
+  // These checks cover the deterministic heuristic; browser font metrics
+  // and headless Konva paint behavior are separate integration concerns.
   const scale = 960 / (13.333 * EMU_PER_INCH)
   const boxWidthPx = 10.8 * EMU_PER_INCH * scale
   const fontSizePx = 40 * EMU_PER_PT * scale
