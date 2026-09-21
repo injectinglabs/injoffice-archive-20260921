@@ -237,3 +237,46 @@ test('a narrow ribbon collapses to icons, then moves the trailing groups behind 
   assert.deepEqual(popover.findAllByProps({ role: 'group' }).map(group => group.props['aria-label']), ['Styles', 'Editing'], 'the hidden groups are reachable in the popover');
   await act(async () => view.unmount());
 });
+
+test('the shared ribbon primitives: alignment toggles and a colour button, ready for the spreadsheet ribbon', async () => {
+  const { AlignmentToggles, ColorButton, RIBBON_ALIGNMENTS, RIBBON_VERTICAL_ALIGNMENTS } = await load('Ribbon.tsx');
+  assert.deepEqual(RIBBON_VERTICAL_ALIGNMENTS.map(option => option.value), ['top', 'middle', 'bottom']);
+  assert.deepEqual(RIBBON_ALIGNMENTS.xlsx.map(option => option.value), ['left', 'center', 'right']);
+  assert.deepEqual(RIBBON_ALIGNMENTS.docx.map(option => option.value), ['left', 'center', 'right', 'both', 'distribute']);
+
+  const horizontal = [], vertical = [];
+  let view;
+  await act(async () => {
+    view = create(h(AlignmentToggles, { horizontal: 'center', vertical: 'bottom', onHorizontal: value => horizontal.push(value), onVertical: value => vertical.push(value) }));
+  });
+  // Six toggles, not two dropdowns, and the alignment in effect is the pressed one.
+  const buttons = view.root.findAllByType('button');
+  assert.deepEqual(buttons.map(button => button.props['aria-label']), ['Top align', 'Middle align', 'Bottom align', 'Align left', 'Center', 'Align right']);
+  assert.deepEqual(buttons.map(button => button.props['aria-pressed']), [false, false, true, false, true, false]);
+  for (const button of buttons) assert.equal(button.findAllByType('svg').length, 1, `${button.props['aria-label']} has an icon`);
+  await act(async () => buttons[0].props.onClick());
+  await act(async () => buttons[3].props.onClick());
+  assert.deepEqual(vertical, ['top']);
+  assert.deepEqual(horizontal, ['left']);
+  // Excel's "general" alignment presses nothing, exactly like Excel's own ribbon.
+  await act(async () => view.update(h(AlignmentToggles, { horizontal: 'general', onHorizontal: () => {}, disabled: true })));
+  const only = view.root.findAllByType('button');
+  assert.deepEqual(only.map(button => button.props['aria-label']), ['Align left', 'Center', 'Align right'], 'a host without vertical alignment gets one row');
+  assert.deepEqual(only.map(button => button.props['aria-pressed']), [false, false, false]);
+  assert.deepEqual(only.map(button => button.props.disabled), [true, true, true]);
+
+  // ColorButton: an icon button with the colour as an underline and a palette behind the chevron.
+  const picked = [];
+  await act(async () => { view.update(h(ColorButton, { label: 'Fill color', icon: 'fill', value: '#217447', colors: [['#B33C3C', 'Red'], ['#217447', 'Green']], onChange: color => picked.push(color) })); });
+  const trigger = view.root.findByProps({ 'aria-label': 'Fill color' });
+  assert.equal(trigger.props['aria-expanded'], false);
+  assert.equal(trigger.props['aria-haspopup'], 'true');
+  assert.deepEqual(view.root.findByProps({ className: 'ribbon-color-bar' }).props.style, { background: '#217447' });
+  assert.equal(view.root.findAllByProps({ className: 'ribbon-chevron' }).length, 1, 'the chevron is part of the button, not a native colour input');
+  await act(async () => trigger.props.onClick());
+  assert.equal(view.root.findByProps({ 'aria-label': 'Green' }).props['aria-pressed'], true);
+  await act(async () => view.root.findByProps({ 'aria-label': 'Red' }).props.onClick());
+  assert.deepEqual(picked, ['#B33C3C']);
+  assert.equal(view.root.findByProps({ 'aria-label': 'Fill color' }).props['aria-expanded'], false, 'picking closes the palette');
+  await act(async () => view.unmount());
+});
