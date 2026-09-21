@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
+import { readCompletionBaselineSnapshot } from './completion-baseline-snapshot.mjs'
 import { BASELINE, BASELINE_V2, BASELINE_V3, findForbiddenNativeAuthority, loadCompletionManifest, normalizeSourceComments, validateCompletionManifest, validateNativeAuthorityClosure } from './validate-native-office-completion.mjs'
 
 const testRoot = resolve(fileURLToPath(new URL('..', import.meta.url)))
@@ -16,6 +18,30 @@ const validate = (mutate) => {
   return validateCompletionManifest(manifest)
 }
 const includes = (errors, text) => assert(errors.some((error) => error.includes(text)), errors.join('\n'))
+
+test('portable baseline preserves every historical blob and refuses altered evidence', () => {
+  const snapshot = readCompletionBaselineSnapshot(testRoot, BASELINE)
+  assert.equal(snapshot.commit, BASELINE)
+  assert.equal(snapshot.tree, '34a2027f1bc0c13ffad8b5d4956e7bd42a1e025d')
+  assert.equal(Object.keys(snapshot.files).length, 1215)
+  for (const [path, entry] of Object.entries(snapshot.files)) {
+    const bytes = Buffer.from(entry.base64, 'base64')
+    const object = createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex')
+    assert.equal(object, entry.object, path)
+  }
+  const temporary = mkdtempSync(join(tmpdir(), 'injoffice-baseline-'))
+  try {
+    const directory = join(temporary, 'testdata/native-office-completion')
+    mkdirSync(directory, { recursive: true })
+    const corrupted = Buffer.from(readFileSync(resolve(testRoot, 'testdata/native-office-completion/baseline-420424b.json.gz')))
+    corrupted[corrupted.length - 1] ^= 1
+    writeFileSync(join(directory, 'baseline-420424b.json.gz'), corrupted)
+    assert.throws(() => readCompletionBaselineSnapshot(temporary, BASELINE), /snapshot digest/)
+    assert.equal(readCompletionBaselineSnapshot(temporary, '0'.repeat(40)), undefined)
+  } finally {
+    rmSync(temporary, { recursive: true, force: true })
+  }
+})
 
 test('canonical matrix is valid', () => {
   const schema = JSON.parse(readFileSync(resolve(testRoot, 'schemas/native-office-completion-v1.schema.json'), 'utf8'))
