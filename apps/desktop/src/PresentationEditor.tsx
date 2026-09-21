@@ -314,7 +314,7 @@ export default function PresentationEditor({ name, bytes, onChange, onBusyChange
     { id: 'File', label: 'File', groups: [{ id: 'export', label: 'Export', children: <RibbonButton icon="svg" label="Export slide SVG" title="Export the current supported slide. Text and unsupported objects require the original PPTX." disabled={blocked || !snapshot} onClick={() => void exportSvg()} /> }] },
     { id: 'Home', label: 'Home', groups: [
       { id: 'slides', label: 'Slides', children: <>
-        <RibbonButton icon="newSlide" label="New slide" disabled={blocked || !slide} onClick={() => insert('slide')} />
+        <RibbonButton icon="newSlide" label="New slide" disabled={blocked || !slide?.source} title={!slide?.source ? 'This slide has no source layout anchor.' : undefined} onClick={() => insert('slide')} />
         <RibbonButton icon="duplicate" label="Duplicate slide" disabled={blocked || !slide} onClick={() => structure('duplicate')} />
         <RibbonButton icon="moveEarlier" label="Move earlier" disabled={blocked || !slide || index === 0} onClick={() => structure('previous')} />
         <RibbonButton icon="moveLater" label="Move later" disabled={blocked || !snapshot || index >= snapshot.deck.slides.length - 1} onClick={() => structure('next')} />
@@ -336,7 +336,7 @@ export default function PresentationEditor({ name, bytes, onChange, onBusyChange
     ] },
     { id: 'Design', label: 'Design', groups: [{ id: 'customize', label: 'Customize', children: <div className="presentation-background-gallery" role="toolbar" aria-label="Slide background">
       {backgroundPresets.map(([color, label]) => <button key={color} type="button" className="ribbon-button presentation-background-swatch" title={`${label} background`} aria-label={`${label} background`} aria-pressed={(slide?.background ?? '') === color}
-        disabled={blocked || !slide || slide.compatibility.diagnostics.some(d => d.code === 'pptx.unsupported-background')} onClick={() => changeBackground(color)}>
+        disabled={blocked || !slide?.source} onClick={() => changeBackground(color)}>
         <svg viewBox="0 0 32 20" aria-hidden="true"><rect x=".5" y=".5" width="31" height="19" rx="1.5" fill={`#${color}`} stroke="currentColor" strokeOpacity=".35" /></svg>
         <span className="ribbon-button-label">{label}</span>
       </button>)}

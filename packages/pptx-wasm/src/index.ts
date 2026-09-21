@@ -105,7 +105,21 @@ export interface PptxNativeAutoShapeUpdateMutationV1 {
   autoShape: PptxNativeExactAutoShapeV1
 }
 
-export type PptxNativeMutationV1 = PptxNativeTextReplaceMutationV1 | PptxNativeAutoShapeUpdateMutationV1
+/** Slide operations are standalone, source-bound mutations. Insertion uses the anchor slide's layout. */
+export interface PptxNativeSlideInsertMutationV1 {
+  operationId: string
+  kind: 'slide.insert'
+  slideId: string
+  expectedFingerprintSha256: string
+}
+export interface PptxNativeSlideBackgroundMutationV1 {
+  operationId: string
+  kind: 'slide.background.set'
+  slideId: string
+  expectedFingerprintSha256: string
+  fill: string
+}
+export type PptxNativeMutationV1 = PptxNativeTextReplaceMutationV1 | PptxNativeAutoShapeUpdateMutationV1 | PptxNativeSlideInsertMutationV1 | PptxNativeSlideBackgroundMutationV1
 
 export interface PptxNativeMutationRequestV1 {
   expectedSourceRevision: string
@@ -272,6 +286,19 @@ function validateMutation(deck: NativePptxDeck, input: PptxNativeMutationRequest
   const operations = requestedOperations.map((operation, index) => {
     if (!isRecord(operation)) throw new TypeError(`PPTX mutation operation ${index} must be an object.`)
     validateId(operation.operationId, `operation ${index} operationId`)
+    if (operation.kind === 'slide.insert' || operation.kind === 'slide.background.set') {
+      if (requestedOperations.length !== 1) throw new TypeError('PPTX slide mutations require a standalone operation.')
+      rejectUnknownKeys(operation, ['operationId', 'kind', 'slideId', 'expectedFingerprintSha256', ...(operation.kind === 'slide.background.set' ? ['fill'] : [])], `operation ${index}`)
+      validateId(operation.slideId, `operation ${index} slideId`)
+      if (typeof operation.expectedFingerprintSha256 !== 'string' || !SHA256.test(operation.expectedFingerprintSha256)) throw new TypeError('PPTX slide mutation has an invalid expectedFingerprintSha256.')
+      const slide = deck.slides.find(slide => slide.id === operation.slideId)
+      if (!slide?.source) throw new NativeWasmError('UNSUPPORTED_TARGET', 'PPTX slide mutation requires a parsed source slide.')
+      if (slide.source.fingerprintSha256 !== operation.expectedFingerprintSha256) throw new NativeWasmError('STALE_FINGERPRINT', 'PPTX slide mutation has a stale fingerprint.')
+      const base = { operationId: operation.operationId, slideId: operation.slideId, expectedFingerprintSha256: operation.expectedFingerprintSha256 }
+      if (operation.kind === 'slide.insert') return { ...base, kind: 'slide.insert' } satisfies PptxNativeSlideInsertMutationV1
+      if (typeof operation.fill !== 'string' || !COLOR.test(operation.fill)) throw new TypeError('PPTX slide background fill must be an uppercase six-digit RGB color.')
+      return { ...base, kind: 'slide.background.set', fill: operation.fill } satisfies PptxNativeSlideBackgroundMutationV1
+    }
     validateId(operation.elementId, `operation ${index} elementId`)
     if (operationIds.has(operation.operationId)) throw new TypeError(`PPTX mutation operationId ${JSON.stringify(operation.operationId)} is duplicated.`)
     if (elementIds.has(operation.elementId)) throw new TypeError(`PPTX mutation elementId ${JSON.stringify(operation.elementId)} is targeted more than once.`)
