@@ -191,3 +191,29 @@ test('docx: packaged worker replaces inline-image text with edge spaces and empt
     assert.equal(next.text, text);
   }
 });
+
+test('docx: packaged worker round-trips paragraph spacing and indentation on empty text', async () => {
+  const files = engineFiles('docx'), worker = startWorker(files);
+  const envelope = { protocol: PROTOCOL, version: 1, format: 'docx' };
+  assert.equal((await worker.send({ ...envelope, id: 'init', op: 'init', assets: { wasmUrl: files.wasm, goRuntimeUrl: files.goRuntime } })).ok, true);
+  const source = await createBlankDocument('docx');
+  let bytes = source.buffer.slice(source.byteOffset, source.byteOffset + source.byteLength);
+  for (const properties of [
+    { spacing_before_twips: 120, spacing_after_twips: 240, indent_left_twips: 720, indent_right_twips: 360, first_line_twips: 240, line_spacing: 360, line_rule: 'auto' },
+    { spacing_before_twips: null, first_line_twips: null, hanging_twips: 360, line_spacing: 480, line_rule: 'exact' },
+  ]) {
+    const extracted = await worker.send({ ...envelope, id: 'extract', op: 'extract', bytes });
+    assert.equal(extracted.ok, true, JSON.stringify(extracted.error));
+    const document = JSON.parse(extracted.result.contractJson), paragraph = document.body.blocks[0].paragraph;
+    const payload = JSON.stringify({ mutations: [{ target_kind: 'paragraph', target_id: paragraph.id, expected_xml_sha256: paragraph.anchor.xml_sha256, properties }] });
+    const applied = await worker.send({ ...envelope, id: 'apply', op: 'apply', original: bytes, expectedRevision: document.source.package_sha256, payload });
+    assert.equal(applied.ok, true, JSON.stringify(applied.error));
+    bytes = applied.result.bytes;
+    const reread = await worker.send({ ...envelope, id: 'reread', op: 'extract', bytes });
+    assert.equal(reread.ok, true, JSON.stringify(reread.error));
+    const result = JSON.parse(reread.result.contractJson).body.blocks[0].paragraph;
+    for (const [key, value] of Object.entries(properties)) assert.equal(result.properties[key], value ?? undefined, key);
+    assert.equal(result.runs.map(run => run.text ?? '').join(''), '');
+    assert.ok(result.edit_policy.allowed_operations.includes('properties.patch'));
+  }
+});

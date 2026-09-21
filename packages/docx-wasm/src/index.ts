@@ -295,14 +295,21 @@ function validateFormatMutation(document: NativeDocxDocumentV1, targets: Map<str
   if (seenTargets.has(targetKey)) throw new NativeWasmError('DUPLICATE_TARGET', `DOCX mutation ${index} repeats the same native target.`)
   seenTargets.add(targetKey)
   const properties = plainObject(mutation.properties, `DOCX mutation ${index} properties`)
-  allowedKeys(properties, ['bold', 'italic', 'underline', 'font_family', 'font_size_half_points', 'color', 'highlight', 'alignment'], `DOCX mutation ${index} properties`)
-  if (properties.alignment !== undefined) {
-    if (Object.getOwnPropertyNames(properties).length !== 1) throw new TypeError(`DOCX mutation ${index} must patch paragraph alignment on its own.`)
-    if (targetKind !== 'paragraph') throw new TypeError(`DOCX mutation ${index} alignment is a paragraph property and needs a paragraph target.`)
-    if (mutation.range !== undefined) throw new TypeError(`DOCX mutation ${index} alignment applies to the whole paragraph and takes no range.`)
-    if (!DOCX_ALIGNMENT_VALUES.includes(properties.alignment as string)) throw new TypeError(`DOCX mutation ${index} alignment is outside the written subset.`)
-    const paragraph: NativeDocxParagraphPropertyPatchV1 = { alignment: properties.alignment as NativeDocxParagraphPropertyPatchV1['alignment'] }
-    return { target_kind: targetKind, target_id: mutation.target_id, expected_xml_sha256: mutation.expected_xml_sha256, properties: paragraph }
+  allowedKeys(properties, ['bold', 'italic', 'underline', 'font_family', 'font_size_half_points', 'color', 'highlight', 'alignment', 'spacing_before_twips', 'spacing_after_twips', 'indent_left_twips', 'indent_right_twips', 'first_line_twips', 'hanging_twips', 'line_spacing', 'line_rule'], `DOCX mutation ${index} properties`)
+  const paragraphKeys = ['alignment', 'spacing_before_twips', 'spacing_after_twips', 'indent_left_twips', 'indent_right_twips', 'first_line_twips', 'hanging_twips', 'line_spacing', 'line_rule']
+  if (Object.keys(properties).some(key => paragraphKeys.includes(key))) {
+    allowedKeys(properties, paragraphKeys, `DOCX mutation ${index} paragraph properties`)
+    if (targetKind !== 'paragraph' || mutation.range !== undefined) throw new TypeError('Paragraph properties need a whole paragraph target.')
+    if (properties.alignment !== undefined && !DOCX_ALIGNMENT_VALUES.includes(properties.alignment as string)) throw new TypeError('Invalid paragraph alignment.')
+    for (const key of paragraphKeys.slice(1)) {
+      const value = properties[key]
+      if (value === undefined || value === null) continue
+      if (key === 'line_rule') {
+        if (!['auto', 'exact', 'atLeast'].includes(value as string)) throw new TypeError('Invalid line rule.')
+      } else if (!Number.isSafeInteger(value) || (value as number) < (key.startsWith('indent_') ? -31680 : 0) || (value as number) > 31680) throw new TypeError(`Invalid paragraph ${key}.`)
+    }
+    if (properties.first_line_twips != null && properties.hanging_twips != null) throw new TypeError('First line and hanging are mutually exclusive.')
+    return { target_kind: targetKind, target_id: mutation.target_id, expected_xml_sha256: mutation.expected_xml_sha256, properties: properties as NativeDocxParagraphPropertyPatchV1 }
   }
   const patch: NativeDocxRunPropertyPatchV1 = {}
   for (const name of ['bold', 'italic'] as const) {
