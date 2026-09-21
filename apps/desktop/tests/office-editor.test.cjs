@@ -423,3 +423,138 @@ test('OfficeEditor arranges its controls as a Word ribbon with labelled groups, 
     await act(async () => view.unmount());
   }
 });
+
+function twoParagraphDocument() {
+  const model = tinyDocument('First');
+  const second = tinyDocument('Second');
+  const paragraph = second.body.blocks[0].paragraph;
+  paragraph.id = 'p2'; paragraph.anchor.path = 'w:p[1]';
+  paragraph.runs[0].id = 'r2'; paragraph.runs[0].anchor.path = 'w:p[1]/w:r[0]';
+  model.body.blocks.push({ paragraph });
+  model._targets.push({ ...second._targets[0], key: 'run-2', runId: 'r2', paragraphId: 'p2' });
+  return model;
+}
+
+function clickRun(view, id) {
+  view.root.findByProps({ 'data-docx-run': id }).props.onClick({ clientX: 20, clientY: 30 });
+}
+function typeDraft(view, text) {
+  view.root.findByProps({ role: 'textbox' }).props.onInput({ currentTarget: { textContent: text } });
+}
+
+test('a rejected draft stays visible while another paragraph accepts the caret and typing', async t => {
+  mockWindow();
+  const client = mockClient(twoParagraphDocument());
+  let calls = 0, commit, recovery;
+  client.apply = async () => { calls++; throw new Error('Run is read-only'); };
+  const { view } = await mountEditor(client, { registerCommit: fn => { commit = fn; }, onRecoveryDraftChange: value => { recovery = value; } });
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  try {
+    await act(async () => clickRun(view, 'r1'));
+    await act(async () => typeDraft(view, 'First draft'));
+    await act(async () => documentPreview(view).props.commit());
+    assert.equal(calls, 1);
+    assert.match(view.root.findByProps({ role: 'alert' }).children.join(''), /read-only/);
+    await act(async () => clickRun(view, 'r2'));
+    assert.equal(documentPreview(view).props.selected, 'run-2');
+    assert.equal(view.root.findByProps({ 'data-docx-run': 'r1' }).children.join(''), 'First draft');
+    await act(async () => typeDraft(view, 'Second draft'));
+    assert.equal(documentPreview(view).props.draft, 'Second draft');
+    assert.deepEqual(recovery.drafts, { 'run-1': 'First draft', 'run-2': 'Second draft' });
+    await act(async () => clickRun(view, 'r1'));
+    assert.equal(calls, 2, 'only the newly edited second paragraph is attempted');
+    assert.equal(documentPreview(view).props.draft, 'First draft');
+    let saved;
+    await act(async () => { saved = await commit(); });
+    assert.equal(saved, false, 'uncommitted drafts must never be reported as saved');
+    assert.equal(calls, 2, 'the same rejected value does not retry on clicks or Save');
+  } finally { await act(async () => view.unmount()); }
+});
+
+test('a click during a rejecting commit is honoured after it settles', async t => {
+  mockWindow();
+  const client = mockClient(twoParagraphDocument());
+  let reject, calls = 0;
+  client.apply = () => { calls++; return new Promise((_, fail) => { reject = fail; }); };
+  const { view, busy } = await mountEditor(client);
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  try {
+    await act(async () => clickRun(view, 'r1'));
+    await act(async () => typeDraft(view, 'First draft'));
+    await act(async () => documentPreview(view).props.commit());
+    assert.equal(busy.at(-1), true);
+    assert.equal(view.root.findByProps({ role: 'textbox' }).props.contentEditable, 'plaintext-only');
+    await act(async () => clickRun(view, 'r2'));
+    await act(async () => reject(new Error('Run is read-only')));
+    assert.equal(documentPreview(view).props.selected, 'run-2');
+    assert.equal(calls, 1);
+    await act(async () => typeDraft(view, 'Still usable'));
+    assert.equal(documentPreview(view).props.draft, 'Still usable');
+    assert.equal(view.root.findByProps({ 'data-docx-run': 'r1' }).children.join(''), 'First draft');
+  } finally { await act(async () => view.unmount()); }
+});
+
+for (const continued of ['First draft continued', 'First']) test(`typing ${JSON.stringify(continued)} during a worker call survives readback and commits next`, async t => {
+  mockWindow();
+  let model = twoParagraphDocument(), resolve;
+  const submitted = [];
+  const client = { extract: async () => model, terminate() {}, apply: (bytes, _, envelope) => {
+    const text = envelope.payload.mutations[0].text;
+    submitted.push(text);
+    return new Promise(done => { resolve = () => {
+      model = structuredClone(model);
+      model._targets[0].text = text;
+      model.body.blocks[0].paragraph.runs[0].text = text;
+      done(bytes);
+    }; });
+  } };
+  const { view } = await mountEditor(client);
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  try {
+    await act(async () => clickRun(view, 'r1'));
+    await act(async () => typeDraft(view, 'First draft'));
+    await act(async () => { t.mock.timers.tick(IDLE_COMMIT_MS); });
+    await act(async () => typeDraft(view, continued));
+    await act(async () => resolve());
+    assert.equal(documentPreview(view).props.draft, continued);
+    assert.equal(documentPreview(view).props.selected, 'run-1');
+    await act(async () => { t.mock.timers.tick(IDLE_COMMIT_MS); });
+    assert.deepEqual(submitted, ['First draft', continued]);
+    await act(async () => resolve());
+    assert.equal(documentPreview(view).props.hasDraft, false);
+  } finally { await act(async () => view.unmount()); }
+});
+
+test('a successful edit in another paragraph retains failed-draft recovery', async t => {
+  mockWindow();
+  let model = twoParagraphDocument(), recovery;
+  const client = { extract: async () => model, terminate() {}, apply: async (bytes, _, envelope) => {
+    const mutation = envelope.payload.mutations[0];
+    if (mutation.target_id === 'r1') throw new Error('Run is read-only');
+    model = structuredClone(model);
+    model._targets[1].text = mutation.text;
+    model.body.blocks[1].paragraph.runs[0].text = mutation.text;
+    return bytes;
+  } };
+  const { view } = await mountEditor(client, {
+    onChange: () => { recovery = null; },
+    onRecoveryDraftChange: value => { recovery = value; },
+  });
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  try {
+    await act(async () => clickRun(view, 'r1'));
+    await act(async () => typeDraft(view, 'Keep this rejected draft'));
+    await act(async () => documentPreview(view).props.commit());
+    await act(async () => clickRun(view, 'r2'));
+    await act(async () => typeDraft(view, 'Second committed'));
+    await act(async () => documentPreview(view).props.commit());
+    assert.equal(documentPreview(view).props.hasDraft, true);
+    assert.deepEqual(recovery.drafts, { 'run-1': 'Keep this rejected draft' });
+    assert.equal(view.root.findByProps({ 'data-docx-run': 'r1' }).children.join(''), 'Keep this rejected draft');
+  } finally { await act(async () => view.unmount()); }
+  const restored = await mountEditor(client, { initialRecoveryDraft: recovery });
+  try {
+    assert.equal(documentPreview(restored.view).props.draft, 'Keep this rejected draft');
+    assert.equal(documentPreview(restored.view).props.hasDraft, true);
+  } finally { await act(async () => restored.view.unmount()); }
+});
