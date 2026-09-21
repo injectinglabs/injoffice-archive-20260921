@@ -584,6 +584,8 @@ export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDr
     {statistics&&snapshot&&<EditorStatus label="Document status">
       <span>Page {pageMetrics.page.toLocaleString()} of {pageMetrics.pages.toLocaleString()} · {statistics.words.toLocaleString()} {statistics.words===1?'word':'words'}</span>
       <span className="office-status-info" tabIndex={0} role="note" aria-label="About these counts" title={`${statistics.characters.toLocaleString()} characters. Counts cover body text including tables; headers, footers, notes and hidden text are excluded. Pages are measured from the flowing preview — the original page layout is preserved in the file.`}>i</span>
+      {/* A page that ignores every click must say why, rather than look like a broken editor. */}
+      {!snapshot.targets.length && <span className="office-status-alert" role="status" title="No paragraph in this document can be edited yet, so clicking the page cannot place a caret.">No editable paragraphs</span>}
       <span>{paragraphStyleName(snapshot.preview.document, selection?.paragraph ?? snapshot.preview.document.body.blocks.find(block=>block.paragraph)?.paragraph)}</span>
     </EditorStatus>}
     {!snapshot && !busy && <div className="office-empty">This file could not be opened. Choose another file to continue.</div>}

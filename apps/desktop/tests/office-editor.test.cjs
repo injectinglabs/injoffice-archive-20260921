@@ -363,6 +363,34 @@ test('OfficeEditor carries one Word-like status row: page and words left, style 
   }
 });
 
+test('OfficeEditor says in the status row when no paragraph can be edited', async () => {
+  const model = tinyDocument('Fixed text');
+  model._targets = [];
+  const client = mockClient(model);
+  mockWindow();
+  const { view } = await mountEditor(client);
+  const text = node => node.children.map(child => typeof child === 'string' ? child : text(child)).join('');
+  try {
+    const alert = view.root.findByProps({ className: 'office-status-alert' });
+    assert.equal(alert.props.role, 'status');
+    assert.match(text(alert), /no editable paragraphs/i);
+    assert.match(alert.props.title, /caret/i, 'the row explains why clicking the page does nothing');
+  } finally {
+    await act(async () => view.unmount());
+  }
+});
+
+test('OfficeEditor keeps the status row clear while a paragraph is editable', async () => {
+  const client = mockClient(tinyDocument('Hello there'));
+  mockWindow();
+  const { view } = await mountEditor(client);
+  try {
+    assert.equal(view.root.findAllByProps({ className: 'office-status-alert' }).length, 0);
+  } finally {
+    await act(async () => view.unmount());
+  }
+});
+
 test('OfficeEditor arranges its controls as a Word ribbon with labelled groups, icons, and shortcut tooltips', async () => {
   const { shortcutLabel } = await loadModule('shortcuts.ts');
   const client = mockClient(tinyDocument('Hello'));
