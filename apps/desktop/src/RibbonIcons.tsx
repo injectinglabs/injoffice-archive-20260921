@@ -90,6 +90,8 @@ const paths = {
   saveAs: 'M5 3h11l3 3v5M5 3v18h7M8 3v5h7V3M15 20l6-6-3-3-6 6-1 4z',
   closeDocument: 'M6 3h9l5 5v13H6zM15 3v5h5M9.5 12.5l5 5M14.5 12.5l-5 5',
   updates: 'M12 3v10M8 9l4 4 4-4M4 15v4h16v-4',
+  // App updates: a refresh ring with a badge dot, not the download tray above (which reads as Export).
+  appUpdate: 'M20 12a8 8 0 1 1-2.6-5.9M20 3v4h-4M12 8v4l2.5 2',
   settings: 'M12 8.5a3.5 3.5 0 1 1 0 7 3.5 3.5 0 0 1 0-7ZM12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1',
   sidebar: 'M3 4h18v16H3V4Zm6 0v16M5 8h2m-2 4h2m-2 4h2',
   focus: 'M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5',
