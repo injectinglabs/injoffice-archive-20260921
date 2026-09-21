@@ -5,8 +5,6 @@ import { basename, join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import { publishedIntegrity } from './release-registry.mjs'
 
-const root = resolve(import.meta.dirname, '..')
-const packageRoot = resolve(root, 'packages')
 const tag = process.argv.find((value) => /^v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(value))
 const dryRun = process.argv.includes('--dry-run')
 const optionValue = (option) => {
@@ -16,14 +14,21 @@ const optionValue = (option) => {
 const packDestinationArg = optionValue('--pack-destination')
 const stageFromArg = optionValue('--stage-from')
 const bootstrapFromArg = optionValue('--bootstrap-from')
-const selectedModes = [dryRun, packDestinationArg !== undefined, stageFromArg !== undefined, bootstrapFromArg !== undefined].filter(Boolean).length
+const publishFromArg = optionValue('--publish-from')
+const root = resolve(optionValue('--source-root') ?? resolve(import.meta.dirname, '..'))
+const packageRoot = resolve(root, 'packages')
+const selectedModes = [dryRun, packDestinationArg !== undefined, stageFromArg !== undefined, bootstrapFromArg !== undefined, publishFromArg !== undefined].filter(Boolean).length
 
-if (!tag || selectedModes !== 1 || packDestinationArg === '' || stageFromArg === '' || bootstrapFromArg === '') {
-  console.error('Usage: npm run release:packages -- vX.Y.Z (--dry-run | --pack-destination DIR | --stage-from DIR | --bootstrap-from DIR)')
+if (!tag || selectedModes !== 1 || [packDestinationArg, stageFromArg, bootstrapFromArg, publishFromArg].includes('')) {
+  console.error('Usage: npm run release:packages -- vX.Y.Z (--dry-run | --pack-destination DIR | --stage-from DIR | --bootstrap-from DIR | --publish-from DIR) [--source-root DIR]')
   process.exit(1)
 }
 if (bootstrapFromArg !== undefined && process.env.CI) {
   console.error('Refusing to bootstrap packages from CI. The first publish must be interactive and protected by 2FA.')
+  process.exit(1)
+}
+if (publishFromArg !== undefined && (process.env.GITHUB_ACTIONS !== 'true' || !process.env.ACTIONS_ID_TOKEN_REQUEST_URL || !process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN)) {
+  console.error('Trusted publishing requires GitHub Actions with OIDC permission in the protected npm environment.')
   process.exit(1)
 }
 if (!existsSync(resolve(root, 'LICENSE'))) {
@@ -109,9 +114,10 @@ try {
     }
     writeFileSync(resolve(destination, 'release-manifest.json'), `${JSON.stringify(releaseManifest, null, 2)}\n`)
     console.log(`Prepared ${releaseManifest.packages.length} release tarballs in ${destination}`)
-  } else if (stageFromArg !== undefined || bootstrapFromArg !== undefined) {
+  } else if (stageFromArg !== undefined || bootstrapFromArg !== undefined || publishFromArg !== undefined) {
     const bootstrap = bootstrapFromArg !== undefined
-    const source = resolve(root, bootstrapFromArg ?? stageFromArg)
+    const direct = bootstrap || publishFromArg !== undefined
+    const source = resolve(root, bootstrapFromArg ?? stageFromArg ?? publishFromArg)
     const manifestPath = resolve(source, 'release-manifest.json')
     if (!existsSync(manifestPath)) {
       throw new Error(`Missing release manifest: ${manifestPath}`)
@@ -147,20 +153,20 @@ try {
     }
     const alreadyPublished = registryState.filter((entry) => entry.published !== null)
 
-    if (!bootstrap && alreadyPublished.length === registryState.length) {
+    if (alreadyPublished.length === registryState.length) {
       console.log(`All ${registryState.length} packages are already published with matching SHA-512 integrity.`)
     } else {
-      if (!bootstrap && alreadyPublished.length > 0) {
+      if (!direct && alreadyPublished.length > 0) {
         throw new Error(`Refusing a partial staged release: ${alreadyPublished.length} of ${registryState.length} package versions are already public.`)
       }
       for (const { packed, published } of registryState) {
         if (published !== null) {
-          console.log(`Already bootstrapped ${packed.name}@${version}`)
+          console.log(`Already published ${packed.name}@${version}; SHA-512 integrity matches.`)
           continue
         }
-        console.log(`${bootstrap ? 'Bootstrapping' : 'Staging'} ${packed.name}@${version}`)
-        run(bootstrap
-          ? ['publish', packed.tarball, '--access', 'public', '--tag', npmTag, '--fetch-retries=0']
+        console.log(`${bootstrap ? 'Bootstrapping' : direct ? 'Publishing' : 'Staging'} ${packed.name}@${version}`)
+        run(direct
+          ? ['publish', packed.tarball, '--access', 'public', '--tag', npmTag, '--ignore-scripts', '--fetch-retries=0']
           : ['stage', 'publish', packed.tarball, '--access', 'public', '--tag', npmTag, '--fetch-retries=0'])
       }
     }
