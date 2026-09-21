@@ -5,7 +5,7 @@ const React = require('react');
 const { create, act } = require('react-test-renderer');
 global.IS_REACT_ACT_ENVIRONMENT = true;
 
-async function loadPreview() {
+async function loadPreview(exportName = 'default') {
   const { rolldown } = await import('rolldown');
   const bundle = await rolldown({
     input: path.resolve(__dirname, '../src/DocumentPreview.tsx'),
@@ -23,7 +23,7 @@ async function loadPreview() {
       return require(id);
     };
     new Function('require', 'module', 'exports', output[0].code)(req, mod, mod.exports);
-    return mod.exports.default ?? mod.exports;
+    return mod.exports[exportName] ?? mod.exports;
   } finally {
     await bundle.close();
   }
@@ -232,4 +232,15 @@ test('Enter and paragraph input split at the caret; Shift+Enter refuses a line b
     await act(async () => textbox.props.onKeyDown(event));
     assert.equal(splits.length, 2, 'IME confirmation does not split');
   } finally { await act(async () => view.unmount()); }
+});
+
+test('flowing page metrics count trailing, repeated and overflow-adjacent hard breaks', async () => {
+  const metrics = await loadPreview('flowingPageMetrics');
+  assert.deepEqual(metrics(1000, 1000, 0, []), { page: 1, pages: 1 });
+  assert.deepEqual(metrics(1000, 1000, 0, [200]), { page: 1, pages: 2 });
+  assert.deepEqual(metrics(1000, 1000, 300, [200]), { page: 2, pages: 2 });
+  assert.deepEqual(metrics(1000, 1000, 0, [200, 220]), { page: 1, pages: 3 });
+  assert.deepEqual(metrics(2200, 1000, 2100, [2000]), { page: 3, pages: 3 });
+  assert.deepEqual(metrics(2000, 1000, 0, [1000]), { page: 1, pages: 2 }, 'a break at a natural boundary is not double counted');
+  assert.deepEqual(metrics(1000, 1000, 1000, [1000]), { page: 2, pages: 2 }, 'a final break creates an empty final page');
 });

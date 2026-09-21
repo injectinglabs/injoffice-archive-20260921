@@ -1,5 +1,5 @@
 import { EditorStatus } from './EditorStatus';
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
+import { useEffect, useLayoutEffect, useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
 import { createXlsxWasmClient, adaptWorkbookMutationBatchV1, type XlsxNativeChart } from '@injoffice/xlsx-wasm';
 import type { NativeWorkbookV2, StyleDelta } from '@injoffice/sheets/browser';
 import { SpreadsheetCharts } from './SpreadsheetCharts';
@@ -28,7 +28,7 @@ function cellInk(color?: string, fill?: string): string | undefined {
   return fill ? 'var(--document-text)' : undefined;
 }
 
-export interface OfficeEditorProps { onInitialLoadError?: (reason: string) => void; registerHistory?: (commands: { undo(): void; redo(): void; canUndo?: boolean; canRedo?: boolean }) => void; registerCommit?: (commit: () => Promise<boolean>) => void; initialRecoveryDraft?: unknown; onRecoveryDraftChange?: (draft: unknown | null) => void; name: string; bytes: Uint8Array; onChange: (bytes: Uint8Array) => void; onBusyChange?: (busy: boolean) => void; onDraftChange?: (dirty: boolean) => void; viewOptions?: { zoom: number; navigation: boolean; focus: boolean } }
+export interface OfficeEditorProps { documentKey?: number; onInitialLoadError?: (reason: string) => void; registerHistory?: (commands: { undo(): void; redo(): void; canUndo?: boolean; canRedo?: boolean }) => void; registerCommit?: (commit: () => Promise<boolean>) => void; initialRecoveryDraft?: unknown; onRecoveryDraftChange?: (draft: unknown | null) => void; name: string; bytes: Uint8Array; onChange: (bytes: Uint8Array) => void; onBusyChange?: (busy: boolean) => void; onDraftChange?: (dirty: boolean) => void; viewOptions?: { zoom: number; navigation: boolean; focus: boolean } }
 
 type Snapshot = { bytes: Uint8Array; workbook: NativeWorkbookV2; calculation?: LocalCalculationResult; calculationRevision?: string; charts: XlsxNativeChart[]; chartError?: string };
 const initialSelection: Selection = { anchor: { row: 0, column: 0 }, end: { row: 0, column: 0 } };
@@ -47,6 +47,8 @@ function historyPush(list: Snapshot[], entry: Snapshot): Snapshot[] {
 
 /** Local authoring over the native, revision-guarded XLSX transaction API. */
 export function SpreadsheetEditor(props: OfficeEditorProps & { initialRecoveryDraft?: unknown; onRecoveryDraftChange?(draft: unknown | null): void; registerCommit?(commit: () => Promise<boolean>): void; registerHistory?(commands: { undo(): void; redo(): void }): void }) {
+  const instanceId = useId();
+  const cellId = (cell: string) => `sheet-cell-${props.documentKey ?? instanceId}-${sheetId}-${cell}`;
   const calculator = useRef<ReturnType<typeof createSpreadsheetCalculator> | null>(null);
   const historyLatest = useRef<(direction: 'undo' | 'redo') => void>(() => {});
   const callbacks = useRef(props); callbacks.current = props;
@@ -421,7 +423,7 @@ Blue"/></label><label><input type="checkbox" checked={filterBlank} onChange={eve
       <button disabled={disabled || (sheetAction === 'delete' ? Boolean(deleteSheetReason) : sheetAction==='add' ? Boolean(addSheetReason)||!sheetName.trim() : !sheetName.trim())} type="submit">{sheetAction === 'delete' ? 'Delete worksheet' : sheetAction === 'add' ? 'Create worksheet' : 'Rename worksheet'}</button><button type="button" disabled={busy} onClick={() => setSheetAction(null)}>Cancel</button>
     </form>}
     {error && <div className="sheet-error" role="alert">{error}</div>}
-    <div className="sheet-content"><div className="sheet-grid-scroll" ref={grid} tabIndex={0} role="grid" aria-label="Worksheet cells" aria-rowcount={MAX_ROWS} aria-colcount={MAX_COLUMNS} aria-activedescendant={`sheet-cell-${sheetId}-${address(selection.anchor)}`} onKeyDown={gridKeys} onScroll={event => growView(event.currentTarget)} onWheel={event => growView(event.currentTarget, { x: event.deltaX, y: event.deltaY })}
+    <div className="sheet-content"><div className="sheet-grid-scroll" ref={grid} tabIndex={0} role="grid" aria-label="Worksheet cells" aria-rowcount={MAX_ROWS} aria-colcount={MAX_COLUMNS} aria-activedescendant={cellId(address(selection.anchor))} onKeyDown={gridKeys} onScroll={event => growView(event.currentTarget)} onWheel={event => growView(event.currentTarget, { x: event.deltaX, y: event.deltaY })}
       onPointerUp={() => { dragging.current = false; }} onPointerLeave={() => { dragging.current = false; }}
       onContextMenu={event => { const key = contextMenuCellKey(event.target); if (key) { const cell = parseAddress(key); if (!contains(range, cell)) select(cell); } menu.open(event); }}
       onPaste={event => { if (event.target !== event.currentTarget || draftRef.current !== null || locked.current) return; event.preventDefault(); try { const pasted = pasteOperations(selection.anchor, event.clipboardData.getData('text/plain')); void execute(pasted.operations, 'Pasted cells applied').then(applied => { if (applied) { setSelection(pasted.selection); setLocation(selectionLabel(pasted.selection)); } }); } catch (reason) { setError(String(reason)); } }}
@@ -438,7 +440,7 @@ Blue"/></label><label><input type="checkbox" checked={filterBlank} onChange={eve
           const stroke=side as {style:string;color:string}, width=stroke.style==='thick'||stroke.style==='double'?3:stroke.style.startsWith('medium')?2:1;
           (css as Record<string,unknown>)[`border${edge[0]!.toUpperCase()}${edge.slice(1)}`]=`${width}px ${stroke.style==='double'?'double':stroke.style.includes('dott')?'dotted':stroke.style.toLowerCase().includes('dash')?'dashed':'solid'} ${stroke.color}`;
         }
-        return <td key={column} id={`sheet-cell-${sheetId}-${key}`} data-address={key} role="gridcell" aria-colindex={column + 1} aria-selected={selected} aria-readonly={!sheet?.editable || Boolean(merged) || cell?.editable === false} className={`${selected ? 'is-selected' : ''} ${isActive ? 'is-active' : ''} ${cell?.formula ? 'has-formula' : ''}`} style={css} rowSpan={merged ? rows.filter(value => value >= merged.row && value <= merged.end_row).length : undefined} colSpan={merged ? columns.filter(value => value >= merged.column && value <= merged.end_column).length : undefined} title={`${key}${merged ? ` · merged ${merged.ref}` : ''}${display.note ? ` · ${display.note}` : ''}`} onPointerDown={event => { if (event.button !== 0) return; event.preventDefault(); dragging.current = true; select(source, event.shiftKey); grid.current?.focus(); }} onPointerEnter={event => { if (dragging.current && event.buttons === 1) select(position, true); }} onDoubleClick={() => { if (address(selection.anchor) === key) startEdit(undefined, true, 'edit'); }}>
+        return <td key={column} id={cellId(key)} data-address={key} role="gridcell" aria-colindex={column + 1} aria-selected={selected} aria-readonly={!sheet?.editable || Boolean(merged) || cell?.editable === false} className={`${selected ? 'is-selected' : ''} ${isActive ? 'is-active' : ''} ${cell?.formula ? 'has-formula' : ''}`} style={css} rowSpan={merged ? rows.filter(value => value >= merged.row && value <= merged.end_row).length : undefined} colSpan={merged ? columns.filter(value => value >= merged.column && value <= merged.end_column).length : undefined} title={`${key}${merged ? ` · merged ${merged.ref}` : ''}${display.note ? ` · ${display.note}` : ''}`} onPointerDown={event => { if (event.button !== 0) return; event.preventDefault(); dragging.current = true; select(source, event.shiftKey); grid.current?.focus(); }} onPointerEnter={event => { if (dragging.current && event.buttons === 1) select(position, true); }} onDoubleClick={() => { if (address(selection.anchor) === key) startEdit(undefined, true, 'edit'); }}>
           {isActive && inline && draft !== null ? <input ref={inlineInput} aria-label={`Edit ${key}`} className="sheet-inline-input" maxLength={32767} onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }} value={draft} disabled={busy} onPointerDown={event => event.stopPropagation()} onChange={event => updateDraft(event.target.value)} onKeyDown={editKeys}/> : <span className="sheet-cell-content">{display.text}</span>}
         </td>;
       })}</tr>)}</tbody></table>}

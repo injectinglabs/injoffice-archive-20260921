@@ -125,7 +125,7 @@ export default function StartPage({ recentFiles, recoveries, onRecover, onDiscar
         </section>}
         {onSearch && <div className="start-command-search"><button onClick={onSearch} disabled={busy} title={searchTitle} aria-label={searchTitle ?? 'Search commands'}><Icon name="search" /><span>{searchLabel ?? 'Search'}</span></button></div>}
         <section className="start-intro" aria-labelledby="start-title">
-          <div><h1 id="start-title">Your next idea starts here.</h1><p>Create something new, or pick up where you left off.</p></div>
+          <div><h1 id="start-title">Home</h1><p>Create a document or open a recent file.</p></div>
           <div className="start-open-existing"><button className="start-open-primary" onClick={onOpen} disabled={disabled}><Icon name="open" />Open existing file…</button><span>DOCX, XLSX, PPTX &amp; PDF</span></div>
         </section>
         <section className="start-create" aria-labelledby="start-create-title">
