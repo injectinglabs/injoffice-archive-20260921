@@ -152,13 +152,21 @@ type NativeNumberingReferenceV1 struct {
 }
 
 type NativeParagraphPropertiesV1 struct {
-	ParagraphStyleID *string                     `json:"paragraph_style_id,omitempty"`
-	Numbering        *NativeNumberingReferenceV1 `json:"numbering,omitempty"`
-	Alignment        *string                     `json:"alignment,omitempty"`
-	KeepNext         *bool                       `json:"keep_next,omitempty"`
-	KeepLines        *bool                       `json:"keep_lines,omitempty"`
-	PageBreakBefore  *bool                       `json:"page_break_before,omitempty"`
-	WidowControl     *bool                       `json:"widow_control,omitempty"`
+	SpacingBeforeTwips *int64                      `json:"spacing_before_twips,omitempty"`
+	SpacingAfterTwips  *int64                      `json:"spacing_after_twips,omitempty"`
+	IndentLeftTwips    *int64                      `json:"indent_left_twips,omitempty"`
+	IndentRightTwips   *int64                      `json:"indent_right_twips,omitempty"`
+	FirstLineTwips     *int64                      `json:"first_line_twips,omitempty"`
+	HangingTwips       *int64                      `json:"hanging_twips,omitempty"`
+	LineSpacing        *int64                      `json:"line_spacing,omitempty"`
+	LineRule           *string                     `json:"line_rule,omitempty"`
+	ParagraphStyleID   *string                     `json:"paragraph_style_id,omitempty"`
+	Numbering          *NativeNumberingReferenceV1 `json:"numbering,omitempty"`
+	Alignment          *string                     `json:"alignment,omitempty"`
+	KeepNext           *bool                       `json:"keep_next,omitempty"`
+	KeepLines          *bool                       `json:"keep_lines,omitempty"`
+	PageBreakBefore    *bool                       `json:"page_break_before,omitempty"`
+	WidowControl       *bool                       `json:"widow_control,omitempty"`
 }
 
 type NativeParagraphV1 struct {
@@ -939,6 +947,20 @@ func (v *nativeValidator) paragraph(paragraph *NativeParagraphV1, path string, t
 	if properties == nil {
 		v.add("REQUIRED", path+"/properties", "field is required")
 		properties = &NativeParagraphPropertiesV1{}
+	}
+
+	for _, field := range []struct {
+		name  string
+		value *int64
+	}{
+		{"spacing_before_twips", properties.SpacingBeforeTwips}, {"spacing_after_twips", properties.SpacingAfterTwips}, {"first_line_twips", properties.FirstLineTwips}, {"hanging_twips", properties.HangingTwips}, {"line_spacing", properties.LineSpacing},
+	} {
+		v.optionalNonnegative(field.value, path+"/properties/"+field.name)
+	}
+	v.optionalSafe(properties.IndentLeftTwips, path+"/properties/indent_left_twips")
+	v.optionalSafe(properties.IndentRightTwips, path+"/properties/indent_right_twips")
+	if properties.LineRule != nil {
+		v.oneOf(*properties.LineRule, path+"/properties/line_rule", "auto", "exact", "atLeast")
 	}
 	v.optionalID(properties.ParagraphStyleID, path+"/properties/paragraph_style_id")
 	if properties.Numbering != nil {

@@ -423,16 +423,21 @@ describe('DOCX WASM package client', () => {
       properties,
       ...extra,
     }] } } as unknown as NativeDocxOfficeMutationEnvelopeV1)
-    expect(() => client.apply(new Uint8Array([1]), fixtureDocument, alignment({ alignment: 'middle' }))).toThrow(/alignment is outside/)
-    expect(() => client.apply(new Uint8Array([1]), fixtureDocument, alignment({ alignment: 'center', bold: true }))).toThrow(/alignment on its own/)
-    expect(() => client.apply(new Uint8Array([1]), fixtureDocument, alignment({ alignment: 'center' }, { range: { start_utf16: 0, end_utf16: 2 } }))).toThrow(/takes no range/)
+    expect(() => client.apply(new Uint8Array([1]), fixtureDocument, alignment({ alignment: 'middle' }))).toThrow(/Invalid paragraph alignment/)
+    expect(() => client.apply(new Uint8Array([1]), fixtureDocument, alignment({ alignment: 'center', bold: true }))).toThrow(/unknown|unsupported/)
+    expect(() => client.apply(new Uint8Array([1]), fixtureDocument, alignment({ alignment: 'center' }, { range: { start_utf16: 0, end_utf16: 2 } }))).toThrow(/whole paragraph target/)
+    const layout = { spacing_before_twips: 120, indent_left_twips: -120, first_line_twips: null, hanging_twips: 360, line_spacing: 480, line_rule: 'auto' }
+    await expect(client.apply(new Uint8Array([1]), fixtureDocument, alignment(layout))).resolves.toEqual(new Uint8Array([4, 5, 6]))
+    for (const invalid of [{ line_spacing: 1.5 }, { indent_left_twips: -31681 }, { line_rule: 'bad' }, { first_line_twips: 1, hanging_twips: 1 }]) {
+      expect(() => client.apply(new Uint8Array([1]), fixtureDocument, alignment(invalid))).toThrow()
+    }
     const onRun = { ...envelope(), payload: { mutations: [{
       target_kind: 'run' as const,
       target_id: fixtureRun.id,
       expected_xml_sha256: fixtureRun.anchor.xml_sha256,
       properties: { alignment: 'center' },
     }] } } as unknown as NativeDocxOfficeMutationEnvelopeV1
-    expect(() => client.apply(new Uint8Array([1]), fixtureDocument, onRun)).toThrow(/needs a paragraph target/)
+    expect(() => client.apply(new Uint8Array([1]), fixtureDocument, onRun)).toThrow(/whole paragraph target/)
   })
 
   it('refuses paragraph targets with multiple runs and paragraph/run overlap', () => {

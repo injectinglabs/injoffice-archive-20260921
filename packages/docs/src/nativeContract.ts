@@ -162,6 +162,15 @@ export interface NativeDocxNumberingReferenceV1 {
 }
 
 export interface NativeDocxParagraphPropertiesV1 {
+  spacing_before_twips?: number
+  spacing_after_twips?: number
+  indent_left_twips?: number
+  indent_right_twips?: number
+  first_line_twips?: number
+  hanging_twips?: number
+  line_spacing?: number
+  line_rule?: 'auto' | 'exact' | 'atLeast'
+
   paragraph_style_id?: string
   numbering?: NativeDocxNumberingReferenceV1
   alignment?: 'left' | 'center' | 'right' | 'both' | 'distribute'
@@ -463,7 +472,7 @@ export const DOCX_NATIVE_V1_BINDING_FIELDS = {
   ReferenceV1: ['kind', 'target_id', 'role'],
   RunV1: ['can_edit_hyperlink', 'hyperlink', 'kind', 'id', 'anchor', 'properties', 'text', 'page_field', 'layout_page_field', 'control', 'reference', 'drawing'],
   NumberingReferenceV1: ['num_id', 'level', 'abstract_num_id'],
-  ParagraphPropertiesV1: ['paragraph_style_id', 'numbering', 'alignment', 'keep_next', 'keep_lines', 'page_break_before', 'widow_control'],
+  ParagraphPropertiesV1: ['spacing_before_twips', 'spacing_after_twips', 'indent_left_twips', 'indent_right_twips', 'first_line_twips', 'hanging_twips', 'line_spacing', 'line_rule', 'paragraph_style_id', 'numbering', 'alignment', 'keep_next', 'keep_lines', 'page_break_before', 'widow_control'],
   ParagraphV1: ['id', 'anchor', 'edit_policy', 'properties', 'runs'],
   TableBorderV1: ['style', 'size_eighth_points', 'color_rgb'],
   TableBordersV1: ['top', 'right', 'bottom', 'left', 'inside_horizontal', 'inside_vertical'],
@@ -847,6 +856,8 @@ function validateRun(value: unknown, path: string, issues: NativeDocxValidationI
 function validateParagraphProperties(value: unknown, path: string, issues: NativeDocxValidationIssue[]): void {
   const entry = object(value, path, DOCX_NATIVE_V1_BINDING_FIELDS.ParagraphPropertiesV1, issues)
   if (!entry) return
+  for (const key of ['spacing_before_twips', 'spacing_after_twips', 'indent_left_twips', 'indent_right_twips', 'first_line_twips', 'hanging_twips', 'line_spacing']) if (entry[key] !== undefined) integer(entry[key], `${path}/${key}`, issues, key.startsWith('indent_') ? -Number.MAX_SAFE_INTEGER : 0)
+  if (entry.line_rule !== undefined) enumValue(entry.line_rule, `${path}/line_rule`, ['auto', 'exact', 'atLeast'], issues)
   optionalString(entry.paragraph_style_id, `${path}/paragraph_style_id`, issues, ID)
   if (entry.numbering !== undefined) {
     const numbering = object(entry.numbering, `${path}/numbering`, DOCX_NATIVE_V1_BINDING_FIELDS.NumberingReferenceV1, issues)

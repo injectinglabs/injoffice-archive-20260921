@@ -2142,14 +2142,10 @@ func (extractor *nativeExtractor) extractParagraphProperties(partName, paragraph
 				unsafe = true
 			}
 		case "spacing":
-			// The resolved-layout projection owns these values. Extraction still
-			// proves the exact source shape so an honest direct-formatting layer is
-			// not mislabeled as unmodeled before the resolver can attest it. Because
-			// this projection cannot round-trip spacing, the paragraph remains
-			// preservation-only even when the source shape is exact.
-			preserveOnly = true
+			// Exact twip spacing is exposed for guarded native write-back.
 			switch nativeResolvedParagraphSpacingShape(child, extractor.wordNS) {
 			case nativeParagraphSpacingExact:
+				nativeExtractParagraphLayout(properties, child, extractor.wordNS)
 			case nativeParagraphSpacingAutomatic:
 				// An explicit automatic before/after flag is an exact source
 				// shape whose value Word determines. The resolved-layout
@@ -2181,7 +2177,11 @@ func (extractor *nativeExtractor) extractParagraphProperties(partName, paragraph
 				unsafe = true
 			}
 		case "ind":
-			preserveOnly = true
+			if nativeWritableParagraphIndent(child, extractor.wordNS) {
+				nativeExtractParagraphLayout(properties, child, extractor.wordNS)
+			} else {
+				preserveOnly = true
+			}
 			if !nativeExactResolvedParagraphIndent(child, extractor.wordNS) {
 				unsafe = true
 				extractor.addUnsupported("UNMODELED_PARAGRAPH_INDENT", "paragraph-properties", paragraphID, partName, child, "Paragraph indentation is invalid, conflicting, character-unit based, or has structure outside the exact resolved-layout subset")

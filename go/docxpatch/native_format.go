@@ -34,6 +34,7 @@ type NativeDOCXRunPropertyPatchV1 struct {
 // has it.
 type NativeDOCXParagraphPropertyPatchV1 struct {
 	Alignment *string
+	Layout    map[string]*string
 }
 
 // NativeDOCXTextRangeV1 selects part of the target's text in UTF-16 code
@@ -139,6 +140,10 @@ func decodeNativeDOCXStructuredMutationField(field string, raw []byte) (nativeDO
 		}
 		decoded.span = &NativeDOCXTextRangeV1{StartUTF16: start, EndUTF16: end}
 		return decoded, nil
+	}
+	if paragraph, ok, err := decodeNativeParagraphLayout(members); ok || err != nil {
+		decoded.paragraph = paragraph
+		return decoded, err
 	}
 	patch := &NativeDOCXRunPropertyPatchV1{}
 	for member, value := range members {
@@ -252,6 +257,9 @@ func validateNativeDOCXFormatMutation(mutation *NativeDOCXFormatMutationV1) erro
 		if mutation.Range != nil {
 			return fmt.Errorf("alignment applies to the whole paragraph and takes no range")
 		}
+		if len(mutation.ParagraphProperties.Layout) > 0 {
+			return validateNativeParagraphLayout(mutation.ParagraphProperties)
+		}
 		if mutation.ParagraphProperties.Alignment == nil || !nativeAlignmentValues[*mutation.ParagraphProperties.Alignment] {
 			return fmt.Errorf("alignment must be left, center, right, both or distribute")
 		}
@@ -305,6 +313,7 @@ type nativeFormatRequest struct {
 	start     int
 	end       int
 	patch     NativeDOCXRunPropertyPatchV1
+	layout    *NativeDOCXParagraphPropertyPatchV1
 	alignment *string
 	text      string
 }
@@ -411,7 +420,7 @@ func resolveNativeFormatRequest(mutation NativeDOCXFormatMutationV1, paragraphs 
 		if mutation.ExpectedXMLSHA256 != paragraph.Anchor.XMLSHA256 {
 			return refuse("STALE_TARGET", fmt.Sprintf("expected XML fingerprint %q, current fingerprint is %q", mutation.ExpectedXMLSHA256, paragraph.Anchor.XMLSHA256))
 		}
-		return nativeFormatRequest{paragraph: paragraph, alignment: mutation.ParagraphProperties.Alignment}, nil
+		return nativeFormatRequest{paragraph: paragraph, alignment: mutation.ParagraphProperties.Alignment, layout: mutation.ParagraphProperties}, nil
 	}
 	anchor := paragraph.Anchor
 	text := strings.Builder{}
@@ -466,6 +475,13 @@ func nativeFormatParagraphSplices(part []byte, root *nativeXMLNode, request nati
 		paragraph.Start != *request.paragraph.Anchor.StartByte || paragraph.End != *request.paragraph.Anchor.EndByte ||
 		nativeSHA(part[paragraph.Start:paragraph.End]) != request.paragraph.Anchor.XMLSHA256 {
 		return refuse("STALE_TARGET", "paragraph source bytes no longer match the issued anchor")
+	}
+	if request.layout != nil && len(request.layout.Layout) > 0 {
+		splice, err := nativeParagraphLayoutSplice(part, paragraph, request.layout)
+		if err != nil {
+			return refuse("UNSUPPORTED_LEXICAL_FORM", err.Error())
+		}
+		return []nativeTextSplice{splice}, nil
 	}
 	if request.alignment != nil {
 		splice, alignErr := nativeFormatParagraphProperties(part, paragraph, *request.alignment)
@@ -568,53 +584,7 @@ func nativeFormatRunElement(part []byte, owner, properties, textNode *nativeXMLN
 // w:pPr, creating the element when the source has none. Every other child of
 // w:pPr keeps its bytes and its position.
 func nativeFormatParagraphProperties(part []byte, paragraph *nativeXMLNode, alignment string) (nativeTextSplice, error) {
-	prefix := ""
-	if name := nativeFormatQName(part, paragraph); strings.Contains(name, ":") {
-		prefix = name[:strings.Index(name, ":")+1]
-	}
-	written := []byte(`<` + prefix + `jc ` + prefix + `val="` + nativeMutationEscapeAttribute(alignment) + `"/>`)
-	properties := firstDirectNativeChild(paragraph, paragraph.Name.Space, "pPr")
-	if properties != nil && paragraph.Children[0] != properties {
-		return nativeTextSplice{}, fmt.Errorf("paragraph properties must be the paragraph's first child")
-	}
-	if properties == nil {
-		tagEnd := nativeStartTagEnd(part[paragraph.Start:paragraph.End])
-		if tagEnd <= 0 {
-			return nativeTextSplice{}, fmt.Errorf("paragraph element has an unterminated start tag")
-		}
-		at := paragraph.Start + int64(tagEnd)
-		return nativeTextSplice{start: at, end: at, text: []byte(`<` + prefix + `pPr>` + string(written) + `</` + prefix + `pPr>`)}, nil
-	}
-	output := []byte(`<` + prefix + `pPr>`)
-	placed := false
-	for _, child := range properties.Children {
-		local := child.Name.Local
-		if child.Name.Space != paragraph.Name.Space {
-			local = ""
-		}
-		if local == "jc" {
-			output, placed = append(output, written...), true
-			continue
-		}
-		if !placed && nativeParagraphPropertyRank(local) > nativeParagraphPropertyRank("jc") {
-			output, placed = append(output, written...), true
-		}
-		output = append(output, part[child.Start:child.End]...)
-	}
-	if !placed {
-		output = append(output, written...)
-	}
-	output = append(output, []byte(`</`+prefix+`pPr>`)...)
-	return nativeTextSplice{start: properties.Start, end: properties.End, text: output}, nil
-}
-
-func nativeParagraphPropertyRank(local string) int {
-	for rank, name := range nativeParagraphPropertyOrder {
-		if name == local {
-			return rank
-		}
-	}
-	return len(nativeParagraphPropertyOrder)
+	return nativeMergePropertyContainer(part, paragraph, "pPr", nativeParagraphPropertyOrder, map[string]map[string]*string{"jc": {"val": &alignment}})
 }
 
 // nativeFormatRunProperties merges the patch into the source w:rPr, keeping
@@ -654,57 +624,14 @@ func nativeFormatRunProperties(part []byte, owner, properties *nativeXMLNode, pa
 		}
 		written["rFonts"] = fonts
 	}
-	children := []struct {
-		local string
-		raw   []byte
-	}{}
 	if properties != nil {
-		for _, child := range properties.Children {
-			local := child.Name.Local
-			if child.Name.Space != owner.Name.Space {
-				local = ""
-			}
-			raw := part[child.Start:child.End]
-			if replacement, ok := written[local]; ok && local != "" {
-				raw = replacement
-				delete(written, local)
-			}
-			children = append(children, struct {
-				local string
-				raw   []byte
-			}{local, raw})
-		}
+		return nativeMergeRawLayoutChildren(part, properties, nativeRunPropertyOrder, written)
 	}
-	pending := make([]string, 0, len(written))
-	for local := range written {
-		pending = append(pending, local)
+	output := []byte("<" + prefix + "rPr>")
+	for _, local := range nativeRunPropertyOrder {
+		output = append(output, written[local]...)
 	}
-	sort.Slice(pending, func(i, j int) bool {
-		return nativeRunPropertyRank(pending[i]) < nativeRunPropertyRank(pending[j])
-	})
-	for _, local := range pending {
-		index := len(children)
-		for position, child := range children {
-			if nativeRunPropertyRank(child.local) > nativeRunPropertyRank(local) {
-				index = position
-				break
-			}
-		}
-		children = append(children, struct {
-			local string
-			raw   []byte
-		}{})
-		copy(children[index+1:], children[index:])
-		children[index] = struct {
-			local string
-			raw   []byte
-		}{local, written[local]}
-	}
-	output := []byte(`<` + prefix + `rPr>`)
-	for _, child := range children {
-		output = append(output, child.raw...)
-	}
-	return append(output, []byte(`</`+prefix+`rPr>`)...), nil
+	return append(output, []byte("</"+prefix+"rPr>")...), nil
 }
 
 // nativeFormatRunFonts rewrites the ascii and hAnsi slots of an existing
@@ -744,15 +671,6 @@ func nativeFormatToggle(prefix, local string, on bool) string {
 		return `<` + prefix + local + `/>`
 	}
 	return `<` + prefix + local + ` ` + prefix + `val="0"/>`
-}
-
-func nativeRunPropertyRank(local string) int {
-	for rank, name := range nativeRunPropertyOrder {
-		if name == local {
-			return rank
-		}
-	}
-	return len(nativeRunPropertyOrder)
 }
 
 // nativeFormatTextElement reuses the source w:t element for a new text value,
@@ -842,6 +760,12 @@ func validateNativeFormatResults(after *NativeDocumentV1, requests []nativeForma
 		paragraph := byPath[request.paragraph.Anchor.PartName+"\x00"+request.paragraph.Anchor.Path]
 		if paragraph == nil {
 			return nativeMutationError("POST_WRITE_MISMATCH", request.paragraph.ID, "the formatted paragraph is absent from the re-extracted contract")
+		}
+		if request.layout != nil && len(request.layout.Layout) > 0 {
+			if err := proveNativeParagraphLayout(paragraph.Properties, request.layout); err != nil {
+				return nativeMutationError("POST_WRITE_MISMATCH", paragraph.ID, err.Error())
+			}
+			continue
 		}
 		if request.alignment != nil {
 			if paragraph.Properties == nil || paragraph.Properties.Alignment == nil || *paragraph.Properties.Alignment != *request.alignment {

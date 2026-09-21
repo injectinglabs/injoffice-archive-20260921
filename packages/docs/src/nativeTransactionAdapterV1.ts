@@ -109,6 +109,15 @@ export interface NativeDocxRunPropertyPatchV1 {
  * patched on its own, never in the same mutation as run properties.
  */
 export interface NativeDocxParagraphPropertyPatchV1 {
+  spacing_before_twips?: number | null
+  spacing_after_twips?: number | null
+  indent_left_twips?: number | null
+  indent_right_twips?: number | null
+  first_line_twips?: number | null
+  hanging_twips?: number | null
+  line_spacing?: number | null
+  line_rule?: 'auto' | 'exact' | 'atLeast' | null
+
   alignment?: 'left' | 'center' | 'right' | 'both' | 'distribute'
 }
 

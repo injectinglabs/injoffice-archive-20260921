@@ -148,7 +148,7 @@ export function DocumentParagraphLayout({ properties, disabled, onChange }: { pr
         {lineSpacings.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
         {!lineSpacings.some(([id]) => id === line) && <option value="custom">Custom ({properties?.line_rule && properties.line_rule !== 'auto' ? `${(properties.line_spacing ?? 0) / 20} pt` : `${(properties?.line_spacing ?? 0) / 240} lines`})</option>}
       </select></label>
-      <label><span>Outline level</span><select aria-label="Paragraph outline level" disabled={inactive} value={properties?.outline_level ?? ''} onChange={event => onChange({ outline_level: event.target.value === '' ? null : Number(event.target.value) })}>
+      <label><span>Outline level</span><select aria-label="Paragraph outline level" disabled title="Outline level changes are not supported by the DOCX engine" value={properties?.outline_level ?? ''} onChange={event => onChange({ outline_level: event.target.value === '' ? null : Number(event.target.value) })}>
         <option value="">From style</option><option value="9">Body text</option>
         {Array.from({ length: 9 }, (_, level) => <option key={level} value={level}>Level {level + 1}</option>)}
       </select></label>
