@@ -263,7 +263,21 @@ func assertDOCXCorpusFixtureSemantics(t *testing.T, fixtureID string, doc *docxp
 			t.Fatalf("Strict case-preserved routing changed: source=%+v headers=%+v", doc.Source, doc.Headers)
 		}
 	case "docx-preserve-refuse":
-		for _, code := range []string{"FIELD_SEMANTICS", "HYPERLINK_SEMANTICS", "PARTIAL_RUN_PROPERTIES", "PICTURE_NONVISUAL_PRESERVED", "UNMODELED_BODY_BLOCK", "WRAPPED_RUN_MARKUP"} {
+		foundLink := false
+		for _, block := range doc.Body.Blocks {
+			if block.Paragraph == nil {
+				continue
+			}
+			for _, run := range block.Paragraph.Runs {
+				if run.Hyperlink != nil {
+					foundLink = true
+				}
+			}
+		}
+		if !foundLink {
+			t.Fatal("ordinary external hyperlink metadata is missing")
+		}
+		for _, code := range []string{"FIELD_SEMANTICS", "PARTIAL_RUN_PROPERTIES", "PICTURE_NONVISUAL_PRESERVED", "UNMODELED_BODY_BLOCK", "WRAPPED_RUN_MARKUP"} {
 			if !hasDOCXCorpusUnsupported(doc, code) {
 				t.Fatalf("accepted preserve/refuse fixture is missing %s", code)
 			}

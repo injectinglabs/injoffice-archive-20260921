@@ -2017,6 +2017,18 @@ func (extractor *nativeExtractor) extractParagraph(partName string, node *native
 	}
 	if paragraph.EditPolicy.Mode == "read-write" && partName == extractor.mainPart && node.parent == extractor.bodyNode {
 		paragraph.EditPolicy.AllowedOperations = append(paragraph.EditPolicy.AllowedOperations, "block.insert_after")
+		linkable := false
+		for i := range paragraph.Runs {
+			run := &paragraph.Runs[i]
+			textNode := nativeNodeByPath(node, run.Anchor.Path)
+			if run.Kind == "text" && run.PageField == "" && textNode != nil && textNode.parent != nil && nativeHyperlinkRun(textNode.parent, extractor.wordNS) && (textNode.parent.parent == node || run.Hyperlink != nil) {
+				run.CanEditHyperlink = true
+				linkable = true
+			}
+		}
+		if linkable {
+			paragraph.EditPolicy.AllowedOperations = append(paragraph.EditPolicy.AllowedOperations, "hyperlink.set")
+		}
 		if nativeSplittableParagraph(node, extractor.wordNS) {
 			paragraph.EditPolicy.AllowedOperations = append(paragraph.EditPolicy.AllowedOperations, "paragraph.split")
 		}
@@ -2465,6 +2477,17 @@ func (extractor *nativeExtractor) extractParagraphRuns(partName, paragraphID str
 			extracted[0].Text = nativeString("") // Ignore stale cache, including nonnumeric values.
 			runs = append(runs, extracted[0])
 		case child.Name == (xml.Name{Space: extractor.wordNS, Local: "hyperlink"}):
+			if link, ok := extractor.nativeEditableHyperlink(partName, child); ok {
+				extracted, runUnsafe, err := extractor.extractRunNode(partName, paragraphID, child.Children[0])
+				if err != nil {
+					return nil, false, err
+				}
+				if !runUnsafe && len(extracted) == 1 && extracted[0].Kind == "text" {
+					extracted[0].Hyperlink = link
+					runs = append(runs, extracted...)
+					continue
+				}
+			}
 			unsafe = true
 			extractor.addUnsupported("HYPERLINK_SEMANTICS", "hyperlinks", paragraphID, partName, child, "Visible hyperlink text is exposed, while relationship and field semantics remain preserve-only")
 			for nestedIndex := 0; nestedIndex < len(child.Children); nestedIndex++ {

@@ -29,7 +29,8 @@
               "allowed_operations": [
                 "text.replace",
                 "properties.patch",
-                "block.insert_after"
+                "block.insert_after",
+                "hyperlink.set"
               ],
               "mode": "read-write"
             },
@@ -44,6 +45,7 @@
                   "start_byte": 380,
                   "xml_sha256": "sha256:8f3f08e85259c3a0c8256fe7f934c5eb49c54ce6ad2ac71d73b7051a58f8e8c4"
                 },
+                "can_edit_hyperlink": true,
                 "id": "run:3e67489e4da2574806945109",
                 "kind": "text",
                 "text": "continuous"
@@ -66,7 +68,8 @@
               "allowed_operations": [
                 "text.replace",
                 "properties.patch",
-                "block.insert_after"
+                "block.insert_after",
+                "hyperlink.set"
               ],
               "mode": "read-write"
             },
@@ -81,6 +84,7 @@
                   "start_byte": 725,
                   "xml_sha256": "sha256:793c6f3be4549b4b7474e2ba5fab891baf02f39906959d45dc78f89a64bc66be"
                 },
+                "can_edit_hyperlink": true,
                 "id": "run:abde87f24d2cb0558803a840",
                 "kind": "text",
                 "text": "next page"
@@ -103,7 +107,8 @@
               "allowed_operations": [
                 "text.replace",
                 "properties.patch",
-                "block.insert_after"
+                "block.insert_after",
+                "hyperlink.set"
               ],
               "mode": "read-write"
             },
@@ -118,6 +123,7 @@
                   "start_byte": 1006,
                   "xml_sha256": "sha256:37edcc332471e246cdeed873e75cbc6bae6eb6d5342207d2dc8e11389d99e44e"
                 },
+                "can_edit_hyperlink": true,
                 "id": "run:4c1351ffa5235b0e7ddbdab4",
                 "kind": "text",
                 "text": "even page"
@@ -140,7 +146,8 @@
               "allowed_operations": [
                 "text.replace",
                 "properties.patch",
-                "block.insert_after"
+                "block.insert_after",
+                "hyperlink.set"
               ],
               "mode": "read-write"
             },
@@ -155,6 +162,7 @@
                   "start_byte": 1349,
                   "xml_sha256": "sha256:bce6ed1c396cd0fbfaaedbe939fc836aa4c30b1630309d83893f54b7fc295d3d"
                 },
+                "can_edit_hyperlink": true,
                 "id": "run:6e612d7729758ba675054826",
                 "kind": "text",
                 "text": "odd page"
@@ -178,6 +186,7 @@
                 "text.replace",
                 "properties.patch",
                 "block.insert_after",
+                "hyperlink.set",
                 "paragraph.split"
               ],
               "mode": "read-write"
@@ -193,6 +202,7 @@
                   "start_byte": 1390,
                   "xml_sha256": "sha256:e936b7be3c3ea4a29f73db87a566fe4387ec285d08503de10b16b3b260dd90b6"
                 },
+                "can_edit_hyperlink": true,
                 "id": "run:3a9778b6c69d6a14a7275bb8",
                 "kind": "text",
                 "text": "next column"

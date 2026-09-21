@@ -141,3 +141,32 @@ test('docx: packaged worker inserts an editable paragraph and splits text at Ent
   document = await extract();
   assert.deepEqual(document.body.blocks.map(block => block.paragraph.runs.map(run => run.text ?? '').join('')), ['', 'hello', ' world']);
 });
+
+test('docx: packaged worker inserts, updates and removes a selected hyperlink', async () => {
+  const files = engineFiles('docx'), worker = startWorker(files);
+  const envelope = { protocol: PROTOCOL, version: 1, format: 'docx' };
+  assert.equal((await worker.send({ ...envelope, id: 'init', op: 'init', assets: { wasmUrl: files.wasm, goRuntimeUrl: files.goRuntime } })).ok, true);
+  let bytes = await createBlankDocument('docx');
+  const extract = async () => {
+    const reply = await worker.send({ ...envelope, id: 'extract', op: 'extract', bytes });
+    assert.equal(reply.ok, true, JSON.stringify(reply.error)); return JSON.parse(reply.result.contractJson);
+  };
+  const apply = async (document, mutation) => {
+    const reply = await worker.send({ ...envelope, id: 'apply', op: 'apply', original: bytes, expectedRevision: document.source.package_sha256, payload: JSON.stringify({mutations: [mutation]}) });
+    assert.equal(reply.ok, true, JSON.stringify(reply.error)); bytes = reply.result.bytes;
+  };
+  let document = await extract(), run = document.body.blocks[0].paragraph.runs[0];
+  await apply(document, {target_kind: 'run', target_id: run.id, expected_xml_sha256: run.anchor.xml_sha256, text: 'Visit example today'});
+  document = await extract(); run = document.body.blocks[0].paragraph.runs[0];
+  assert.equal(run.can_edit_hyperlink, true);
+  await apply(document, {target_kind: 'run', target_id: run.id, expected_xml_sha256: run.anchor.xml_sha256, operation: 'hyperlink.set', hyperlink: {url: 'https://example.com'}, range: {start_utf16: 6, end_utf16: 13}});
+  document = await extract();
+  assert.deepEqual(document.body.blocks[0].paragraph.runs.map(run => [run.text, run.hyperlink?.url]), [['Visit ', undefined], ['example', 'https://example.com'], [' today', undefined]]);
+  for (const url of ['mailto:editor@example.com', null]) {
+    run = document.body.blocks[0].paragraph.runs[1];
+    await apply(document, {target_kind: 'run', target_id: run.id, expected_xml_sha256: run.anchor.xml_sha256, operation: 'hyperlink.set', hyperlink: {url, expected_xml_sha256: run.hyperlink.anchor.xml_sha256}});
+    document = await extract();
+    assert.equal(document.body.blocks[0].paragraph.runs[1].hyperlink?.url, url ?? undefined);
+    assert.equal(document.body.blocks[0].paragraph.runs.map(run => run.text).join(''), 'Visit example today');
+  }
+});

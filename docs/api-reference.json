@@ -4506,7 +4506,7 @@
             {
               "name": "NativeDocxEditOperation",
               "kind": "type",
-              "signature": "export type NativeDocxEditOperation = 'text.replace' | 'properties.patch' | 'paragraph.split' | 'block.insert_after' | 'block.delete' | 'drawing.replace'"
+              "signature": "export type NativeDocxEditOperation = 'text.replace' | 'properties.patch' | 'hyperlink.set' | 'paragraph.split' | 'block.insert_after' | 'block.delete' | 'drawing.replace'"
             },
             {
               "name": "NativeDocxEditPolicyV1",
@@ -4677,6 +4677,11 @@
               "name": "NativeDocxHostFontsV1",
               "kind": "interface",
               "signature": "export interface NativeDocxHostFontsV1"
+            },
+            {
+              "name": "NativeDocxHyperlinkPayloadV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxHyperlinkPayloadV1"
             },
             {
               "name": "NativeDocxImageTransformV1",
@@ -6142,7 +6147,7 @@
             {
               "name": "NativeDocxEditOperation",
               "kind": "type",
-              "signature": "export type NativeDocxEditOperation = 'text.replace' | 'properties.patch' | 'paragraph.split' | 'block.insert_after' | 'block.delete' | 'drawing.replace'"
+              "signature": "export type NativeDocxEditOperation = 'text.replace' | 'properties.patch' | 'hyperlink.set' | 'paragraph.split' | 'block.insert_after' | 'block.delete' | 'drawing.replace'"
             },
             {
               "name": "NativeDocxEditPolicyV1",
@@ -6163,6 +6168,11 @@
               "name": "NativeDocxHeaderFooterReferenceV1",
               "kind": "interface",
               "signature": "export interface NativeDocxHeaderFooterReferenceV1"
+            },
+            {
+              "name": "NativeDocxHyperlinkPayloadV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxHyperlinkPayloadV1"
             },
             {
               "name": "NativeDocxIssueCode",

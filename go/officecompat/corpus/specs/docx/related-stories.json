@@ -38,7 +38,8 @@
                 "allowed_operations": [
                   "text.replace",
                   "properties.patch",
-                  "block.insert_after"
+                  "block.insert_after",
+                  "hyperlink.set"
                 ],
                 "mode": "read-write"
               },
@@ -68,6 +69,7 @@
                     "start_byte": 248,
                     "xml_sha256": "sha256:72253a413446b39e84bc3883c1d1cba5134cf12ca8054c271334d4d495210366"
                   },
+                  "can_edit_hyperlink": true,
                   "id": "run:3e67489e4da2574806945109",
                   "kind": "text",
                   "text": "Body anchor"

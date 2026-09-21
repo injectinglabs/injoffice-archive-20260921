@@ -187,6 +187,34 @@ function validateEnvelope(document: NativeDocxDocumentV1, value: NativeDocxOffic
   if (payload.mutations.some(value => plainObject(value, 'DOCX mutation').operation !== undefined)) {
     if (payload.mutations.length !== 1) throw new TypeError('Structural edits require one mutation.')
     const mutation = plainObject(payload.mutations[0], 'DOCX structural mutation')
+    if (mutation.operation === 'hyperlink.set') {
+      allowedKeys(mutation, ['target_kind', 'target_id', 'expected_xml_sha256', 'operation', 'hyperlink', 'range'], 'DOCX hyperlink mutation')
+      const paragraph = document.body.blocks.find(block => block.paragraph && (mutation.target_kind === 'paragraph' ? block.paragraph.id === mutation.target_id : block.paragraph.runs.some(run => run.id === mutation.target_id)))?.paragraph
+      const run = mutation.target_kind === 'run' ? paragraph?.runs.find(run => run.id === mutation.target_id) : undefined
+      const target = mutation.target_kind === 'paragraph' ? paragraph : run
+      if (!paragraph || !target || target.anchor.xml_sha256 !== mutation.expected_xml_sha256) throw new NativeWasmError('STALE_TARGET', 'The hyperlink target anchor changed.')
+      if (!paragraph.edit_policy.allowed_operations.includes('hyperlink.set') || (run && !run.can_edit_hyperlink)) throw new TypeError('This text cannot be linked safely.')
+      const link = plainObject(mutation.hyperlink, 'DOCX hyperlink')
+      allowedKeys(link, ['url', 'expected_xml_sha256'], 'DOCX hyperlink')
+      if (link.url !== null) {
+        if (typeof link.url !== 'string' || link.url.length > 2048 || /[\r\n\t \\<>]/.test(link.url)) throw new TypeError('Enter a web or email link.')
+        let parsed: URL
+        try { parsed = new URL(link.url) } catch { throw new TypeError('Enter a web or email link.') }
+        if (!['http:', 'https:', 'mailto:'].includes(parsed.protocol) || parsed.username || parsed.password || (parsed.protocol === 'mailto:' && !parsed.pathname)) throw new TypeError('Enter a web or email link.')
+      }
+      if (link.expected_xml_sha256 !== run?.hyperlink?.anchor.xml_sha256) throw new NativeWasmError('STALE_TARGET', 'The hyperlink wrapper anchor changed.')
+      const text = run ? run.text ?? '' : paragraph.runs.map(run => run.text ?? '').join('')
+      let range: {start_utf16: number; end_utf16: number} | undefined
+      if (mutation.range !== undefined) {
+        const span = plainObject(mutation.range, 'DOCX hyperlink range')
+        exactKeys(span, ['start_utf16', 'end_utf16'], 'DOCX hyperlink range')
+        const start = span.start_utf16 as number, end = span.end_utf16 as number
+        if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end <= start || end > text.length || !xmlTextValid(text.slice(0, start)) || !xmlTextValid(text.slice(0, end))) throw new TypeError('Select text on UTF-16 character boundaries.')
+        range = {start_utf16: start, end_utf16: end}
+      }
+      if (!text.length) throw new TypeError('Select nonempty text to link.')
+      return {mutations: [{target_kind: run ? 'run' : 'paragraph', target_id: target.id, expected_xml_sha256: target.anchor.xml_sha256, operation: 'hyperlink.set', hyperlink: {url: link.url as string | null, ...(run?.hyperlink ? {expected_xml_sha256: run.hyperlink.anchor.xml_sha256} : {})}, ...(range ? {range} : {})}]}
+    }
     const split = mutation.operation === 'paragraph.split'
     exactKeys(mutation, ['target_kind', 'target_id', 'expected_xml_sha256', 'operation', split ? 'split' : 'text'], 'DOCX structural mutation')
     if (mutation.target_kind !== 'paragraph' || (!split && (mutation.operation !== 'block.insert_after' || mutation.text !== ''))) throw new TypeError('Unsupported DOCX structural operation.')

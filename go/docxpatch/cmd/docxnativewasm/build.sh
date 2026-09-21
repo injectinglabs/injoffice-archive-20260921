@@ -17,7 +17,10 @@ fi
 mkdir -p "$output_dir"
 (
   cd "$module_dir"
-  GOOS=js GOARCH=wasm go build -trimpath -ldflags='-s -w' -o "$output_dir/docxnative.wasm" ./cmd/docxnativewasm
+  # Avoid duplicating the large extractor/mutation helpers at every call site.
+  # Package-local no-inlining keeps the same engine and size ceiling: measured
+  # 7,428,853 -> 6,834,408 bytes with hyperlink writes on Go 1.23.
+  GOOS=js GOARCH=wasm go build -trimpath -gcflags='github.com/injectinglabs/injoffice/go/docxpatch=-l' -ldflags='-s -w' -o "$output_dir/docxnative.wasm" ./cmd/docxnativewasm
 )
 cp "$wasm_exec" "$output_dir/wasm_exec.js"
 
