@@ -39,7 +39,9 @@
 .ribbon-combo-size { width: 62px; }
 .ribbon-combo-style { width: 150px; }
 .ribbon-combo-list { width: 124px; }
-.formatting-alignment { display: inline-flex; align-items: center; gap: 2px; }
+.ribbon-alignment-toggles { display: flex; flex-direction: column; justify-content: center; gap: 4px; }
+.ribbon-alignment-row { display: flex; align-items: center; min-height: 30px; gap: 2px; }
+.formatting-alignment { flex-direction: row; }
 .ribbon-color { position: relative; display: inline-flex; }
 .ribbon-color-button { gap: 2px; padding-inline: 5px; }
 .ribbon-chevron { width: 0; height: 0; border: 3.5px solid transparent; border-bottom: 0; border-top-color: currentColor; }

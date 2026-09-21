@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { ColorButton, RibbonButton, RibbonCombo, RibbonRows, type RibbonColor } from './Ribbon'
+import { AlignmentToggles, ColorButton, RIBBON_ALIGNMENTS, RibbonButton, RibbonCombo, RibbonRows, type RibbonColor } from './Ribbon'
 
 export interface FormattingValues {
   font?: string; size?: number; bold?: boolean; italic?: boolean; underline?: boolean;
@@ -22,15 +22,8 @@ export function stepFontSize(size: number | undefined, direction: 1 | -1): numbe
 /** The text-colour palette shared by the ribbon, the mini toolbar and the slide inspector. */
 export const TEXT_COLORS: RibbonColor[] = [['#000000', 'Black'], ['#20242B', 'Dark gray'], ['#687386', 'Gray'], ['#2459AD', 'Blue'], ['#B33C3C', 'Red'], ['#217447', 'Green']];
 
-/** The alignment buttons Office shows for each host, in ribbon order. */
-export function alignmentOptions(kind: 'docx' | 'xlsx' | 'pptx'): Array<{ value: string; label: string; icon: 'alignLeft' | 'alignCenter' | 'alignRight' | 'alignJustify' | 'alignDistribute' }> {
-  const base = [
-    { value: 'left', label: 'Align left', icon: 'alignLeft' as const },
-    { value: 'center', label: 'Center', icon: 'alignCenter' as const },
-    { value: 'right', label: 'Align right', icon: 'alignRight' as const },
-  ];
-  return kind === 'docx' ? [...base, { value: 'both', label: 'Justify', icon: 'alignJustify' as const }, { value: 'distribute', label: 'Distribute', icon: 'alignDistribute' as const }] : base;
-}
+/** The alignment buttons Office shows for each host, in ribbon order (the shared primitive's table). */
+export const alignmentOptions = (kind: 'docx' | 'xlsx' | 'pptx') => RIBBON_ALIGNMENTS[kind];
 
 /** Status text describing what the formatting controls currently apply to. */
 export function formattingScope(kind: 'docx' | 'xlsx' | 'pptx', values: FormattingValues | undefined, scopeLabel?: string): string {
@@ -60,9 +53,7 @@ export default function FormattingToolbar({ kind, values, disabled, onChange, sc
     {kind === 'docx' && <RibbonButton icon="underline" label="Underline" shortcut="underline" labelHidden aria-pressed={values?.underline ?? 'mixed'} disabled={characterInactive} onClick={() => onChange({ underline: !values?.underline })} />}
   </>;
   const color = <ColorButton label="Text color" icon="fontColor" disabled={characterInactive} value={values?.color?.toUpperCase()} colors={TEXT_COLORS} onChange={color => onChange({ color })} />;
-  const alignment = <span className="formatting-alignment">
-    {alignmentOptions(kind).map(option => <RibbonButton key={option.value} icon={option.icon} label={option.label} labelHidden aria-pressed={values?.alignment === option.value} disabled={inactive} onClick={() => onChange({ alignment: option.value })} />)}
-  </span>;
+  const alignment = <AlignmentToggles className="formatting-alignment" kind={kind} horizontal={values?.alignment} disabled={inactive} onHorizontal={alignment => onChange({ alignment })} />;
   if (section === 'font') return <div className="formatting-toolbar formatting-toolbar-font" aria-label="Font formatting"><RibbonRows><div className="formatting-group">{family}{size}</div><div className="formatting-group">{emphasis}{children}{color}</div></RibbonRows></div>;
   if (section === 'paragraph') return <div className="formatting-toolbar formatting-toolbar-paragraph" aria-label="Paragraph alignment"><div className="formatting-group">{alignment}</div>{children}</div>;
   return <div className="formatting-toolbar" aria-label="Formatting">
