@@ -2172,7 +2172,7 @@ func (extractor *nativeExtractor) extractParagraphProperties(partName, paragraph
 			// to its body runs.
 			preserveOnly = true
 			if !nativeExactParagraphMarkProperties(child, extractor.wordNS) {
-				unsafe = true
+				preserveOnly = true
 				extractor.addUnsupported("UNMODELED_PARAGRAPH_MARK_PROPERTIES", "paragraph-properties", paragraphID, partName, child, "Paragraph-mark formatting has unknown, duplicate, or noncanonical source structure")
 			} else if _, invalid, _ := extractor.extractRunPropertiesState(partName, paragraphID, child); invalid {
 				unsafe = true
@@ -2217,14 +2217,17 @@ func (extractor *nativeExtractor) extractParagraphProperties(partName, paragraph
 		case "sectPr":
 			// Modeled separately as a section.
 		default:
-			unsafe = true
+			preserveOnly = true
 			extractor.addUnsupported("UNMODELED_PARAGRAPH_PROPERTY", "paragraph-properties", paragraphID, partName, child, "This paragraph property is preserved verbatim")
 		}
 	}
 	if unsafe {
 		extractor.addUnsupported("PARTIAL_PARAGRAPH_PROPERTIES", "paragraph-properties", paragraphID, partName, node, "Only the conservative v1 paragraph-property subset is exposed")
 	}
-	return properties, unsafe || preserveOnly, nil
+	// Preserved-verbatim paragraph properties ride through every v1 operation, so
+	// they are disclosed by their diagnostic instead of freezing the paragraph.
+	_ = preserveOnly
+	return properties, unsafe, nil
 }
 
 func nativeExactParagraphMarkProperties(node *nativeXMLNode, wordNS string) bool {
@@ -2242,7 +2245,7 @@ func nativeExactParagraphMarkProperties(node *nativeXMLNode, wordNS string) bool
 			// Preserve the bounded complex-script slot without treating it as
 			// active. The resolver still qualifies the paragraph mark's script
 			// context; RTL/mixed-script uncertainty retains its diagnostic.
-			if !nativeExactLeaf(property, xml.Name{Space: wordNS, Local: "ascii"}, xml.Name{Space: wordNS, Local: "hAnsi"}, xml.Name{Space: wordNS, Local: "cs"}, xml.Name{Space: wordNS, Local: "eastAsia"}) {
+			if !nativeExactLeaf(property, xml.Name{Space: wordNS, Local: "ascii"}, xml.Name{Space: wordNS, Local: "hAnsi"}, xml.Name{Space: wordNS, Local: "cs"}, xml.Name{Space: wordNS, Local: "eastAsia"}, xml.Name{Space: wordNS, Local: "hint"}) {
 				return false
 			}
 			for _, slot := range []string{"cs", "eastAsia"} {
@@ -3436,8 +3439,10 @@ func nativeVerticalAlignmentValue(node *nativeXMLNode, wordNS string) (string, b
 }
 
 func (extractor *nativeExtractor) extractRunProperties(partName, paragraphID string, node *nativeXMLNode) (*NativeRunPropertiesV1, bool) {
-	properties, unsafe, preserveOnly := extractor.extractRunPropertiesState(partName, paragraphID, node)
-	return properties, unsafe || preserveOnly
+	properties, unsafe, _ := extractor.extractRunPropertiesState(partName, paragraphID, node)
+	// preserveOnly narrows what this tier claims to model; it does not make the
+	// run's text unreplaceable, because the property is written back untouched.
+	return properties, unsafe
 }
 
 // Keep source-layout invalidity separate from valid but noneditable metadata.
@@ -3473,7 +3478,7 @@ func (extractor *nativeExtractor) extractRunPropertiesState(partName, paragraphI
 				extractor.addUnsupported(code, "run-properties", paragraphID, partName, child, detail)
 				continue
 			}
-			unsafe = true
+			preserveOnly = true
 			extractor.addUnsupported("FOREIGN_RUN_PROPERTY", "run-properties", paragraphID, partName, child, "Foreign namespace run property is preserved verbatim")
 			continue
 		}
@@ -3492,7 +3497,7 @@ func (extractor *nativeExtractor) extractRunPropertiesState(partName, paragraphI
 			if ok && value != "" {
 				properties.FontFamily = nativeString(value)
 			} else {
-				unsafe = true
+				preserveOnly = true
 			}
 		case "sz":
 			value, ok := nativePositiveIntAttr(child, extractor.wordNS, "val")
@@ -3552,7 +3557,6 @@ func (extractor *nativeExtractor) extractRunPropertiesState(partName, paragraphI
 		case "kern":
 			preserveOnly = true
 			if _, ok := nativeKerningThreshold(child, extractor.wordNS); !ok || len(directNativeChildren(node, extractor.wordNS, "kern")) != 1 {
-				unsafe = true
 				extractor.addUnsupported("UNMODELED_RUN_PROPERTY", "run-properties", paragraphID, partName, child, "Kerning threshold is malformed, duplicate or outside the bounded whole half-point subset")
 			}
 		case "szCs":
@@ -3621,7 +3625,7 @@ func (extractor *nativeExtractor) extractRunPropertiesState(partName, paragraphI
 				extractor.addUnsupported("RUN_EFFECT_ABSENT_PRESERVED", "run-properties", paragraphID, partName, child, "A run property that states the absence of its own effect is preserved and not applied; it selects the same glyphs at the same advances and paints the same ink as the same run without it, so it moves no line and no page")
 				continue
 			}
-			unsafe = true
+			preserveOnly = true
 			extractor.addUnsupported("UNMODELED_RUN_PROPERTY", "run-properties", paragraphID, partName, child, "This run property is preserved verbatim")
 		}
 	}
