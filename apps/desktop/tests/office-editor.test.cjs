@@ -343,6 +343,26 @@ test('OfficeEditor answers a break the paragraph cannot take with a caret notice
   }
 });
 
+test('OfficeEditor carries one Word-like status row: page and words left, style right', async () => {
+  const client = mockClient(tinyDocument('Hello there'));
+  mockWindow();
+  const { view } = await mountEditor(client);
+  const text = node => node.children.map(child => typeof child === 'string' ? child : text(child)).join('');
+  try {
+    const status = view.root.findByProps({ className: 'office-document-status' });
+    const spans = status.findAllByType('span').map(text);
+    assert.equal(spans[0], 'Page 1 of 1 · 2 words');
+    assert.equal(spans.at(-1), 'Normal', 'the paragraph style sits on the right, as in Word');
+    const info = status.findByProps({ className: 'office-status-info' });
+    assert.match(info.props.title, /11 characters/);
+    assert.match(info.props.title, /original page layout is preserved in the file/);
+    assert.equal(/character|Saved|Unsaved/.test(spans.join(' ')), false, 'no character count or duplicated save state in the row');
+    assert.equal(view.root.findAllByProps({ className: 'office-document-note' }).length, 0, 'no caption above the page');
+  } finally {
+    await act(async () => view.unmount());
+  }
+});
+
 test('OfficeEditor arranges its controls as a Word ribbon with labelled groups, icons, and shortcut tooltips', async () => {
   const { shortcutLabel } = await loadModule('shortcuts.ts');
   const client = mockClient(tinyDocument('Hello'));
