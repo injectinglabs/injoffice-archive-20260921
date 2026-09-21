@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import test from 'node:test'
@@ -33,6 +33,7 @@ test('registry preflight fails closed on invalid metadata or network failures', 
 
 const root = resolve(import.meta.dirname, '..')
 const script = resolve(root, 'scripts/release-packages.mjs')
+const releaseTag = `v${JSON.parse(readFileSync(resolve(root, 'packages/collab/package.json'), 'utf8')).version}`
 
 const run = (args, env = process.env) => spawnSync(process.execPath, [script, ...args], {
   cwd: root,
@@ -41,17 +42,17 @@ const run = (args, env = process.env) => spawnSync(process.execPath, [script, ..
 })
 
 test('requires one explicit non-accidental release mode', () => {
-  const missing = run(['v0.1.0'])
+  const missing = run([releaseTag])
   assert.equal(missing.status, 1)
   assert.match(missing.stderr, /--dry-run.*--pack-destination.*--stage-from.*--bootstrap-from/)
 
-  const conflicting = run(['v0.1.0', '--dry-run', '--pack-destination', 'release-tarballs'])
+  const conflicting = run([releaseTag, '--dry-run', '--pack-destination', 'release-tarballs'])
   assert.equal(conflicting.status, 1)
   assert.match(conflicting.stderr, /Usage:/)
 })
 
 test('refuses first-package bootstrap from CI', () => {
-  const result = run(['v0.1.0', '--bootstrap-from', 'release-tarballs'], { ...process.env, CI: '1' })
+  const result = run([releaseTag, '--bootstrap-from', 'release-tarballs'], { ...process.env, CI: '1' })
   assert.equal(result.status, 1)
   assert.match(result.stderr, /first publish must be interactive and protected by 2FA/)
 })
@@ -61,11 +62,11 @@ test('rejects a release artifact whose identity does not match the requested tag
   try {
     writeFileSync(resolve(temporary, 'release-manifest.json'), JSON.stringify({
       schemaVersion: 1,
-      tag: 'v0.1.1',
+      tag: 'v0.0.0-mismatched-artifact',
       npmTag: 'latest',
       packages: [],
     }))
-    const result = run(['v0.1.0', '--stage-from', temporary])
+    const result = run([releaseTag, '--stage-from', temporary])
     assert.equal(result.status, 1)
     assert.match(result.stderr, /Release manifest does not match the requested release/)
   } finally {
