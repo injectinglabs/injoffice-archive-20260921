@@ -282,7 +282,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .preferences-dialog label { display: flex; justify-content: space-between; align-items: center; gap: 18px; margin: 22px 0; font-size: 14px; }
 .preferences-dialog select { padding: 7px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface-raised); color: var(--ink); }
 .preferences-dialog .preferences-checkbox { justify-content: flex-start; gap: 10px; }
-.preferences-dialog .preferences-shortcuts { border-top: 1px solid var(--line); padding-top: 14px; font-size: 12px; }
 .document-search { display: flex; align-items: center; gap: 8px; padding: 10px 20px; background: var(--surface-muted); border-bottom: 1px solid var(--line); flex-wrap: wrap; font-size: 12px; }
 .document-search input { width: 180px; padding: 7px 9px; background: var(--surface); border: 1px solid var(--line); border-radius: 4px; }
 .document-search button { padding: 7px 10px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--ink); }

@@ -10,6 +10,7 @@ import type { LocalCalculationResult } from '../../../packages/formulas/src/loca
 import { exportDelimitedSheet, type DelimitedExportMode } from './spreadsheetDelimited';
 import type { DelimitedFormat } from './delimitedText';
 import { sheetLifecycleReason } from './spreadsheetSheetPolicy';
+import { engineErrorMessage } from './engine-result';
 import Ribbon, { RibbonButton, RibbonRows, type RibbonTabSpec } from './Ribbon';
 import RibbonIcon from './RibbonIcons';
 import './ribbon.css';
@@ -95,9 +96,9 @@ export function SpreadsheetEditor(props: OfficeEditorProps & { initialRecoveryDr
           const recovered = validateRecoveryDraft(workbook, pendingRecovery), position = { row: recovered.row, column: recovered.column };
           draftTarget.current = recovered; draftRef.current = recovered.value; setEntry('edit'); setDraft(recovered.value); setInline(true); setSheetId(recovered.sheetId); setSelection({ anchor: position, end: position }); setLocation(address(position)); setView(viewAt(position)); scrollTarget.current = address(position);
           callbacks.current.onDraftChange?.(true); callbacks.current.onRecoveryDraftChange?.(recovered); setNotice('Recovered pending cell input. Apply or cancel to continue.');
-        } catch (reason) { setError(reason instanceof Error ? reason.message : String(reason)); callbacks.current.onRecoveryDraftChange?.(null); }
+        } catch (reason) { setError(engineErrorMessage(reason)); callbacks.current.onRecoveryDraftChange?.(null); }
       }
-    }).catch(reason => { if (!cancelled) setError(String(reason instanceof Error ? reason.message : reason)); }).finally(() => { if (!cancelled) setWorking(false); });
+    }).catch(reason => { if (!cancelled) setError(engineErrorMessage(reason)); }).finally(() => { if (!cancelled) setWorking(false); });
     return () => { cancelled = true; };
   }, [props.bytes]);
   useEffect(() => { if (inline && draft !== null) inlineInput.current?.focus(); }, [inline, draft !== null]);
@@ -214,7 +215,7 @@ export function SpreadsheetEditor(props: OfficeEditorProps & { initialRecoveryDr
       const sheetName=before.workbook.sheets.find(value=>value.id===sheetId)?.name ?? 'Sheet';
       const result=await bridge.exportBytes({name:`${props.name.replace(/\.xlsx$/i,'')}-${sheetName}.${exportFormat}`,bytes});
       if (mounted.current && current.current===before && result) setNotice(`Exported ${result.name}; workbook unchanged`);
-    } catch(reason) {if(mounted.current)setError(reason instanceof Error ? reason.message : String(reason));}
+    } catch(reason) {if(mounted.current)setError(engineErrorMessage(reason));}
     finally {if(mounted.current&&current.current===before)setWorking(false);}
   }
   async function recalculate() {
@@ -228,7 +229,7 @@ export function SpreadsheetEditor(props: OfficeEditorProps & { initialRecoveryDr
       current.current = next; setSnapshot(next);
       const unresolved = next.calculation?.cells.filter(cell => cell.status === 'unsupported' || cell.status === 'circular').length ?? 0;
       setNotice(unresolved ? `Calculated locally; ${unresolved} formulas remain unresolved (see cell details).` : 'Formulas calculated locally');
-    } catch (reason) { if (mounted.current) setError(reason instanceof Error ? reason.message : String(reason)); }
+    } catch (reason) { if (mounted.current) setError(engineErrorMessage(reason)); }
     finally { if (mounted.current && (current.current === before || emitted.current === current.current?.bytes)) setWorking(false); }
   }
   async function execute(operations: SheetOperation[], message = 'Change applied', allowDraft = false): Promise<boolean> {
@@ -255,7 +256,7 @@ export function SpreadsheetEditor(props: OfficeEditorProps & { initialRecoveryDr
         if (filteredSheet?.rows.some(row=>row.hidden&&row.row===selection.anchor.row)) {const start={row:range.row,column:range.column};setSelection({anchor:start,end:start});setView(viewAt(start));scrollTarget.current=address(start);}
       }
       callbacks.current.onChange(next.bytes); setStructureAction(null); setSortOpen(false); setFilterOpen(false); setNotice(message); return true;
-    } catch (reason) { if (mounted.current) setError(reason instanceof Error ? reason.message : String(reason)); return false; }
+    } catch (reason) { if (mounted.current) setError(engineErrorMessage(reason)); return false; }
     finally { if (mounted.current && (current.current === before || emitted.current === current.current?.bytes)) setWorking(false); }
   }
   async function applyDraft(move?: Position): Promise<boolean> {

@@ -28,7 +28,6 @@
   "exclude": [
     "src/DocumentPreview.tsx",
     "src/OfficeEditor.tsx",
-    "src/PageLayoutControl.tsx",
     "src/ParagraphToolbar.tsx",
     "src/PresentationEditor.tsx",
     "src/SpreadsheetCharts.tsx",
