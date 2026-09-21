@@ -1,12 +1,14 @@
-.selection-toolbar { position: fixed; z-index: 1150; max-width: calc(100vw - 16px); border: 1px solid var(--border); border-radius: 8px; background: var(--surface-raised); color: var(--text); box-shadow: 0 10px 30px var(--shadow); animation: selection-toolbar-in 120ms ease-out; }
-.selection-toolbar .formatting-toolbar { gap: 8px; flex-wrap: nowrap; padding: 5px 8px; background: transparent; border-bottom: 0; }
-.selection-toolbar .formatting-toolbar select { min-height: 28px; font-size: 11px; padding: 3px 5px; }
-.selection-toolbar .formatting-toolbar select[aria-label="Font family"] { max-width: 150px; }
-.selection-toolbar .formatting-toolbar select[aria-label="Font size"] { max-width: 62px; }
-.selection-toolbar .formatting-toolbar select[aria-label="Text color"] { max-width: 130px; }
-.selection-toolbar .formatting-toolbar select[aria-label="Text alignment"] { max-width: 118px; }
-.selection-toolbar .formatting-toolbar button { min-width: 28px; height: 28px; padding: 3px 7px; }
-.selection-toolbar .formatting-scope { display: none; }
+/* Office's mini toolbar: a small floating card of icon buttons over the selection.
+   Every control has a fixed width, so a value is never truncated by its chevron. */
+.selection-toolbar { position: fixed; z-index: 1150; display: flex; align-items: center; gap: 2px; max-width: calc(100vw - 16px); padding: 4px 6px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface-raised); color: var(--text); font-size: 12px; box-shadow: 0 8px 24px var(--shadow); animation: selection-toolbar-in 120ms ease-out; }
+.selection-toolbar .ribbon-combo { flex: 0 0 auto; font: inherit; font-size: 11.5px; height: 26px; min-height: 26px; padding: 2px 4px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: var(--text); }
+.selection-toolbar .ribbon-combo:disabled { opacity: .45; }
+.selection-toolbar .ribbon-combo-font { width: 132px; }
+.selection-toolbar .ribbon-combo-size { width: 58px; }
+.selection-toolbar .ribbon-button { min-height: 26px; height: 26px; min-width: 26px; padding: 3px 4px; }
+.selection-toolbar .ribbon-icon { width: 16px; height: 16px; }
+.selection-toolbar .ribbon-color-bar { width: 15px; }
+.selection-toolbar-separator { flex: 0 0 auto; width: 1px; align-self: stretch; margin: 3px 3px; background: var(--border-subtle); }
 .selection-toolbar[data-placement="above"]::after, .selection-toolbar[data-placement="below"]::before { content: ""; position: absolute; left: 18px; width: 10px; height: 10px; background: var(--surface-raised); border: 1px solid var(--border); transform: rotate(45deg); }
 .selection-toolbar[data-placement="above"]::after { bottom: -6px; border-top: 0; border-left: 0; }
 .selection-toolbar[data-placement="below"]::before { top: -6px; border-bottom: 0; border-right: 0; }
