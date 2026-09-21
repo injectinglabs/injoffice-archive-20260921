@@ -51,7 +51,7 @@ test('chrome stylesheets carry no colour literals outside the token blocks and d
   // mock-ups inside the start page's create cards (document illustrations, not chrome).
   const documentLayer = new Set(['#fff9d7', '#fff9', '#fff0a7', '#ffed91', '#ffd52f50', '#ffcb3e66', '#ec922b88', '#c7ae55', '#be6b15', '#b99726', '#5b4a0f', '#4f4617', '#493e16', '#147cf360',
     '#e0e9e4', '#e0eee6', '#edf4ef', '#69a383', '#eef6f155', '#dcbfaf', '#e8dbd4', '#e1d5ce', '#ccdbd2', '#dce4f0', '#bbcee8']);
-  const chrome = ['styles.css', 'start-page.css', 'office-editor.css', 'ribbon.css', 'presentation-editor.css', 'spreadsheet.css', 'spreadsheet-charts.css', 'pdf-editor.css', 'open-error.css', 'updates-dialog.css'];
+  const chrome = ['styles.css', 'start-page.css', 'office-editor.css', 'ribbon.css', 'backstage.css', 'presentation-editor.css', 'spreadsheet.css', 'spreadsheet-charts.css', 'pdf-editor.css', 'open-error.css', 'updates-dialog.css'];
   for (const name of chrome) {
     let css = fs.readFileSync(path.join(src, name), 'utf8');
     if (name === 'styles.css') css = css.replace(/:root[^{]*\{[^}]*\}/g, '');

@@ -16,12 +16,8 @@ export function visibleRibbonTabs(tabs: RibbonTabSpec[]): RibbonTabSpec[] {
   return tabs.map(tab => ({ ...tab, groups: tab.groups.filter(group => hasContent(group.children)) })).filter(tab => tab.groups.length > 0)
 }
 
-/**
- * Workspace commands the shell contributes to every editor's File tab (Office's
- * backstage: Home, New, Open, Save, Save as…, Close, Updates). `before` groups
- * precede the editor's own File groups (Export…) and `after` groups follow them.
- */
-export interface WorkspaceFileGroups { before: RibbonGroupSpec[]; after: RibbonGroupSpec[] }
+/** Shell File surface. Legacy groups are retained for standalone ribbon consumers. */
+export interface WorkspaceFileGroups { before: RibbonGroupSpec[]; after: RibbonGroupSpec[]; backstage?: { open(): void; render(groups: RibbonGroupSpec[]): ReactNode } }
 export const WorkspaceFileGroupsContext = createContext<WorkspaceFileGroups | null>(null)
 
 /** The editor's tabs with the workspace File groups merged into (or added as) the File tab. */
@@ -77,7 +73,9 @@ export interface RibbonProps {
  */
 export default function Ribbon({ label, tabs, active, onChange, quickAccess, trailing, panelLayout }: RibbonProps) {
   const id = useId()
-  const visible = visibleRibbonTabs(withWorkspaceFileGroups(tabs, useContext(WorkspaceFileGroupsContext)))
+  const workspace = useContext(WorkspaceFileGroupsContext)
+  const fileGroups = tabs.flatMap(tab => tab.id === 'File' ? tab.groups : tab.groups.filter(group => group.id === 'export'))
+  const visible = visibleRibbonTabs(workspace?.backstage ? tabs.filter(tab => tab.id !== 'File') : withWorkspaceFileGroups(tabs, workspace))
   const current = visible.find(tab => tab.id === active) ?? visible[0]
   const tabId = (tab: RibbonTabSpec) => `${id}-tab-${tab.id}`
   const panelId = (tab: RibbonTabSpec) => `${id}-panel-${tab.id}`
@@ -136,7 +134,9 @@ export default function Ribbon({ label, tabs, active, onChange, quickAccess, tra
     <span className="ribbon-group-label" aria-hidden="true">{group.label}</span>
   </div>
   return <div className="ribbon" aria-label={label}>
+    {workspace?.backstage && workspace.backstage.render(fileGroups)}
     <div className="ribbon-strip">
+      {workspace?.backstage && <button type="button" className="ribbon-file" aria-haspopup="dialog" onClick={workspace.backstage.open}>File</button>}
       {quickAccess && <div className="ribbon-quick-access" role="toolbar" aria-label="Quick access">{quickAccess}</div>}
       <div className="ribbon-tabs" role="tablist" aria-label={`${label} tabs`}>
         {visible.map(tab => <button key={tab.id} type="button" role="tab" id={tabId(tab)} aria-selected={current === tab} aria-controls={panelId(tab)} tabIndex={current === tab ? 0 : -1} onClick={() => onChange(tab.id)} onKeyDown={event => navigate(event, tab)}>{tab.label}</button>)}
