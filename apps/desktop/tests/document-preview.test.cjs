@@ -41,7 +41,7 @@ function document() {
   };
 }
 
-test('DocumentPreview paints editable text, reports IME composition, and Escape cancels', async () => {
+test('DocumentPreview edits in place and commits without an apply step', async () => {
   const DocumentPreview = await loadPreview();
   global.window = {
     getSelection: () => null,
@@ -54,21 +54,55 @@ test('DocumentPreview paints editable text, reports IME composition, and Escape 
     },
   };
   const composing = [];
-  const cancelled = [];
+  const committed = [];
   let view;
   await act(async () => {
     view = create(React.createElement(DocumentPreview, {
       images: {}, imageNotice: '', document: document(), selected: 'run-1', draft: 'Hello',
       onTextRangeChange() {}, joinPrevious() {}, insertLines() {}, busy: false, hasDraft: true,
-      zoom: 100, navigation: false, choose() {}, updateDraft() {}, apply() {},
-      cancel: () => cancelled.push('cancel'), onCompositionChange: value => composing.push(value), deleteImage() {},
+      zoom: 100, navigation: false, choose() {}, updateDraft() {}, notice: '',
+      commit: () => committed.push('commit'), onCompositionChange: value => composing.push(value), deleteImage() {},
     }));
   });
   const textbox = view.root.findByProps({ role: 'textbox' });
   assert.equal(textbox.props.contentEditable, 'plaintext-only');
+  assert.equal(textbox.props['data-placeholder'], undefined, 'the edited paragraph carries no placeholder');
   await act(async () => textbox.props.onCompositionStart());
   await act(async () => textbox.props.onCompositionEnd({ currentTarget: { textContent: 'Hello' } }));
   assert.deepEqual(composing, [true, false]);
+  // Esc leaves the paragraph by committing; there is no cancel.
   await act(async () => textbox.props.onKeyDown({ key: 'Escape', preventDefault() {}, nativeEvent: {} }));
-  assert.deepEqual(cancelled, ['cancel']);
+  assert.deepEqual(committed, ['commit']);
+  // Focus moving to another control belongs to that control; a click on nothing commits here.
+  await act(async () => textbox.props.onBlur({ relatedTarget: {} }));
+  assert.deepEqual(committed, ['commit']);
+  await act(async () => textbox.props.onBlur({ relatedTarget: null }));
+  assert.deepEqual(committed, ['commit', 'commit']);
+});
+
+test('DocumentPreview shows an engine notice beside the caret instead of a banner', async () => {
+  const DocumentPreview = await loadPreview();
+  global.window = {
+    getSelection: () => null,
+    document: {
+      createTextNode: () => ({}),
+      createRange: () => ({}),
+      caretRangeFromPoint: () => null,
+      addEventListener() {},
+      removeEventListener() {},
+    },
+  };
+  let view;
+  const props = {
+    images: {}, imageNotice: '', document: document(), selected: 'run-1', draft: 'Hello',
+    onTextRangeChange() {}, joinPrevious() {}, insertLines() {}, busy: false, hasDraft: true,
+    zoom: 100, navigation: false, choose() {}, updateDraft() {}, commit() {},
+    onCompositionChange() {}, deleteImage() {}, notice: '',
+  };
+  await act(async () => { view = create(React.createElement(DocumentPreview, props)); });
+  assert.equal(view.root.findAllByProps({ className: 'office-inline-hint' }).length, 0);
+  await act(async () => { view.update(React.createElement(DocumentPreview, { ...props, notice: 'This paragraph cannot be split here yet.' })); });
+  const hint = view.root.findByProps({ className: 'office-inline-hint' });
+  assert.equal(hint.props.role, 'status');
+  assert.equal(hint.children[0], 'This paragraph cannot be split here yet.');
 });
