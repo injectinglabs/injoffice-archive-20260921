@@ -1,0 +1,43 @@
+.backstage { position: fixed; inset: 0; z-index: 100; display: flex; background: var(--surface); color: var(--text); font: inherit; }
+.backstage-rail { width: 196px; flex-shrink: 0; padding: 42px 0 24px; overflow: auto; background: var(--accent-fill); color: var(--accent-text); }
+.backstage-rail button { color: inherit; border: 0; background: transparent; border-radius: 0; text-align: left; }
+.backstage-rail .backstage-back { font-size: 30px; width: 48px; height: 48px; margin: 0 24px 22px; padding: 0; text-align: center; border: 1px solid currentColor; border-radius: 50%; }
+.backstage-rail nav { display: grid; }
+.backstage-rail nav button { min-height: 44px; padding: 10px 30px; font-size: 15px; }
+.backstage-rail nav button:hover, .backstage-rail nav button[aria-current] { background: var(--accent-hover); }
+.backstage-rail nav button[aria-current] { box-shadow: inset 4px 0 var(--accent-text); font-weight: 600; }
+.backstage-rail nav button:nth-last-child(2) { margin-top: 28px; }
+.backstage button:focus-visible, .backstage select:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.backstage-rail button:focus-visible { outline-color: var(--accent-text); outline-offset: -4px; }
+.backstage-content { flex: 1; min-width: 0; overflow: auto; padding: 52px clamp(24px, 5vw, 76px); }
+.backstage-content header { margin-bottom: 36px; }
+.backstage-content h1 { margin: 0 0 8px; font-size: 36px; font-weight: 400; }
+.backstage-content h2 { margin: 28px 0 18px; font-size: 20px; font-weight: 500; }
+.backstage-content p { color: var(--text-secondary); max-width: 760px; line-height: 1.6; }
+.backstage-content button { background: var(--surface-raised); color: var(--text); border: 1px solid var(--border); border-radius: 3px; padding: 12px 20px; cursor: pointer; }
+.backstage-content button:hover { background: var(--hover); border-color: var(--accent); }
+.backstage button:disabled { opacity: .5; cursor: default; }
+.backstage-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(155px, 1fr)); gap: 18px; max-width: 900px; }
+.backstage-cards button { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 24px 12px 18px; }
+.backstage-content small { color: var(--text-muted); }
+.backstage-paper { width: 76px; height: 100px; border: 1px solid var(--border-strong); background: var(--surface); display: flex; flex-direction: column; gap: 9px; padding: 20px 12px; box-sizing: border-box; margin-bottom: 8px; }
+.backstage-paper span { height: 2px; background: var(--border-strong); }
+.backstage-paper-xlsx { border-top: 5px solid var(--xlsx); background: repeating-linear-gradient(0deg, var(--border) 0 1px, transparent 1px 16px), repeating-linear-gradient(90deg, var(--border) 0 1px, var(--surface) 1px 19px); }
+.backstage-paper-pptx { width: 118px; height: 75px; margin-top: 25px; border-top: 5px solid var(--pptx); }
+.backstage-paper-docx { border-top: 5px solid var(--docx); }
+.backstage-paper-pdf { border-top: 5px solid var(--pdf); }
+.backstage-recents { list-style: none; padding: 0; max-width: 900px; }
+.backstage-recents button { display: flex; flex-direction: column; gap: 6px; text-align: left; width: 100%; border: 0; border-bottom: 1px solid var(--border-subtle); border-radius: 0; overflow-wrap: anywhere; }
+.backstage-properties { display: grid; grid-template-columns: 180px 1fr; gap: 20px; max-width: 900px; }
+.backstage-properties dt { color: var(--text-secondary); }
+.backstage-properties dd { margin: 0; overflow-wrap: anywhere; }
+.backstage-exports { display: flex; flex-direction: column; align-items: flex-start; gap: 16px; }
+.backstage-exports select { background: var(--surface-raised); color: var(--text); border: 1px solid var(--border); padding: 8px; }
+.backstage-exports .sheet-export { position: static; }
+.backstage-exports .sheet-export > div { position: static; display: grid; gap: 16px; width: auto; box-shadow: none; }
+@media (max-width: 650px) { .backstage-rail { width: 142px; } .backstage-rail nav button { padding-left: 22px; } .backstage-content { padding: 42px 20px; } .backstage-properties { grid-template-columns: 1fr; gap: 10px; } }
+
+.ribbon-file { border: 0; border-radius: 0; padding: 9px 13px; background: transparent; color: var(--accent); font: inherit; font-weight: 500; cursor: pointer; }
+.ribbon-file:focus-visible { outline: 2px solid var(--accent); outline-offset: -4px; }
+
+.backstage-exports > [role="group"] { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; }
