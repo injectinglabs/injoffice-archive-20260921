@@ -85,12 +85,14 @@ export function SpreadsheetEditor(props: OfficeEditorProps & { initialRecoveryDr
     mounted.current = true; calculator.current = createSpreadsheetCalculator(); const worker = createXlsxWasmClient(); client.current = worker;
     return () => { mounted.current = false; calculator.current?.terminate(); calculator.current = null; worker.terminate(); client.current = null; callbacks.current.onBusyChange?.(false); callbacks.current.onDraftChange?.(false); };
   }, []);
+  const initiallyLoaded = useRef(false);
   useEffect(() => {
     if (props.bytes === emitted.current) return;
     let cancelled = false; const worker = client.current!, pendingRecovery = props.initialRecoveryDraft; setWorking(true); setError(''); draftRef.current = null; draftTarget.current = null; setDraft(null); setInline(false); callbacks.current.onDraftChange?.(false); current.current = null; setSnapshot(null);
     worker.extract(props.bytes).then(async workbook => {
       const chartState = await readChartState(props.bytes, workbook);
       if (cancelled) return;
+      initiallyLoaded.current = true;
       const next = { bytes: props.bytes.slice(), workbook, ...chartState }; current.current = next; setSnapshot(next); undo.current = []; redo.current = [];
       setSheetId(workbook.sheets.find(sheet => sheet.state === 'visible')?.id ?? workbook.sheets[0]?.id ?? ''); setSelection(initialSelection); resetView(); setLocation('A1'); setNotice('');
       if (pendingRecovery != null) {
@@ -100,7 +102,7 @@ export function SpreadsheetEditor(props: OfficeEditorProps & { initialRecoveryDr
           callbacks.current.onDraftChange?.(true); callbacks.current.onRecoveryDraftChange?.(recovered); setNotice('Recovered pending cell input. Apply or cancel to continue.');
         } catch (reason) { setError(engineErrorMessage(reason)); callbacks.current.onRecoveryDraftChange?.(null); }
       }
-    }).catch(reason => { if (!cancelled) { setError(engineErrorMessage(reason)); callbacks.current.onInitialLoadError?.(engineErrorMessage(reason)); } }).finally(() => { if (!cancelled) setWorking(false); });
+    }).catch(reason => { if (!cancelled) { setError(engineErrorMessage(reason)); if (!initiallyLoaded.current) callbacks.current.onInitialLoadError?.(engineErrorMessage(reason)); } }).finally(() => { if (!cancelled) setWorking(false); });
     return () => { cancelled = true; };
   }, [props.bytes]);
   useEffect(() => { if (inline && draft !== null) inlineInput.current?.focus(); }, [inline, draft !== null]);

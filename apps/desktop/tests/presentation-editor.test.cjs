@@ -354,3 +354,32 @@ test('the slide number lives in the status row; the canvas carries no caption or
     delete globalThis.__textTargets;
   }
 });
+
+
+test('PresentationEditor reports the first parser rejection to the workspace', async () => {
+  const errors = [];
+  globalThis.__pptxClient = { extract: async () => { throw new Error('invalid XML in pptx package'); }, terminate() {} };
+  const Editor = await loadEditor();
+  let view;
+  try {
+    await act(async () => { view = create(React.createElement(Editor, { name: 'Corrupt.pptx', bytes: new Uint8Array([80,75,3,4]), onChange() {}, onInitialLoadError: reason => errors.push(reason) })); });
+    await until(() => errors.length > 0);
+    assert.deepEqual(errors, ['invalid XML in pptx package']);
+  } finally { if (view) await act(async () => view.unmount()); delete globalThis.__pptxClient; }
+});
+
+
+test('a presentation mutation rejection after load stays in the editor', async () => {
+  const client = mockClient(), errors = [];
+  client.apply = async () => { throw new Error('slide mutation refused'); };
+  globalThis.__pptxClient = client;
+  const Editor = await loadEditor();
+  let view;
+  try {
+    await act(async () => { view = create(React.createElement(Editor, { name: 'Deck.pptx', bytes: new Uint8Array([1]), onChange() {}, onInitialLoadError: reason => errors.push(reason) })); });
+    await until(() => view.root.findAllByProps({ 'aria-label': 'Show slide 1' }).length > 0);
+    await act(async () => button(view, 'New slide').props.onClick());
+    await until(() => JSON.stringify(view.toJSON()).includes('slide mutation refused'));
+    assert.deepEqual(errors, []);
+  } finally { if (view) await act(async () => view.unmount()); delete globalThis.__pptxClient; }
+});

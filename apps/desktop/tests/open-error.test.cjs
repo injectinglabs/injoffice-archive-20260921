@@ -49,6 +49,7 @@ test('classifyOpenError maps host messages onto unsupported, encrypted, and extr
     assert.equal(classifyOpenError('Choose a DOCX document, XLSX workbook, PPTX presentation, or PDF.'), 'unsupported');
     assert.equal(classifyOpenError('This document is encrypted.'), 'encrypted');
     assert.equal(classifyOpenError('Native extract refused the package.'), 'extract');
+    assert.equal(classifyOpenError('xlsxpatch: native extract: root element is not a supported SpreadsheetML workbook'), 'extract');
     assert.equal(classifyOpenError('Unknown document. Open the file again.'), undefined);
     // Office Open XML files are ZIP packages; a renamed text file is refused before any engine runs.
     const zip = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 0]);
