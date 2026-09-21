@@ -191,7 +191,7 @@ describe('PPTX WASM package client', () => {
     expect(() => client.apply(new Uint8Array([1]), fixtureDeck, { ...mutation, expectedSourceRevision: `rev-${'0'.repeat(64)}` })).toThrow(/sourceRevision/)
     expect(() => client.apply(new Uint8Array([1]), fixtureDeck, {
       ...mutation,
-      operations: [{ ...mutation.operations[0], kind: 'slide.insert' } as never],
+      operations: [{ ...mutation.operations[0], kind: 'slide.unsupported' } as never],
     })).toThrow(/Unsupported PPTX native mutation kind/)
     expect(() => client.apply(new Uint8Array([1]), fixtureDeck, {
       ...mutation,
@@ -240,4 +240,38 @@ describe('browser workbook inspection source ownership',()=>{
   let created=false;const client=createPptxWasmClient({workerFactory:()=>{created=true;return new FakeWorker()}}),abort=new AbortController();abort.abort()
   await expect(client.inspectChartWorkbooks(bytes,{signal:abort.signal})).rejects.toMatchObject({name:'AbortError'});expect(created).toBe(false)
  })
+})
+
+describe('source-bound slide mutations', () => {
+  const slide = fixtureDeck.slides[0]!
+  const base = { operationId: 'slide-edit', slideId: slide.id, expectedFingerprintSha256: slide.source!.fingerprintSha256 }
+  it.each(['slide.insert', 'slide.background.set'] as const)('sends %s without an element target and snapshots the payload', async kind => {
+    const worker = new FakeWorker()
+    const client = createPptxWasmClient({ workerFactory: () => worker })
+    const operation = kind === 'slide.insert' ? { ...base, kind } : { ...base, kind, fill: '2459AD' }
+    const request = { expectedSourceRevision: fixtureDeck.sourceRevision!, operations: [operation] }
+    const expected = structuredClone(request)
+    const pending = client.apply(new Uint8Array([1]), fixtureDeck, request)
+    operation.slideId = 'changed-after-apply'
+    await pending
+    const apply = worker.requests.find(request => request.op === 'apply')!
+    if (apply.op !== 'apply') throw new Error('missing mutation')
+    expect(JSON.parse(apply.payload as string)).toEqual(expected)
+    expect(apply.expectedRevision).toBe(`sha256:${fixtureDeck.sourceRevision!.slice(4)}`)
+    client.terminate()
+  })
+  it('refuses stale, missing, mixed and malformed slide targets before creating a worker', () => {
+    let calls = 0
+    const client = createPptxWasmClient({ workerFactory: () => { calls++; return new FakeWorker() } })
+    const valid = { ...base, kind: 'slide.background.set' as const, fill: '2459AD' }
+    for (const operations of [
+      [{ ...valid, expectedFingerprintSha256: '0'.repeat(64) }],
+      [{ ...valid, slideId: 'missing' }],
+      [{ ...valid, fill: '#2459AD' }],
+      [{ ...valid, elementId: 'bogus' }],
+      [valid, { ...valid, operationId: 'second' }],
+      [{ ...valid, kind: 'slide.insert' as const }],
+    ]) expect(() => client.apply(new Uint8Array([1]), fixtureDeck, { expectedSourceRevision: fixtureDeck.sourceRevision!, operations })).toThrow()
+    expect(calls).toBe(0)
+  })
 })

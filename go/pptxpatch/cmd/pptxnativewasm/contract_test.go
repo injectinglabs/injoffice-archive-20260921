@@ -482,3 +482,61 @@ func stderrFrom(err error) string {
 	}
 	return ""
 }
+
+func TestWASMSlideMutationsRoundTrip(t *testing.T) {
+	wasm, wasmExec, script := requireNodeHarness(t)
+	original := contractPPTX(t)
+	for _, kind := range []pptxpatch.NativePPTXMutationKind{pptxpatch.NativePPTXInsertSlide, pptxpatch.NativePPTXSetSlideBackground} {
+		sourceJSON, err := extractNativeJSON(original)
+		if err != nil {
+			t.Fatal(err)
+		}
+		deck, err := pptxpatch.DecodeNativePPTXJSON(sourceJSON)
+		if err != nil {
+			t.Fatal(err)
+		}
+		slide := deck.Slides[len(deck.Slides)-1]
+		operation := pptxpatch.NativePPTXMutation{OperationID: "slide-operation", Kind: kind, SlideID: slide.ID, ExpectedFingerprintSHA256: slide.Source.FingerprintSHA256}
+		if kind == pptxpatch.NativePPTXSetSlideBackground {
+			fill := "2459AD"
+			operation.Fill = &fill
+		}
+		payload, err := json.Marshal(pptxpatch.NativePPTXMutationRequest{ExpectedSourceRevision: *deck.SourceRevision, Operations: []pptxpatch.NativePPTXMutation{operation}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		dir := t.TempDir()
+		input := filepath.Join(dir, "source.pptx")
+		payloadPath := filepath.Join(dir, "mutation.json")
+		if err := os.WriteFile(input, original, 0600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(payloadPath, payload, 0600); err != nil {
+			t.Fatal(err)
+		}
+		command := exec.Command("node", script, "apply", "--wasm", wasm, "--wasm-exec", wasmExec, "--original", input, "--payload", payloadPath, "--expected-revision", "sha256:"+strings.TrimPrefix(*deck.SourceRevision, "rev-"))
+		output, err := command.Output()
+		if err != nil {
+			t.Fatalf("%s: %v %s", kind, err, stderrFrom(err))
+		}
+		outputPath := filepath.Join(dir, "output.pptx")
+		if err := os.WriteFile(outputPath, output, 0600); err != nil {
+			t.Fatal(err)
+		}
+		reopened, err := exec.Command("node", script, "extract", "--wasm", wasm, "--wasm-exec", wasmExec, "--input", outputPath).Output()
+		if err != nil {
+			t.Fatalf("WASM reopen: %v %s", err, stderrFrom(err))
+		}
+		after, err := pptxpatch.DecodeNativePPTXJSON(reopened)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if kind == pptxpatch.NativePPTXInsertSlide && len(after.Slides) != len(deck.Slides)+1 {
+			t.Fatal("WASM insertion lost")
+		}
+		if kind == pptxpatch.NativePPTXSetSlideBackground && (after.Slides[len(after.Slides)-1].Background == nil || *after.Slides[len(after.Slides)-1].Background != "2459AD") {
+			t.Fatal("WASM background lost")
+		}
+		original = output
+	}
+}
