@@ -65,3 +65,31 @@ test('background update notice is dismissible without downloading or forcing a d
     assert.equal(unsubscribed, 1);
   } finally { if (view) await act(async () => view.unmount()); delete global.window; }
 });
+
+// Opening the dialog used to paint a heavy focus ring on × (autoFocus), and a build without an
+// updater said "Updates unavailable" where Office says what it means.
+test('the dialog takes its own initial focus and says what an updateless build can do', async () => {
+  const Dialog = await loadDialog();
+  const focused = [];
+  global.window = {};
+  let view;
+  try {
+    await act(async () => { view = create(React.createElement(Dialog, { onClose() {} }), { createNodeMock: element => element.type === 'dialog' ? { showModal() {}, close() {}, focus: options => focused.push(options) } : null }); });
+    const close = view.root.findByProps({ 'aria-label': 'Close updates' });
+    assert.equal(close.props.autoFocus, undefined, 'the close button is not autofocused');
+    assert.deepEqual(focused, [{ preventScroll: true }], 'the dialog itself takes the initial focus');
+    assert.equal(view.root.findByType('dialog').props.tabIndex, -1);
+    // Without a host bridge the dialog reports the local build honestly.
+    assert.match(view.root.findByProps({ className: 'updates-summary' }).findByType('h3').children.join(''), /Updates aren’t available in this build/);
+  } finally { if (view) await act(async () => view.unmount()); delete global.window; }
+});
+
+test('a checked build with nothing to install says it is up to date', async () => {
+  const Dialog = await loadDialog();
+  global.window = { injDesktop: { getUpdateState: async () => ({ status: 'not-available', appVersion: '0.1.0', autoCheck: true }), onUpdateState: () => () => {} } };
+  let view;
+  try {
+    await act(async () => { view = create(React.createElement(Dialog, { onClose() {} }), { createNodeMock: element => element.type === 'dialog' ? { showModal() {}, close() {}, focus() {} } : null }); });
+    assert.match(view.root.findByProps({ className: 'updates-summary' }).findByType('h3').children.join(''), /You’re up to date/);
+  } finally { if (view) await act(async () => view.unmount()); delete global.window; }
+});
