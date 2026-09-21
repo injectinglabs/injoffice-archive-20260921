@@ -19,16 +19,19 @@ const npmCache = mkdtempSync(join(tmpdir(), 'injoffice-npm-cache-'))
 const mebibyte = 1024 * 1024
 const kibibyte = 1024
 // XLSX ships a separate, lazily loaded read-only rich-source WASM module.
-// The unpacked budget carries 608 KiB above 12 MiB. The worksheet form-control
+// The unpacked budget carries 704 KiB above 12 MiB. The worksheet form-control
 // reader cost 40,054 bytes of xlsxnative.wasm, which left 12 MiB exceeded by
 // 15,352 bytes and set the first 128 KiB. The conditional data-bar reader then
 // cost 49,217 more, which left that exceeded by 24,131 bytes. Reaching the
 // native chart writer from apply then grew xlsxnative.wasm to 8,031,235 bytes
-// and the unpacked package to 13,175,240, 395,720 over 12 MiB + 192 KiB. The
-// extra 416 KiB leaves ~30 KiB. The headroom is stated here rather than
-// rounded away so the next module that grows the package has to say so too.
+// and the unpacked package to 13,175,240, 395,720 over 12 MiB + 192 KiB. Native
+// freeze, AutoFilter and sort then grew Linux CI's unpacked package to
+// 13,274,123, 68,619 over 12 MiB + 608 KiB. The extra 96 KiB leaves ~29 KiB.
+// The headroom is stated here rather than rounded away so the next module that
+// grows the package has to say so too. The xlsxnative.wasm byte ceiling in
+// go/xlsxpatch/cmd/xlsxnativewasm/max-bytes.txt is unchanged.
 const packageBudgets = {
-  "@injoffice/xlsx-wasm": { packed: 3.5 * mebibyte, unpacked: 12 * mebibyte + 608 * kibibyte },
+  "@injoffice/xlsx-wasm": { packed: 3.5 * mebibyte, unpacked: 12 * mebibyte + 704 * kibibyte },
 }
 const maxTotalPackedBytes = 15 * mebibyte
 let totalPackedBytes = 0
