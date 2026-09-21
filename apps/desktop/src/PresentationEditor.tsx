@@ -281,7 +281,7 @@ export default function PresentationEditor({ name, bytes, onChange, onBusyChange
     </div>}
     {error && <div className="presentation-error" role="alert"><span>{error}</span><button aria-label="Dismiss presentation error" onClick={() => setError('')}>×</button></div>}
     {!snapshot ? <div className="presentation-loading" role="status">{busy ? 'Opening presentation…' : 'This presentation could not be opened.'}</div> : <div className="presentation-layout">
-      {!viewOptions?.focus && <nav className="presentation-thumbnails" aria-label="Slides"><div className="presentation-rail-title">Slides <span>{snapshot.deck.slides.length}</span></div>{snapshot.deck.slides.map((item, i) => <button key={item.id} className="presentation-thumbnail" disabled={blocked} aria-label={`Show slide ${i + 1}`} aria-current={index === i ? 'page' : undefined} onClick={() => selectSlide(i)}><span className="presentation-slide-number">{i + 1}</span><div className="presentation-thumb-stage"><SlideCanvas deck={snapshot.deck} slide={item} scale={148 / (snapshot.deck.size.cx / EMU_PER_PIXEL)} thumbnail /></div></button>)}</nav>}
+      {!viewOptions?.focus && <nav className="presentation-thumbnails" aria-label="Slides"><div className="presentation-rail-title">Slides <span>{snapshot.deck.slides.length}</span></div>{snapshot.deck.slides.map((item, i) => <SlideThumbnail key={item.id} deck={snapshot.deck} slide={item} number={i + 1} current={index === i} disabled={blocked} onSelect={() => selectSlide(i)} />)}</nav>}
       <div className="presentation-workspace" ref={workspace} onContextMenu={event => { selectObjectAt(event); menu.open(event); }}>
         <div className="presentation-canvas-label"><strong>Slide {index + 1}</strong><span>Positioned preview · text wrapping may differ in PowerPoint</span></div>
         <div className="presentation-canvas-scroll">{slide && <SlideCanvas deck={snapshot.deck} slide={slide} scale={scale} selected={selected} selectedKeys={arrangeKeys} onSelect={choose} disabled={blocked} draft={draft} onGeometry={geometryPatch} selectedCell={cellSelection} onCellSelect={chooseCell} onGestureChange={value => { dragging.current = value; }} />}</div>
@@ -342,6 +342,30 @@ export default function PresentationEditor({ name, bytes, onChange, onBusyChange
       if (event.key === 'Tab') { const buttons = Array.from(event.currentTarget.querySelectorAll('button')); const next = event.shiftKey ? buttons[0] : buttons.at(-1); if (document.activeElement === next) { event.preventDefault(); (event.shiftKey ? buttons.at(-1) : buttons[0])?.focus(); } }
     }}><h2 id="presentation-delete-title">Delete slide {index + 1}?</h2><p>You can undo this change before closing the presentation.</p><div><button autoFocus onClick={() => { setConfirmDelete(false); deleteTrigger.current?.focus(); }}>Cancel</button><button className="presentation-danger" onClick={() => { setConfirmDelete(false); structure('delete'); }}>Delete slide</button></div></section></div>}
   </div>;
+}
+
+/**
+ * One slide in the rail, laid out like PowerPoint: the number sits to the left of
+ * the thumbnail and the stage takes the rest of the pane. The stage sizes itself
+ * (`width: 100%` + the deck's `aspect-ratio`), so the thumbnail can never overflow
+ * the pane; the painted slide is then scaled to the measured content box.
+ */
+function SlideThumbnail({ deck, slide, number, current, disabled, onSelect }: { deck: NativePptxDeck; slide: NativeSlide; number: number; current: boolean; disabled: boolean; onSelect(): void }) {
+  const stage = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(0);
+  useEffect(() => {
+    const node = stage.current; if (!node || typeof ResizeObserver !== 'function') return;
+    const observer = new ResizeObserver(entries => setWidth(entries[0]?.contentRect.width ?? 0));
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+  const slideWidth = deck.size.cx / EMU_PER_PIXEL;
+  return <button className="presentation-thumbnail" disabled={disabled} aria-label={`Show slide ${number}`} aria-current={current ? 'page' : undefined} onClick={onSelect}>
+    <span className="presentation-slide-number">{number}</span>
+    <div className="presentation-thumb-stage" ref={stage} style={{ aspectRatio: `${deck.size.cx} / ${deck.size.cy}` }}>
+      {width > 0 && slideWidth > 0 && <SlideCanvas deck={deck} slide={slide} scale={width / slideWidth} thumbnail />}
+    </div>
+  </button>;
 }
 
 function SlideCanvas({ deck, slide, scale, thumbnail = false, selected, selectedKeys = [], onSelect, disabled, draft, onGeometry, onGestureChange, selectedCell, onCellSelect }: { deck: NativePptxDeck; slide: NativeSlide; scale: number; thumbnail?: boolean; selected?: string; selectedKeys?: string[]; onSelect?(key: string, additive?: boolean): void; disabled?: boolean; draft?: Draft; onGeometry?(key: string, transform: NativeTransform): void; onGestureChange?(value: boolean): void; selectedCell?: { row: number; column: number }; onCellSelect?(key: string, row: number, column: number): void }) {
