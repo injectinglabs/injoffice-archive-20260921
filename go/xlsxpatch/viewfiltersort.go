@@ -61,11 +61,6 @@ func applyNativeViewTransaction(original []byte, before *NativeWorkbookV1, mutat
 		ids = append(ids, id)
 	}
 	return patchExclusiveSheets(original, before, "freeze", ids, func(id string, sheet *NativeWorkbookSheetV1, data []byte) ([]byte, error) {
-		for _, item := range before.Unsupported {
-			if item.ScopeID == "sheet:"+id && item.Code == "SHEET_VIEW_GEOMETRY" {
-				return nil, fmt.Errorf("existing sheet view is not a qualified freeze target")
-			}
-		}
 		return rewriteWorksheetFreeze(data, sheet, last[id])
 	})
 }
@@ -75,7 +70,7 @@ func applyNativeFilterTransaction(original []byte, before *NativeWorkbookV1, mut
 	if err != nil {
 		return nil, err
 	}
-	last := map[string]normalizedFilterMutation{}
+	last := map[string]FilterMutation{}
 	for _, mutation := range normalized {
 		last[mutation.SheetID] = mutation
 	}
@@ -152,16 +147,13 @@ func patchExclusiveSheets(original []byte, before *NativeWorkbookV1, label strin
 	return &NativeWorkbookMutationResultV1{Package: produced, Workbook: after}, nil
 }
 
-func requireMutationID(prefix, operationID, sheetID string, seen map[string]bool) error {
-	if operationID == "" || len(operationID) > maxOperationIDLen || !restrictedIDPattern.MatchString(operationID) {
-		return fmt.Errorf("%s: invalid operation_id %q", prefix, operationID)
-	}
-	if seen[operationID] {
-		return fmt.Errorf("%s: duplicate operation_id %q", prefix, operationID)
+func requireMutationID(operationID, sheetID string, seen map[string]bool) error {
+	if operationID == "" || len(operationID) > maxOperationIDLen || !restrictedIDPattern.MatchString(operationID) || seen[operationID] {
+		return fmt.Errorf("xlsxpatch: invalid operation_id")
 	}
 	seen[operationID] = true
 	if sheetID == "" || utf16Length(sheetID) > maxStableSheetIDLen || strings.TrimSpace(sheetID) != sheetID {
-		return fmt.Errorf("%s: invalid sheet_id", prefix)
+		return fmt.Errorf("xlsxpatch: invalid sheet_id")
 	}
 	return nil
 }
@@ -171,54 +163,46 @@ func validateViewMutations(mutations []ViewMutation) error {
 		return fmt.Errorf("xlsxpatch: freeze: empty or oversized batch")
 	}
 	seen := map[string]bool{}
-	for i, mutation := range mutations {
-		if err := requireMutationID(fmt.Sprintf("xlsxpatch: freeze: operation %d", i), mutation.OperationID, mutation.SheetID, seen); err != nil {
+	for _, mutation := range mutations {
+		if err := requireMutationID(mutation.OperationID, mutation.SheetID, seen); err != nil {
 			return err
 		}
 		if mutation.Kind != SheetFreeze || mutation.Rows < 0 || mutation.Rows > excelMaxRows || mutation.Columns < 0 || mutation.Columns > excelMaxColumns {
-			return fmt.Errorf("xlsxpatch: freeze: operation %d: invalid freeze", i)
+			return fmt.Errorf("xlsxpatch: freeze: invalid freeze")
 		}
 	}
 	return nil
 }
 
-type normalizedFilterMutation struct {
-	FilterMutation
-	rangeRow, rangeColumn, rangeEndRow, rangeEndColumn int
-}
-
-func validateFilterMutations(mutations []FilterMutation) ([]normalizedFilterMutation, error) {
+func validateFilterMutations(mutations []FilterMutation) ([]FilterMutation, error) {
 	if len(mutations) == 0 || len(mutations) > maxCellMutations {
 		return nil, fmt.Errorf("xlsxpatch: filter: empty or oversized batch")
 	}
 	seen := map[string]bool{}
-	out := make([]normalizedFilterMutation, 0, len(mutations))
-	for i, mutation := range mutations {
-		if err := requireMutationID(fmt.Sprintf("xlsxpatch: filter: operation %d", i), mutation.OperationID, mutation.SheetID, seen); err != nil {
+	for _, mutation := range mutations {
+		if err := requireMutationID(mutation.OperationID, mutation.SheetID, seen); err != nil {
 			return nil, err
 		}
 		if mutation.Kind != SheetFilter {
-			return nil, fmt.Errorf("xlsxpatch: filter: operation %d: unsupported kind", i)
+			return nil, fmt.Errorf("xlsxpatch: filter: unsupported kind")
 		}
-		item := normalizedFilterMutation{FilterMutation: mutation}
-		if mutation.Filter != nil {
-			parsed := parseCanonicalA1Range(mutation.Filter.Ref)
-			if parsed == nil || mutation.Filter.Column < parsed.column || mutation.Filter.Column > parsed.endColumn || parsed.endRow <= parsed.row {
-				return nil, fmt.Errorf("xlsxpatch: filter: operation %d: AutoFilter range must include a header row and at least one data row", i)
-			}
-			if (len(mutation.Filter.Values) == 0 && !mutation.Filter.Blank) || len(mutation.Filter.Values) > 256 {
-				return nil, fmt.Errorf("xlsxpatch: filter: operation %d: invalid filter values", i)
-			}
-			for _, value := range mutation.Filter.Values {
-				if value == "" || utf16Length(value) > maxNumberFormatLength || strings.TrimSpace(value) != value {
-					return nil, fmt.Errorf("xlsxpatch: filter: operation %d: invalid filter value", i)
-				}
-			}
-			item.rangeRow, item.rangeColumn, item.rangeEndRow, item.rangeEndColumn = parsed.row, parsed.column, parsed.endRow, parsed.endColumn
+		if mutation.Filter == nil {
+			continue
 		}
-		out = append(out, item)
+		parsed := parseCanonicalA1Range(mutation.Filter.Ref)
+		if parsed == nil || mutation.Filter.Column < parsed.column || mutation.Filter.Column > parsed.endColumn || parsed.endRow <= parsed.row {
+			return nil, fmt.Errorf("xlsxpatch: filter: AutoFilter range must include a header row")
+		}
+		if (len(mutation.Filter.Values) == 0 && !mutation.Filter.Blank) || len(mutation.Filter.Values) > 256 {
+			return nil, fmt.Errorf("xlsxpatch: filter: invalid filter values")
+		}
+		for _, value := range mutation.Filter.Values {
+			if value == "" || utf16Length(value) > maxNumberFormatLength || strings.TrimSpace(value) != value {
+				return nil, fmt.Errorf("xlsxpatch: filter: invalid filter value")
+			}
+		}
 	}
-	return out, nil
+	return mutations, nil
 }
 
 func validateSortMutations(mutations []SortMutation) ([]SortMutation, error) {
@@ -226,8 +210,8 @@ func validateSortMutations(mutations []SortMutation) ([]SortMutation, error) {
 		return nil, fmt.Errorf("xlsxpatch: sort: empty or oversized batch")
 	}
 	seen := map[string]bool{}
-	for i, mutation := range mutations {
-		if err := requireMutationID(fmt.Sprintf("xlsxpatch: sort: operation %d", i), mutation.OperationID, mutation.SheetID, seen); err != nil {
+	for _, mutation := range mutations {
+		if err := requireMutationID(mutation.OperationID, mutation.SheetID, seen); err != nil {
 			return nil, err
 		}
 		area, dataRows := mutation.Range, mutation.Range.EndRow-mutation.Range.Row+1
@@ -235,7 +219,7 @@ func validateSortMutations(mutations []SortMutation) ([]SortMutation, error) {
 			dataRows--
 		}
 		if mutation.Kind != RangeSort || area.Row < 0 || area.EndRow < area.Row || area.EndRow >= excelMaxRows || area.Column < 0 || area.EndColumn < area.Column || area.EndColumn >= excelMaxColumns || mutation.KeyColumn < area.Column || mutation.KeyColumn > area.EndColumn || dataRows < 1 || dataRows > maxSortRows || dataRows*(area.EndColumn-area.Column+1) > maxSortCells {
-			return nil, fmt.Errorf("xlsxpatch: sort: operation %d: invalid sort", i)
+			return nil, fmt.Errorf("xlsxpatch: sort: invalid sort")
 		}
 	}
 	return mutations, nil
@@ -262,7 +246,7 @@ func rewriteWorksheetFreeze(data []byte, sheet *NativeWorkbookSheetV1, mutation 
 	if mutation.Rows == 0 && mutation.Columns == 0 && len(views) == 0 {
 		return append([]byte(nil), data...), nil
 	}
-	return spliceWorksheetChild(data, root, views, buildSheetViewsXML(root.qname, mutation.Rows, mutation.Columns), []string{"sheetPr", "dimension"})
+	return spliceWorksheetChild(data, root, views, buildSheetViewsXML(root.qname, mutation.Rows, mutation.Columns), []string{"dimension"})
 }
 
 func buildSheetViewsXML(rootQName string, rows, columns int) []byte {
@@ -288,7 +272,7 @@ func buildSheetViewsXML(rootQName string, rows, columns int) []byte {
 	return []byte(`<` + views + `><` + view + ` workbookViewId="0">` + pane + sel + `</` + view + `></` + views + `>`)
 }
 
-func rewriteWorksheetFilter(data []byte, sheet *NativeWorkbookSheetV1, mutation normalizedFilterMutation) ([]byte, error) {
+func rewriteWorksheetFilter(data []byte, sheet *NativeWorkbookSheetV1, mutation FilterMutation) ([]byte, error) {
 	existing, root, err := directChildElements(data, "worksheet", "autoFilter")
 	if err != nil {
 		return nil, err
@@ -302,17 +286,9 @@ func rewriteWorksheetFilter(data []byte, sheet *NativeWorkbookSheetV1, mutation 
 		if len(existing) == 0 {
 			return append([]byte(nil), data...), nil
 		}
-		ref := sheet.AutoFilter
 		parsed := (*struct{ row, column, endRow, endColumn int })(nil)
-		if ref != nil {
-			parsed = parseCanonicalA1Range(ref.Ref)
-		}
-		if parsed == nil {
-			start, err := decodeStartElement(data[existing[0].span.start:existing[0].span.startTagEnd])
-			if err == nil {
-				value, _, _ := unqualifiedXMLAttribute(start, "ref")
-				parsed = parseCanonicalA1Range(value)
-			}
+		if sheet.AutoFilter != nil {
+			parsed = parseCanonicalA1Range(sheet.AutoFilter.Ref)
 		}
 		if parsed != nil {
 			for row := parsed.row + 1; row <= parsed.endRow; row++ {
@@ -320,6 +296,7 @@ func rewriteWorksheetFilter(data []byte, sheet *NativeWorkbookSheetV1, mutation 
 			}
 		}
 	} else {
+		parsed := parseCanonicalA1Range(mutation.Filter.Ref)
 		keep := map[string]bool{}
 		for _, value := range mutation.Filter.Values {
 			keep[strings.ToLower(value)] = true
@@ -328,7 +305,7 @@ func rewriteWorksheetFilter(data []byte, sheet *NativeWorkbookSheetV1, mutation 
 		for _, row := range sheet.Rows {
 			hidden[row.Row] = row.Hidden
 		}
-		for row := mutation.rangeRow + 1; row <= mutation.rangeEndRow; row++ {
+		for row := parsed.row + 1; row <= parsed.endRow; row++ {
 			if hidden[row] {
 				continue
 			}
@@ -338,13 +315,13 @@ func rewriteWorksheetFilter(data []byte, sheet *NativeWorkbookSheetV1, mutation 
 			}
 			hide[row] = true
 		}
-		built, err := buildAutoFilterXML(root.qname, mutation)
+		built, err := buildAutoFilterXML(root.qname, mutation, parsed.column)
 		if err != nil {
 			return nil, err
 		}
 		body = built
 	}
-	updated, err := spliceWorksheetChild(data, root, existing, body, []string{"sheetData", "sheetCalcPr", "sheetProtection", "protectedRanges", "scenarios"})
+	updated, err := spliceWorksheetChild(data, root, existing, body, []string{"sheetData"})
 	if err != nil {
 		return nil, err
 	}
@@ -373,10 +350,10 @@ func nativeFilterCell(sheet *NativeWorkbookSheetV1, row, column int) (string, st
 	return "", "empty"
 }
 
-func buildAutoFilterXML(rootQName string, mutation normalizedFilterMutation) ([]byte, error) {
+func buildAutoFilterXML(rootQName string, mutation FilterMutation, rangeColumn int) ([]byte, error) {
 	qname, col, filters, filter := prefixedLocal(rootQName, "autoFilter"), prefixedLocal(rootQName, "filterColumn"), prefixedLocal(rootQName, "filters"), prefixedLocal(rootQName, "filter")
 	var body strings.Builder
-	body.WriteString(`<` + qname + ` ref="` + mutation.Filter.Ref + `"><` + col + ` colId="` + strconv.Itoa(mutation.Filter.Column-mutation.rangeColumn) + `">`)
+	body.WriteString(`<` + qname + ` ref="` + mutation.Filter.Ref + `"><` + col + ` colId="` + strconv.Itoa(mutation.Filter.Column-rangeColumn) + `">`)
 	if mutation.Filter.Blank {
 		body.WriteString(`<` + filters + ` blank="1">`)
 	} else {

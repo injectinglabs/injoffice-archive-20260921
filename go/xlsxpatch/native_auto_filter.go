@@ -54,7 +54,7 @@ func nativeAutoFilterIssues(filter *NativeWorkbookAutoFilterV1, path string) []n
 		return nil
 	}
 	if parseCanonicalA1Range(filter.Ref) == nil {
-		return []nativeSheetViewIssue{{code: "INVALID_VALUE", path: path + "/auto_filter/ref", message: "AutoFilter ref must be a canonical bounded A1 range"}}
+		return []nativeSheetViewIssue{{code: "INVALID_VALUE", path: path + "/auto_filter/ref", message: "AutoFilter ref must be canonical A1"}}
 	}
 	return nil
 }
