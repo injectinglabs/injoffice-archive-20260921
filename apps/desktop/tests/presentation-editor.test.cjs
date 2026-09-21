@@ -214,7 +214,7 @@ test('the Format pane is closed until Format is pressed and Arrange is one of it
     assert.equal(view.root.findAllByType('button').find(node => text(node) === 'Format').props['aria-pressed'], true);
     await act(async () => view.root.findByProps({ 'aria-label': 'Close the Format pane' }).props.onClick());
     assert.equal(pane().length, 0);
-    const arrange = view.root.findAllByType('button').find(node => text(node) === 'Arrange objects');
+    const arrange = view.root.findAllByType('button').find(node => text(node) === 'Arrange');
     assert.equal(arrange.props.disabled, true, 'this slide has fewer than two arrangeable objects');
     const source = fs.readFileSync(path.resolve(__dirname, '../src/SlideArrangePanel.tsx'), 'utf8');
     assert.equal(/<details|<summary/.test(source), false, 'Arrange is a pane group, not a disclosure link');
@@ -294,8 +294,6 @@ test('the inspector has no text segment select or textarea, and the wrapping cav
     assert.equal(view.root.findAllByProps({ 'aria-label': 'Slide text segment' }).length, 0);
     assert.equal(view.root.findAllByType('textarea').length, 0);
     assert.equal(view.root.findAllByType('button').filter(node => text(node) === 'Text' && node.props['aria-pressed'] !== undefined).length, 0, 'no Text tab in the pane');
-    const label = view.root.findByProps({ className: 'presentation-canvas-label' });
-    assert.equal(/wrapping/.test(text(label)), false, 'the caveat is off the canvas');
     const note = view.root.findByProps({ 'aria-label': 'Preview note' });
     assert.match(note.props.title, /text wrapping may differ in PowerPoint/);
     assert.equal(view.root.findByProps({ className: 'presentation-status' }) != null, true);
@@ -305,6 +303,33 @@ test('the inspector has no text segment select or textarea, and the wrapping cav
     await act(async () => caret.props.onKeyDown({ key: 'Escape', preventDefault() {}, stopPropagation() {} }));
     assert.equal(client.applied.length, 0);
     assert.equal(view.root.findAllByProps({ role: 'textbox' }).length, 0);
+  } finally {
+    if (view) await act(async () => view.unmount());
+    delete globalThis.__pptxClient;
+    delete globalThis.__textTargets;
+  }
+});
+
+test('the slide number lives in the status row; the canvas carries no caption or preview disclosure', async () => {
+  const client = textClient();
+  globalThis.__pptxClient = client;
+  const PresentationEditor = await loadEditor();
+  const busy = [];
+  let view;
+  try {
+    await act(async () => {
+      view = create(React.createElement(PresentationEditor, { name: 'Deck.pptx', bytes: new Uint8Array([1]), onChange: () => {}, onBusyChange: value => busy.push(value) }));
+    });
+    await until(() => busy.at(-1) === false && view.root.findAllByProps({ 'aria-label': 'Show slide 1' }).length > 0);
+    assert.equal(view.root.findAllByType('details').length, 0, 'no Preview and editing limits disclosure');
+    assert.equal(view.root.findAllByProps({ className: 'presentation-canvas-label' }).length, 0);
+    const status = view.root.findByProps({ className: 'presentation-status' });
+    assert.match(text(status), /Slide 1 of 1/);
+    const note = view.root.findByProps({ 'aria-label': 'Preview note' });
+    assert.match(note.props.title, /text wrapping may differ in PowerPoint/);
+    assert.match(note.props.title, /Unsupported content stays in the file/, 'the editing limits moved into the tooltip');
+    const source = fs.readFileSync(path.resolve(__dirname, '../src/PresentationEditor.tsx'), 'utf8');
+    assert.equal(/Positioned preview ·/.test(source), false);
   } finally {
     if (view) await act(async () => view.unmount());
     delete globalThis.__pptxClient;
