@@ -2,7 +2,6 @@
 
 .sheet-lifecycle{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--xlsx-soft);border-bottom:1px solid var(--sheet-line);flex-wrap:wrap}.sheet-lifecycle label{display:flex;align-items:center;gap:10px}.sheet-lifecycle input{border:1px solid var(--border);border-radius:3px;padding:6px 8px}.sheet-lifecycle button{border-color:var(--border);background:var(--surface)}.sheet-tab-tools{display:flex;align-items:center;gap:2px;flex-shrink:0}.sheet-bottom nav{flex:1}@media(max-width:1000px){.sheet-tab-tools button{font-size:11px}.sheet-lifecycle{padding:8px}}
 
-.sheet-filter-status { margin: 0; padding: 7px 14px; background: var(--xlsx-soft); color: var(--text-secondary); font-size: 12px; border-bottom: 1px solid var(--border); }
 .sheet-lifecycle textarea { min-width: 150px; max-width: 280px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 5px; font: inherit; resize: vertical; }
 .sheet-lifecycle small { max-width: 32em; color: var(--text-muted); line-height: 1.4; }
 
@@ -68,3 +67,4 @@
 .sheet-editor .sheet-menu>div button{display:flex;align-items:center;gap:8px;justify-content:flex-start;width:100%;text-align:left}
 .sheet-menu>div label{display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--text-muted)}
 .sheet-menu>div input{border:1px solid var(--sheet-line);border-radius:3px;padding:5px;background:var(--surface);color:inherit}
+.sheet-note{color:var(--text-secondary);border-bottom:1px dotted var(--border-strong);cursor:default}
