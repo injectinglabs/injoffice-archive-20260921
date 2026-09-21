@@ -155,3 +155,19 @@ test('the shell contributes Office backstage groups to every editor File tab thr
   await act(async () => { view = create(h(Ribbon, { label: 'Spreadsheet tools', tabs: emptyFile, active: 'File', onChange() {} })); });
   assert.deepEqual(view.root.findAllByProps({ role: 'tab' }).map(text), ['Home'], 'without the shell provider an empty File tab still drops out');
 });
+
+test('every ribbon glyph is a drawable path, including the PDF tool set', async () => {
+  const { default: RibbonIcon, ribbonIconNames } = await load('RibbonIcons.tsx');
+  for (const name of ['note', 'highlight', 'strikethrough', 'rectangle', 'ellipse', 'line', 'arrow', 'form', 'rotate', 'pageDelete', 'import', 'pagePrevious', 'pageNext', 'goToPage']) {
+    assert.ok(ribbonIconNames.includes(name), `${name} is a ribbon glyph`);
+  }
+  let view;
+  await act(async () => { view = create(h('div', null, ribbonIconNames.map(name => h(RibbonIcon, { key: name, name })))); });
+  const paths = view.root.findAllByType('path');
+  assert.equal(paths.length, ribbonIconNames.length);
+  paths.forEach((path, index) => {
+    assert.match(path.props.d, /^[Mm][\d.\s-]/, `${ribbonIconNames[index]} starts with a move command`);
+    assert.equal(/[^MmLlHhVvCcSsQqTtAaZz\d.,\s-]/.test(path.props.d), false, `${ribbonIconNames[index]} uses path commands only`);
+  });
+  await act(async () => view.unmount());
+});
