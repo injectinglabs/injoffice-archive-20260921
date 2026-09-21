@@ -22,7 +22,7 @@ import { shortcutLabel, shortcutPlatform, shortcutTooltip } from './shortcuts';
 // is the window's only title row: it drags the window and leaves room for the inset traffic lights.
 const macChrome = shortcutPlatform() === 'mac';
 
-type DocumentSession = { key: number; id: string; name: string; initialName: string; initialBytes: Uint8Array; bytes: Uint8Array; dirty: boolean; untitled?: boolean; editorBusy?: boolean; draftDirty?: boolean; recoveryDraft?: unknown };
+type DocumentSession = { key: number; id: string; name: string; initialName: string; initialBytes: Uint8Array; bytes: Uint8Array; dirty: boolean; untitled?: boolean; recovered?: boolean; editorBusy?: boolean; draftDirty?: boolean; recoveryDraft?: unknown };
 type ReplaceChoice = 'save' | 'discard' | 'cancel';
 
 type HistoryCommands = { undo(): void; redo(): void; canUndo?: boolean; canRedo?: boolean };
@@ -205,7 +205,7 @@ export default function App() {
       }
       if (action === 'externalOpen') externalPending.current = true;
       if (sessionsRef.current.length >= 12) throw new Error('Close a document before opening another. Up to 12 documents can stay open.');
-      let opened:Awaited<ReturnType<typeof bridge.open>> & {untitled?:true;recoveryDraft?:unknown}|null;
+      let opened:Awaited<ReturnType<typeof bridge.open>> & {untitled?:true;recovered?:true;recoveryDraft?:unknown}|null;
       if(action==='importText'){
         const picked=await bridge.pickDelimitedImport();if(!picked)return;
         const controller=new AbortController();importAbort.current=controller;setImportProgress({completed:0,total:0});
@@ -386,7 +386,10 @@ export default function App() {
   const changeZoom = (zoom: number) => setViewOptions(value => ({ ...value, zoom: Math.max(50, Math.min(200, zoom)) }));
   const toggleFocus = () => setViewOptions(value => ({ ...value, focus: !value.focus }));
   // Office states the save state once, in the title bar. The status bar keeps messages and zoom.
-  const saveStatus = document?.untitled ? 'Not saved yet' : draftDirty || document?.dirty ? 'Unsaved changes' : 'Saved';
+  // A recovered document is a copy with no file behind it yet: say so where the save state
+  // lives, so Save asking for a location is expected rather than surprising.
+  const recoveredCopy = document?.recovered === true;
+  const saveStatus = recoveredCopy ? 'Recovered copy · not saved yet' : document?.untitled ? 'Not saved yet' : draftDirty || document?.dirty ? 'Unsaved changes' : 'Saved';
   const canUndo = !!document && !busy && (draftDirty || (historyState[document.key]?.undo ?? true));
   const canRedo = !!document && !busy && (draftDirty || (historyState[document.key]?.redo ?? true));
   const searchLabel = `Search (${shortcutLabel('commands')})`, searchTitle = shortcutTooltip('Search commands', 'commands');
@@ -437,7 +440,7 @@ export default function App() {
       {!showHome && document && <header className="app-titlebar">
         {/* Office's title bar: Quick Access (Save, Undo, Redo) · document name and state · Search · view tools. File, New, Open and Save as… live in the ribbon's File tab. */}
         <div className="titlebar-quick-access" role="toolbar" aria-label="Quick access">
-          <RibbonButton className="titlebar-button" icon="save" label="Save" title={busy ? "Wait for the current operation to finish." : !document.dirty && !draftDirty ? "There are no changes to save." : undefined} shortcut="save" labelHidden disabled={busy || (!document.dirty && !draftDirty)} onClick={() => void runAction('save')} />
+          <RibbonButton className="titlebar-button" icon="save" label="Save" title={busy ? "Wait for the current operation to finish." : !document.dirty && !draftDirty ? "There are no changes to save." : recoveredCopy ? "This is a recovered copy, so Save asks where to keep it; your original file is untouched." : document.untitled ? "This document has no file yet, so Save asks where to keep it." : undefined} shortcut="save" labelHidden disabled={busy || (!document.dirty && !draftDirty)} onClick={() => void runAction('save')} />
           <RibbonButton className="titlebar-button" icon="undo" label="Undo" title={!canUndo ? busy ? "Wait for the current operation to finish." : "There is nothing to undo." : undefined} shortcut="undo" labelHidden disabled={!canUndo} onClick={() => runHistory('undo')} />
           <RibbonButton className="titlebar-button" icon="redo" label="Redo" title={!canRedo ? busy ? "Wait for the current operation to finish." : "There is nothing to redo." : undefined} shortcut="redo" labelHidden disabled={!canRedo} onClick={() => runHistory('redo')} />
         </div>

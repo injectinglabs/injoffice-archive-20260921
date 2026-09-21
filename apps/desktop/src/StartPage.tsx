@@ -115,7 +115,7 @@ export default function StartPage({ recentFiles, recoveries, onRecover, onDiscar
     <main className="start-main">
       <div className="start-main-inner">
         {!!recoveries?.length && onRecover && <section className="start-recovery" aria-labelledby="start-recovery-title">
-          <div className="start-recovery-heading"><Icon name="recovery" /><div><h2 id="start-recovery-title">Document Recovery</h2><p>InjOffice kept these copies of your last edits. Recover opens an unsaved copy.</p></div></div>
+          <div className="start-recovery-heading"><Icon name="recovery" /><div><h2 id="start-recovery-title">Document Recovery</h2><p>InjOffice kept these copies of your last edits. Recover opens an unsaved copy, so Save will ask where to keep it — your original file is left untouched.</p></div></div>
           <ul>{recoveries.map(entry => <li key={entry.id}>
             <FileBadge name={entry.name} />
             <span className="start-recovery-file"><strong>{entry.name}</strong><small>Recovered · {relativeTime(entry.updatedAt)}</small></span>
