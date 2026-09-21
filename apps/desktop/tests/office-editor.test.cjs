@@ -6,6 +6,9 @@ const React = require('react');
 const { create, act } = require('react-test-renderer');
 global.IS_REACT_ACT_ENVIRONMENT = true;
 
+/** The editor's own idle-commit delay, read from the module under test. */
+let IDLE_COMMIT_MS;
+
 async function loadEditor(client) {
   const { rolldown } = await import('rolldown');
   const bundle = await rolldown({
@@ -39,6 +42,8 @@ async function loadEditor(client) {
       return require(id);
     };
     new Function('require', 'module', 'exports', output[0].code)(req, mod, mod.exports);
+    IDLE_COMMIT_MS = mod.exports.IDLE_COMMIT_MS;
+    assert.equal(typeof IDLE_COMMIT_MS, 'number');
     return mod.exports.default ?? mod.exports;
   } finally {
     await bundle.close();
@@ -197,10 +202,10 @@ test('OfficeEditor mounts with mocked wasm, reports busy, and applies a draft', 
   assert.equal(busy.includes(true), true);
   assert.equal(busy.at(-1), false);
   const textbox = view.root.findByProps({ role: 'textbox' });
+  assert.equal(view.root.findAllByProps({ className: 'office-apply' }).length, 0, 'Word has no apply step');
   await act(async () => textbox.props.onInput({ currentTarget: { textContent: 'Hello' } }));
-  const apply = view.root.findByProps({ className: 'office-apply' });
-  assert.equal(apply.props.disabled, false);
-  await act(async () => apply.props.onClick());
+  // Leaving the paragraph commits through the same engine path the Apply button used.
+  await act(async () => textbox.props.onBlur({ relatedTarget: null }));
   await until(() => changes.length === 1 && busy.at(-1) === false);
   assert.equal(changes[0], bytes);
   assert.equal(client.applied[0].payload.mutations[0].text, 'Hello');
@@ -242,7 +247,7 @@ test('OfficeEditor schedules a hidden native apply after debounce and skips whil
   await act(async () => textbox.props.onInput({ currentTarget: { textContent: 'Hello' } }));
   assert.equal(client.applied.length, 0);
   assert.equal(changes.length, 0);
-  await act(async () => { t.mock.timers.tick(79); });
+  await act(async () => { t.mock.timers.tick(IDLE_COMMIT_MS - 1); });
   assert.equal(client.applied.length, 0);
   await act(async () => { t.mock.timers.tick(1); });
   for (let count = 0; count < 50 && (changes.length === 0 || busy.at(-1) !== false); count++) {
@@ -255,7 +260,7 @@ test('OfficeEditor schedules a hidden native apply after debounce and skips whil
   const live = view.root.findByProps({ role: 'textbox' });
   await act(async () => live.props.onCompositionStart());
   await act(async () => live.props.onInput({ currentTarget: { textContent: 'Hello!' } }));
-  await act(async () => { t.mock.timers.tick(80); });
+  await act(async () => { t.mock.timers.tick(IDLE_COMMIT_MS); });
   for (let count = 0; count < 10; count++) await act(async () => Promise.resolve());
   assert.equal(client.applied.length, 1);
   await act(async () => view.unmount());
@@ -269,12 +274,12 @@ test('OfficeEditor compositionend schedules hidden apply after debounce', async 
   const textbox = view.root.findByProps({ role: 'textbox' });
   await act(async () => textbox.props.onCompositionStart());
   await act(async () => textbox.props.onInput({ currentTarget: { textContent: 'Hello' } }));
-  await act(async () => { t.mock.timers.tick(80); });
+  await act(async () => { t.mock.timers.tick(IDLE_COMMIT_MS); });
   for (let count = 0; count < 10; count++) await act(async () => Promise.resolve());
   assert.equal(nativeApplies(client).length, 0);
   await act(async () => textbox.props.onCompositionEnd({ currentTarget: { textContent: 'Hello' } }));
   assert.equal(nativeApplies(client).length, 0);
-  await act(async () => { t.mock.timers.tick(79); });
+  await act(async () => { t.mock.timers.tick(IDLE_COMMIT_MS - 1); });
   assert.equal(nativeApplies(client).length, 0);
   await act(async () => { t.mock.timers.tick(1); });
   await settleApply(changes, busy);
@@ -289,7 +294,7 @@ test('OfficeEditor hidden apply restores a non-end caret from the run prefix ran
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const textbox = view.root.findByProps({ role: 'textbox' });
   await act(async () => textbox.props.onInput({ currentTarget: { textContent: 'Hello' } }));
-  await act(async () => { t.mock.timers.tick(80); });
+  await act(async () => { t.mock.timers.tick(IDLE_COMMIT_MS); });
   await settleApply(changes, busy);
   assert.equal(nativeApplies(client)[0].payload.mutations[0].text, 'Hello');
   assert.equal(documentPreview(view).props.caretOffset, 2);
@@ -311,10 +316,31 @@ test('OfficeEditor commit applies a pending debounce once', async t => {
   await settleApply(changes, busy);
   assert.equal(nativeApplies(client).length, 1);
   assert.equal(nativeApplies(client)[0].payload.mutations[0].text, 'Hello');
-  await act(async () => { t.mock.timers.tick(80); });
+  await act(async () => { t.mock.timers.tick(IDLE_COMMIT_MS); });
   for (let count = 0; count < 10; count++) await act(async () => Promise.resolve());
   assert.equal(nativeApplies(client).length, 1);
   await act(async () => view.unmount());
+});
+
+test('OfficeEditor answers a break the paragraph cannot take with a caret notice, not a banner', async t => {
+  const client = mockClient(tinyDocument(''));
+  mockWindow();
+  const { view, changes, busy } = await mountEditor(client);
+  try {
+    t.mock.timers.enable({ apis: ['setTimeout'] });
+    await act(async () => view.root.findByProps({ role: 'textbox' }).props.onInput({ currentTarget: { textContent: 'Hello' } }));
+    // This paragraph has no paragraph.split policy: the engine refuses the break.
+    await act(async () => { await documentPreview(view).props.insertLines('Hel\nlo', 2); });
+    for (let count = 0; count < 20 && documentPreview(view).props.notice === ''; count++) await act(async () => Promise.resolve());
+    assert.match(documentPreview(view).props.notice, /paragraph/i);
+    assert.equal(view.root.findAllByProps({ className: 'office-error' }).length, 0, 'a refused break is not an error banner');
+    // The typed text is not lost: the idle commit still writes it.
+    await act(async () => { t.mock.timers.tick(IDLE_COMMIT_MS); });
+    await settleApply(changes, busy);
+    assert.equal(nativeApplies(client).at(-1).payload.mutations[0].text, 'Hello');
+  } finally {
+    await act(async () => view.unmount());
+  }
 });
 
 test('OfficeEditor arranges its controls as a Word ribbon with labelled groups, icons, and shortcut tooltips', async () => {
@@ -342,7 +368,9 @@ test('OfficeEditor arranges its controls as a Word ribbon with labelled groups, 
     assert.equal(titles.Italic, `Italic (${shortcutLabel('italic')})`);
     assert.equal(titles.Underline, `Underline (${shortcutLabel('underline')})`);
     assert.equal(titles['Find / replace'], `Find / replace (${shortcutLabel('find')})`);
-    assert.equal(view.root.findAllByProps({ className: 'office-toolbar' })[0].findAllByType('button').length, 0, 'no editing row buttons before a run is chosen');
+    assert.equal(view.root.findAllByProps({ className: 'office-toolbar' }).length, 0, 'the Apply/Cancel row is gone; edits commit themselves');
+    const notes = view.root.findAllByProps({ className: 'ribbon-note' }).map(text);
+    assert.equal(notes.includes('Select text to format'), false, 'the tab row carries no formatting scope note');
   } finally {
     await act(async () => view.unmount());
   }

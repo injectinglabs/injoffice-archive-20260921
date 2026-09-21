@@ -25,8 +25,10 @@ interface DocumentPreviewProps {
   navigation: boolean
   choose(key: string,range?:DocumentTextRange): void
   updateDraft(value: string): void
-  apply(): void
-  cancel(): void
+  /** Leave the paragraph: pending text is written through the engine, then the caret is released. */
+  commit(): void
+  /** Transient, self-clearing message shown beside the caret. */
+  notice: string
   onCompositionChange(value: boolean): void
 }
 
@@ -100,7 +102,7 @@ export default function DocumentPreview(props: DocumentPreviewProps) {
       {value.runs.map(run => {
         const key = runIdentity(run.anchor.part_name, run.id)
         const target = targets.get(key)
-        return <DocumentRun replaceImage={props.replaceImage} deleteImage={props.deleteImage} image={run.drawing?props.images[run.drawing.id]:undefined} key={key} run={{...run, properties:runAppearance(document, value, run)}} background={background} active={!!target && selected === target.key} editable={!!target} disabled={busy} draft={props.draft} textRange={props.textRange} onTextRangeChange={props.onTextRangeChange} caretOffset={props.caretOffset} joinPrevious={props.joinPrevious} insertLines={props.insertLines} activate={() => target && choose(target.key)} updateDraft={props.updateDraft} apply={props.apply} cancel={props.cancel} onCompositionChange={props.onCompositionChange} />
+        return <DocumentRun replaceImage={props.replaceImage} deleteImage={props.deleteImage} image={run.drawing?props.images[run.drawing.id]:undefined} key={key} run={{...run, properties:runAppearance(document, value, run)}} background={background} active={!!target && selected === target.key} editable={!!target} disabled={busy} draft={props.draft} textRange={props.textRange} onTextRangeChange={props.onTextRangeChange} caretOffset={props.caretOffset} joinPrevious={props.joinPrevious} insertLines={props.insertLines} activate={() => target && choose(target.key)} updateDraft={props.updateDraft} commit={props.commit} notice={props.notice} onCompositionChange={props.onCompositionChange} />
       })}
     </p>
   }
@@ -158,23 +160,33 @@ interface DocumentRunProps {
   insertLines(text: string, caret: number): void
   activate(): void
   updateDraft(value: string): void
-  apply(): void
-  cancel(): void
+  commit(): void
+  notice: string
   onCompositionChange(value: boolean): void
 }
 
-function DocumentRun({ replaceImage, deleteImage, image, run, background, active, editable, disabled, draft, textRange, onTextRangeChange, caretOffset, insertLines, joinPrevious, activate, updateDraft, apply, cancel, onCompositionChange }: DocumentRunProps) {
+function DocumentRun({ replaceImage, deleteImage, image, run, background, active, editable, disabled, draft, textRange, onTextRangeChange, caretOffset, insertLines, joinPrevious, activate, updateDraft, commit, notice, onCompositionChange }: DocumentRunProps) {
   const element = useRef<HTMLSpanElement>(null)
   const point = useRef<{ x: number; y: number } | undefined>(undefined)
   const composing = useRef(false)
   const [hint, setHint] = useState('')
+  const hintTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  // Notices belong beside the caret and disappear on their own; they never become a banner.
+  function flashHint(message: string) {
+    setHint(message)
+    if (hintTimer.current) clearTimeout(hintTimer.current)
+    hintTimer.current = setTimeout(() => setHint(''), 2000)
+  }
+  useEffect(() => () => { if (hintTimer.current) clearTimeout(hintTimer.current) }, [])
   const initialText = run.text ?? ''
   // React never owns children of the editable span. Ordinary rerenders must not reset its DOM/caret.
   useLayoutEffect(() => {
     if (!active || !element.current) return
     const node = element.current
     node.textContent = initialText
-    node.focus({ preventScroll: true })
+    // A commit that lands while the user is in the ribbon must not pull the caret back.
+    const focused = window.document.activeElement as HTMLElement | null
+    if (!focused || focused === window.document.body || node.contains(focused) || focused.closest?.('.office-document-canvas')) node.focus({ preventScroll: true })
     const selection = window.getSelection()
     const range = window.document.createRange()
     const clicked = point.current ? window.document.caretRangeFromPoint(point.current.x, point.current.y) : null
@@ -184,7 +196,6 @@ function DocumentRun({ replaceImage, deleteImage, image, run, background, active
     } else if (textRange && !textRange.unsupported && !textRange.paragraph_id && node.firstChild) { range.setStart(node.firstChild,Math.min(textRange.start_utf16,node.textContent?.length??0));range.setEnd(node.firstChild,Math.min(textRange.end_utf16,node.textContent?.length??0)) } else if (caretOffset !== undefined && node.firstChild) { range.setStart(node.firstChild, Math.min(caretOffset, node.textContent?.length ?? 0)); range.collapse(true) } else { range.selectNodeContents(node); range.collapse(false) }
     selection?.removeAllRanges(); selection?.addRange(range)
     point.current = undefined
-    setHint('')
   }, [active, initialText])
   // Cancel / accepted values may update while active, but normal input already equals draft.
   useLayoutEffect(() => {
@@ -241,17 +252,23 @@ function DocumentRun({ replaceImage, deleteImage, image, run, background, active
     const selection=window.getSelection()
     if(selection?.rangeCount&&!selection.isCollapsed&&selection.getRangeAt(0).intersectsNode(event.currentTarget))return
     point.current = { x: event.clientX, y: event.clientY }; activate()
-  }} onKeyDown={event => { if (!disabled && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); point.current = undefined; activate() } }}>{text || <span className="office-empty-run">Start typing…</span>}</span>
-  return <><span ref={element} className="office-inline-input" data-docx-run={run.id} data-hyperlink={run.hyperlink?true:undefined} title={run.hyperlink?.url} contentEditable={disabled ? false : 'plaintext-only'} suppressContentEditableWarning role="textbox" aria-label="Edit document text" aria-multiline="false" data-placeholder="Start typing…" style={style} spellCheck onInput={event => updateDraft(event.currentTarget.textContent ?? '')}
+  }} onKeyDown={event => { if (!disabled && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); point.current = undefined; activate() } }}>{text || <span className="office-empty-run" />}</span>
+  return <><span ref={element} className="office-inline-input" data-docx-run={run.id} data-hyperlink={run.hyperlink?true:undefined} title={run.hyperlink?.url} contentEditable={disabled ? false : 'plaintext-only'} suppressContentEditableWarning role="textbox" aria-label="Edit document text" aria-multiline="false" style={style} spellCheck onInput={event => updateDraft(event.currentTarget.textContent ?? '')}
+    onBlur={event => {
+      // Focus moving to another control (a run, the ribbon) is committed by that control's own
+      // path; a click on nothing in particular has no other owner, so commit it here.
+      if (composing.current || event.relatedTarget) return
+      commit()
+    }}
     onCompositionStart={() => { composing.current = true; onCompositionChange(true) }}
     onCompositionEnd={event => { composing.current = false; updateDraft(event.currentTarget.textContent ?? ''); onCompositionChange(false) }}
-    onCut={event=>{const selection=window.getSelection();if(selection?.rangeCount&&!element.current?.contains(selection.getRangeAt(0).commonAncestorContainer)){event.preventDefault();setHint('Select text inside one segment to cut.')}}}
-    onBeforeInput={event => { const selection=window.getSelection();if(selection?.rangeCount&&!element.current?.contains(selection.getRangeAt(0).commonAncestorContainer)){event.preventDefault();setHint('Select text inside one segment to type. Formatting can span segments.');return} const input = event.nativeEvent as InputEvent; if (input.inputType === 'insertParagraph' || input.inputType === 'insertLineBreak') { event.preventDefault(); setHint('Paragraph breaks are not supported in this text segment.') } }}
+    onCut={event=>{const selection=window.getSelection();if(selection?.rangeCount&&!element.current?.contains(selection.getRangeAt(0).commonAncestorContainer)){event.preventDefault();flashHint('Select text inside one segment to cut.')}}}
+    onBeforeInput={event => { const selection=window.getSelection();if(selection?.rangeCount&&!element.current?.contains(selection.getRangeAt(0).commonAncestorContainer)){event.preventDefault();flashHint('Select text inside one segment to type. Formatting can span segments.');return} const input = event.nativeEvent as InputEvent; if (input.inputType === 'insertParagraph' || input.inputType === 'insertLineBreak') { event.preventDefault(); flashHint('This paragraph cannot be split here yet.') } }}
     onPaste={event => {
       event.preventDefault()
       const text = event.clipboardData.getData('text/plain')
       if (/[\r\n]/.test(text)) { insertParagraphText(text); return }
-      if (/[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(text)) { setHint('This text contains unsupported control characters.'); return }
+      if (/[\x00-\x08\x0b\x0c\x0e-\x1f]/.test(text)) { flashHint('This text contains unsupported control characters.'); return }
       // Insert a text node into the active selection; clipboard HTML is never interpreted.
       const selection = window.getSelection()
       if (!selection?.rangeCount || !element.current) return
@@ -261,9 +278,9 @@ function DocumentRun({ replaceImage, deleteImage, image, run, background, active
       const node = window.document.createTextNode(text)
       range.insertNode(node); range.setStartAfter(node); range.collapse(true)
       selection.removeAllRanges(); selection.addRange(range)
-      updateDraft(element.current.textContent ?? ''); setHint('')
+      updateDraft(element.current.textContent ?? '')
     }}
-    onDrop={event => { event.preventDefault(); setHint('Use paste to insert plain text.') }}
+    onDrop={event => { event.preventDefault(); flashHint('Use paste to insert plain text.') }}
     onKeyDown={event => {
       if (composing.current || event.nativeEvent.isComposing) return
       if (event.key === 'Backspace') {
@@ -273,7 +290,8 @@ function DocumentRun({ replaceImage, deleteImage, image, run, background, active
           if (node.contains(range.commonAncestorContainer)) { const before = range.cloneRange(); before.selectNodeContents(node); before.setEnd(range.startContainer, range.startOffset); if (!before.toString()) { event.preventDefault(); joinPrevious(); return } }
         }
       }
-      if (event.key === 'Escape') { event.preventDefault(); cancel() }
-      else if (event.key === 'Enter') { event.preventDefault(); if (event.ctrlKey || event.metaKey) apply(); else insertParagraphText('\n') }
-    }} />{hint && <span className="office-inline-hint" role="status">{hint}</span>}</>
+      // Esc leaves the paragraph (Undo, not Esc, is the way back); Enter commits and splits.
+      if (event.key === 'Escape') { event.preventDefault(); commit() }
+      else if (event.key === 'Enter') { event.preventDefault(); if (event.ctrlKey || event.metaKey) commit(); else insertParagraphText('\n') }
+    }} />{(hint || notice) && <span className="office-hint-anchor" contentEditable={false}><span className="office-inline-hint" role="status">{hint || notice}</span></span>}</>
 }
