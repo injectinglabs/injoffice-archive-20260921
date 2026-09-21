@@ -13,8 +13,9 @@ function isExternal(id) {
 function adaptWorkbookMutationBatchV1(workbook, batch) {
   const operations = batch.operations ?? [];
   const cells = operations.filter(operation => String(operation.kind).startsWith('cell.'));
+  const merges = operations.filter(operation => ['range.merge', 'range.unmerge'].includes(operation.kind));
   const styles = operations.filter(operation => operation.kind === 'style.patch');
-  return { expected_revision: workbook.revision, ...(cells.length ? { cells } : {}), ...(styles.length ? { styles } : {}) };
+  return { expected_revision: workbook.revision, ...(merges.length ? { merges } : {}), ...(cells.length ? { cells } : {}), ...(styles.length ? { styles } : {}) };
 }
 
 function stubRequire(id) {
@@ -90,6 +91,10 @@ function mockClient() {
     extract: async () => structuredClone(model),
     apply: async (_bytes, _workbook, request) => {
       applied.push(request);
+      if (request.merges?.length) {
+        const merge = request.merges[0];
+        model.sheets[0].merged_ranges = merge.kind === 'range.merge' ? [{...merge.range,ref:'A1:B2',editable:false}] : [];
+      }
       const operation = request.cells?.[0];
       if (operation?.kind === 'cell.set_value') {
         model.sheets[0].cells = [{ row: operation.cell.row, column: operation.cell.column, value: { kind: 'string', text: String(operation.value) } }];
@@ -394,4 +399,26 @@ test('sheet-state notes live in the status row, not as captions over the cells',
     if (view) await act(async () => view.unmount());
     delete globalThis.__xlsxClient;
   }
+});
+
+test('Merge and Unmerge submit native range mutations, including a selected merged anchor', async () => {
+ const client=mockClient(); globalThis.__xlsxClient=client;
+ const Editor=await loadEditor(); let view;
+ try {
+  await act(async()=>{view=create(React.createElement(Editor,{name:'Merge.xlsx',bytes:new Uint8Array([1]),onChange:()=>{}}));});
+  await until(()=>view.root.findAllByProps({'aria-label':'Cell or range address'}).length>0);
+  const location=()=>view.root.findByProps({'aria-label':'Cell or range address'});
+  await act(async()=>location().props.onChange({target:{value:'A1:B2'}}));
+  await act(async()=>location().parent.props.onSubmit({preventDefault(){}}));
+  const button=label=>view.root.findAllByType('button').find(node=>node.props['aria-label']===label);
+  assert.equal(button('Merge cells').props.disabled,false);
+  await act(async()=>button('Merge cells').props.onClick());
+  await until(()=>client.applied.length===1);
+  assert.equal(client.applied[0].merges[0].kind,'range.merge');
+  assert.equal(button('Unmerge cells').props.disabled,false);
+  await act(async()=>button('Unmerge cells').props.onClick());
+  await until(()=>client.applied.length===2);
+  assert.deepEqual(client.applied[1].merges[0].range,{row:0,column:0,end_row:1,end_column:1});
+  assert.equal(client.applied[1].merges[0].kind,'range.unmerge');
+ } finally {if(view)await act(async()=>view.unmount());delete globalThis.__xlsxClient;}
 });
