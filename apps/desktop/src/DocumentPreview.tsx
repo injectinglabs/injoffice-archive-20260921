@@ -346,7 +346,7 @@ function DocumentRun({ fill, caretPoint, replaceImage, deleteImage, image, run, 
     onCompositionStart={() => { composing.current = true; onCompositionChange(true) }}
     onCompositionEnd={event => { composing.current = false; updateDraft(event.currentTarget.textContent ?? ''); onCompositionChange(false) }}
     onCut={event=>{const selection=window.getSelection();if(selection?.rangeCount&&!element.current?.contains(selection.getRangeAt(0).commonAncestorContainer)){event.preventDefault();flashHint('Select text inside one segment to cut.')}}}
-    onBeforeInput={event => { const selection=window.getSelection();if(selection?.rangeCount&&!element.current?.contains(selection.getRangeAt(0).commonAncestorContainer)){event.preventDefault();flashHint('Select text inside one segment to type. Formatting can span segments.');return} const input = event.nativeEvent as InputEvent; if (input.inputType === 'insertParagraph' || input.inputType === 'insertLineBreak') { event.preventDefault(); flashHint('This paragraph cannot be split here yet.') } }}
+    onBeforeInput={event => { const selection=window.getSelection();if(selection?.rangeCount&&!element.current?.contains(selection.getRangeAt(0).commonAncestorContainer)){event.preventDefault();flashHint('Select text inside one segment to type. Formatting can span segments.');return} const input = event.nativeEvent as InputEvent; if (input.inputType === 'insertParagraph') { event.preventDefault(); if (!composing.current) insertParagraphText('\n') } else if (input.inputType === 'insertLineBreak') { event.preventDefault(); flashHint('Line breaks (Shift+Enter) are not supported by the DOCX engine yet. Use Enter for a new paragraph.') } }}
     onPaste={event => {
       event.preventDefault()
       const text = event.clipboardData.getData('text/plain')
@@ -375,6 +375,6 @@ function DocumentRun({ fill, caretPoint, replaceImage, deleteImage, image, run, 
       }
       // Esc leaves the paragraph (Undo, not Esc, is the way back); Enter commits and splits.
       if (event.key === 'Escape') { event.preventDefault(); commit() }
-      else if (event.key === 'Enter') { event.preventDefault(); if (event.ctrlKey || event.metaKey) commit(); else insertParagraphText('\n') }
+      else if (event.key === 'Enter') { event.preventDefault(); if (event.ctrlKey || event.metaKey) commit(); else if (event.shiftKey) flashHint('Line breaks (Shift+Enter) are not supported by the DOCX engine yet. Use Enter for a new paragraph.'); else insertParagraphText('\n') }
     }} />{(hint || notice) && <span className="office-hint-anchor" contentEditable={false}><span className="office-inline-hint" role="status">{hint || notice}</span></span>}</>
 }
