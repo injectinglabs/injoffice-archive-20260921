@@ -9,12 +9,16 @@
 .presentation-editor .presentation-primary { color: var(--accent-text); background: var(--accent-fill); border-color: var(--accent-fill); }
 .presentation-editor .presentation-primary:hover:enabled { background: var(--accent-hover); }
 .presentation-layout { flex: 1; min-height: 0; display: flex; }
-.presentation-thumbnails { flex: 0 0 190px; padding: 17px 11px; overflow: auto; background: var(--surface-muted); border-right: 1px solid var(--border); }
+.presentation-thumbnails { flex: 0 0 190px; padding: 14px 10px; overflow-x: hidden; overflow-y: auto; background: var(--surface-muted); border-right: 1px solid var(--border); }
 .presentation-rail-title { display: flex; justify-content: space-between; align-items: center; padding: 0 8px 17px; font-size: 12px; font-weight: 600; }
 .presentation-rail-title > span { color: var(--text-muted); font-size: 11px; font-weight: 400; }
-.presentation-thumbnails .presentation-thumbnail { display: flex; align-items: flex-start; gap: 8px; width: 100%; border: 0; background: none; padding: 6px 0 12px; text-align: left; }
-.presentation-slide-number { font-size: 10px; min-width: 12px; padding-top: 5px; color: var(--text-muted); }
-.presentation-thumb-stage { border: 1px solid var(--document-border); background: var(--document-surface); pointer-events: none; }
+/* PowerPoint's slide rail: number on the left, thumbnail filling the rest of the pane. */
+.presentation-editor .presentation-thumbnails .presentation-thumbnail { display: grid; grid-template-columns: 16px minmax(0, 1fr); align-items: start; gap: 8px; width: 100%; box-sizing: border-box; border: 0; border-radius: 0; background: none; padding: 5px 0 11px; text-align: left; }
+.presentation-editor .presentation-thumbnails .presentation-thumbnail:hover:enabled { background: none; }
+.presentation-editor .presentation-thumbnails .presentation-thumbnail:hover:enabled .presentation-thumb-stage { border-color: var(--accent-border); }
+.presentation-slide-number { font-size: 11px; line-height: 1.2; padding-top: 3px; text-align: right; color: var(--text-muted); }
+/* The stage takes its width from the pane and its height from the deck aspect ratio, so no thumbnail is ever clipped. */
+.presentation-thumb-stage { width: 100%; box-sizing: border-box; overflow: hidden; border: 1px solid var(--document-border); background: var(--document-surface); pointer-events: none; }
 .presentation-thumbnail[aria-current="page"] .presentation-thumb-stage { outline: 2px solid var(--accent); outline-offset: 2px; }
 .presentation-thumbnail[aria-current="page"] .presentation-slide-number { color: var(--accent); font-weight: bold; }
 .presentation-workspace { flex: 1; min-width: 0; overflow: auto; padding: 0 0 28px; }
@@ -42,7 +46,10 @@
 .presentation-fidelity p { margin: 10px 0; }
 .presentation-fidelity ul { padding-left: 17px; }
 .presentation-inspector { flex: 0 0 244px; overflow: auto; border-left: 1px solid var(--border); background: var(--surface); padding: 19px 16px; }
-.presentation-inspector h2 { margin: 0 0 16px; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.presentation-inspector-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin: 0 0 16px; }
+.presentation-inspector h2 { margin: 0; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.presentation-editor .presentation-pane-close { border: 0; border-radius: 4px; background: none; padding: 0 6px; font-size: 17px; line-height: 1.2; color: var(--text-muted); }
+.presentation-editor .presentation-pane-close:hover:enabled { background: var(--hover); border-color: transparent; }
 .presentation-inspector h3 { margin: 9px 0 0; font-size: 11px; font-weight: 600; color: var(--text-muted); }
 .presentation-inspector-tabs { display: flex; gap: 7px; margin: 0 0 16px; }
 .presentation-inspector-tabs button { border: 0; background: var(--surface-muted); padding: 6px 12px; font-size: 12px; }
@@ -92,8 +99,8 @@
 .presentation-background-control { display: flex; align-items: center; gap: 6px; color: var(--text-muted); font-size: 11px; }
 .presentation-background-control select { padding: 5px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: var(--text); }
 
-.presentation-arrange { border-bottom: 1px solid var(--border); padding-bottom: 14px; margin-bottom: 16px; }
-.presentation-arrange summary { cursor: pointer; font-weight: 600; color: var(--accent); }
+.presentation-arrange { border-top: 1px solid var(--border); padding-top: 15px; margin-top: 18px; }
+.presentation-arrange h3 { margin: 0 0 8px; font-size: 11px; font-weight: 600; color: var(--text-muted); }
 .presentation-arrange-list { max-height: 180px; overflow: auto; }
 .presentation-arrange-list label { display: flex; align-items: center; gap: 8px; padding: 5px 0; }
 .presentation-arrange-list input { width: auto; }

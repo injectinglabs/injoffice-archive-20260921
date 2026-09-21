@@ -48,6 +48,8 @@ export default function PresentationEditor({ name, bytes, onChange, onBusyChange
   const [error, setError] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [ribbonTab, setRibbonTab] = useState('Home');
+  // Office's Format pane: closed until an object is selected or Format is pressed.
+  const [paneOpen, setPaneOpen] = useState(false);
   const deleteTrigger = useRef<HTMLButtonElement>(null);
   const [undo, setUndo] = useState<Snapshot[]>([]); const [redo, setRedo] = useState<Snapshot[]>([]);
   const undoRef = useRef<Snapshot[]>([]); const redoRef = useRef<Snapshot[]>([]);
@@ -92,6 +94,11 @@ export default function PresentationEditor({ name, bytes, onChange, onBusyChange
   const paragraphs = draft?.kind === 'text' ? draft.paragraphs : text?.paragraphs;
   const selectedParagraph = paragraphs?.[segment.paragraph]; const run = selectedParagraph?.runs[segment.run];
   const shapeValue = draft?.kind === 'shape' ? draft.shape : shape?.autoShape;
+  const hasSelection = !!selectedItem || arrangeKeys.length > 1;
+  // Selecting an object opens the pane; clearing the selection closes it again.
+  // A manual toggle in between is kept until the selection changes.
+  useEffect(() => { setPaneOpen(hasSelection); }, [hasSelection]);
+  const arrangeable = snapshot ? arrangeTargets(snapshot.deck, index) : [];
   function choose(key: string, additive = false) {
     if (busyRef.current || draftRef.current || confirmDelete) return;
     if (additive && current.current) {
@@ -253,7 +260,11 @@ export default function PresentationEditor({ name, bytes, onChange, onBusyChange
       </> },
       { id: 'font', label: 'Font', children: <PresentationTextToolbar section="font" run={run} align={selectedParagraph?.align} disabled={busy || confirmDelete || !text || (!!draft && draft.kind !== 'text')} onRunChange={patch => textPatch(patch)} onAlignChange={align => textPatch({}, align)} /> },
       { id: 'paragraph', label: 'Paragraph', children: <PresentationTextToolbar section="paragraph" run={run} align={selectedParagraph?.align} disabled={busy || confirmDelete || !text || (!!draft && draft.kind !== 'text')} onRunChange={patch => textPatch(patch)} onAlignChange={align => textPatch({}, align)} /> },
-      { id: 'drawing', label: 'Drawing', children: <RibbonButton icon="deleteObject" label="Delete object" disabled={blocked || !selectedItem || selectedItem.grouped || (!text && !shape && !geometryTarget(snapshot!.deck, selected))} onClick={deleteObject} /> },
+      { id: 'drawing', label: 'Drawing', children: <>
+        <RibbonButton icon="align" label="Arrange objects" title="Align or space the objects selected on this slide" disabled={blocked || arrangeable.length < 2} aria-expanded={paneOpen} onClick={() => setPaneOpen(true)} />
+        <RibbonButton icon="sidebar" label="Format" title="Show or hide the Format pane for the selected object" disabled={!snapshot} aria-pressed={paneOpen} onClick={() => setPaneOpen(!paneOpen)} />
+        <RibbonButton icon="deleteObject" label="Delete object" disabled={blocked || !selectedItem || selectedItem.grouped || (!text && !shape && !geometryTarget(snapshot!.deck, selected))} onClick={deleteObject} />
+      </> },
     ] },
     { id: 'Insert', label: 'Insert', groups: [
       { id: 'tables', label: 'Tables', children: <RibbonButton icon="table" label="Table" disabled={blocked || !slide} aria-expanded={tableInsertOpen} onClick={() => setTableInsertOpen(!tableInsertOpen)} /> },
@@ -281,16 +292,18 @@ export default function PresentationEditor({ name, bytes, onChange, onBusyChange
     </div>}
     {error && <div className="presentation-error" role="alert"><span>{error}</span><button aria-label="Dismiss presentation error" onClick={() => setError('')}>×</button></div>}
     {!snapshot ? <div className="presentation-loading" role="status">{busy ? 'Opening presentation…' : 'This presentation could not be opened.'}</div> : <div className="presentation-layout">
-      {!viewOptions?.focus && <nav className="presentation-thumbnails" aria-label="Slides"><div className="presentation-rail-title">Slides <span>{snapshot.deck.slides.length}</span></div>{snapshot.deck.slides.map((item, i) => <button key={item.id} className="presentation-thumbnail" disabled={blocked} aria-label={`Show slide ${i + 1}`} aria-current={index === i ? 'page' : undefined} onClick={() => selectSlide(i)}><span className="presentation-slide-number">{i + 1}</span><div className="presentation-thumb-stage"><SlideCanvas deck={snapshot.deck} slide={item} scale={148 / (snapshot.deck.size.cx / EMU_PER_PIXEL)} thumbnail /></div></button>)}</nav>}
+      {!viewOptions?.focus && <nav className="presentation-thumbnails" aria-label="Slides"><div className="presentation-rail-title">Slides <span>{snapshot.deck.slides.length}</span></div>{snapshot.deck.slides.map((item, i) => <SlideThumbnail key={item.id} deck={snapshot.deck} slide={item} number={i + 1} current={index === i} disabled={blocked} onSelect={() => selectSlide(i)} />)}</nav>}
       <div className="presentation-workspace" ref={workspace} onContextMenu={event => { selectObjectAt(event); menu.open(event); }}>
         <div className="presentation-canvas-label"><strong>Slide {index + 1}</strong><span>Positioned preview · text wrapping may differ in PowerPoint</span></div>
         <div className="presentation-canvas-scroll">{slide && <SlideCanvas deck={snapshot.deck} slide={slide} scale={scale} selected={selected} selectedKeys={arrangeKeys} onSelect={choose} disabled={blocked} draft={draft} onGeometry={geometryPatch} selectedCell={cellSelection} onCellSelect={chooseCell} onGestureChange={value => { dragging.current = value; }} />}</div>
         {slide && <details className="presentation-fidelity"><summary>Preview and editing limits</summary><p>Exact text and supported shapes can be edited. Images use embedded previews when available. Unsupported content stays in the file and appears as a placeholder. Slide commands can be refused for notes, comments, links, sections, or other relationships that cannot be changed safely.</p>{slide.compatibility.diagnostics.length > 0 && <ul>{slide.compatibility.diagnostics.slice(0, 10).map((diagnostic, i) => <li key={i}>{diagnostic.message}</li>)}</ul>}</details>}
       </div>
-      <aside className="presentation-inspector" aria-label="Selected object">
-        <SlideArrangePanel elements={arrangeTargets(snapshot.deck,index)} keys={arrangeKeys} disabled={blocked} onToggle={key => choose(key,true)} onArrange={arrange} />
+      {paneOpen && <aside className="presentation-inspector" aria-label="Format">
+        <div className="presentation-inspector-header">
+          <h2>{selectedItem?.element.name || (selectedItem ? selectedItem.element.kind : arrangeKeys.length > 1 ? `${arrangeKeys.length} objects selected` : 'Format')}</h2>
+          <button className="presentation-pane-close" aria-label="Close the Format pane" title="Close the Format pane" onClick={() => setPaneOpen(false)}>×</button>
+        </div>
         {arrangeKeys.length > 1 ? <p className="presentation-help">Choose a single object to edit its content or appearance.</p> : <>
-        <h2>{selectedItem?.element.name || (selectedItem ? selectedItem.element.kind : 'Select an object')}</h2>
         {!selectedItem ? <p className="presentation-help">Choose text or a shape on the slide to edit it.</p> : <>
           <div className="presentation-inspector-tabs">{rotationTarget(snapshot.deck, selected) && <button aria-pressed={panel === 'rotation'} disabled={!!draft || busy} onClick={() => setPanel('rotation')}>Rotation</button>}{table && <button aria-pressed={panel === 'table'} disabled={!!draft || busy} onClick={() => setPanel('table')}>Cell</button>}{snapshot && geometryTarget(snapshot.deck, selected) && <button aria-pressed={panel === 'position'} disabled={!!draft || busy} onClick={() => setPanel('position')}>Position</button>}{text && <button aria-pressed={panel === 'text'} disabled={!!draft || busy} onClick={() => setPanel('text')}>Text</button>}{shape && <button aria-pressed={panel === 'shape'} disabled={!!draft || busy} onClick={() => setPanel('shape')}>Shape</button>}</div>
           {!text && !shape && !geometryTarget(snapshot.deck, selected) && <p className="presentation-help">This object is preserved in the original file. Editing is not available for its current format.</p>}
@@ -334,7 +347,8 @@ export default function PresentationEditor({ name, bytes, onChange, onBusyChange
           </fieldset>}
         </>}
         </>}
-      </aside>
+        {arrangeable.length > 1 && <SlideArrangePanel elements={arrangeable} keys={arrangeKeys} disabled={blocked} onToggle={key => choose(key,true)} onArrange={arrange} />}
+      </aside>}
     </div>}
     {menu.anchor && snapshot && <ContextMenu anchor={menu.anchor} label="Slide" onClose={menu.close} items={presentationContextMenu({ object: !!selectedItem && !selectedItem.grouped && (!!text || !!shape || !!geometryTarget(snapshot.deck, selected)), slide: !!slide, disabled: blocked, canDeleteSlide: snapshot.deck.slides.length > 1, onDeleteObject: deleteObject, onNewSlide: () => insert('slide'), onDuplicateSlide: () => structure('duplicate'), onDeleteSlide: () => setConfirmDelete(true) })} />}
     {confirmDelete &&<div className="presentation-modal"><section role="alertdialog" aria-modal="true" aria-labelledby="presentation-delete-title" onKeyDown={event => {
@@ -342,6 +356,30 @@ export default function PresentationEditor({ name, bytes, onChange, onBusyChange
       if (event.key === 'Tab') { const buttons = Array.from(event.currentTarget.querySelectorAll('button')); const next = event.shiftKey ? buttons[0] : buttons.at(-1); if (document.activeElement === next) { event.preventDefault(); (event.shiftKey ? buttons.at(-1) : buttons[0])?.focus(); } }
     }}><h2 id="presentation-delete-title">Delete slide {index + 1}?</h2><p>You can undo this change before closing the presentation.</p><div><button autoFocus onClick={() => { setConfirmDelete(false); deleteTrigger.current?.focus(); }}>Cancel</button><button className="presentation-danger" onClick={() => { setConfirmDelete(false); structure('delete'); }}>Delete slide</button></div></section></div>}
   </div>;
+}
+
+/**
+ * One slide in the rail, laid out like PowerPoint: the number sits to the left of
+ * the thumbnail and the stage takes the rest of the pane. The stage sizes itself
+ * (`width: 100%` + the deck's `aspect-ratio`), so the thumbnail can never overflow
+ * the pane; the painted slide is then scaled to the measured content box.
+ */
+function SlideThumbnail({ deck, slide, number, current, disabled, onSelect }: { deck: NativePptxDeck; slide: NativeSlide; number: number; current: boolean; disabled: boolean; onSelect(): void }) {
+  const stage = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(0);
+  useEffect(() => {
+    const node = stage.current; if (!node || typeof ResizeObserver !== 'function') return;
+    const observer = new ResizeObserver(entries => setWidth(entries[0]?.contentRect.width ?? 0));
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+  const slideWidth = deck.size.cx / EMU_PER_PIXEL;
+  return <button className="presentation-thumbnail" disabled={disabled} aria-label={`Show slide ${number}`} aria-current={current ? 'page' : undefined} onClick={onSelect}>
+    <span className="presentation-slide-number">{number}</span>
+    <div className="presentation-thumb-stage" ref={stage} style={{ aspectRatio: `${deck.size.cx} / ${deck.size.cy}` }}>
+      {width > 0 && slideWidth > 0 && <SlideCanvas deck={deck} slide={slide} scale={width / slideWidth} thumbnail />}
+    </div>
+  </button>;
 }
 
 function SlideCanvas({ deck, slide, scale, thumbnail = false, selected, selectedKeys = [], onSelect, disabled, draft, onGeometry, onGestureChange, selectedCell, onCellSelect }: { deck: NativePptxDeck; slide: NativeSlide; scale: number; thumbnail?: boolean; selected?: string; selectedKeys?: string[]; onSelect?(key: string, additive?: boolean): void; disabled?: boolean; draft?: Draft; onGeometry?(key: string, transform: NativeTransform): void; onGestureChange?(value: boolean): void; selectedCell?: { row: number; column: number }; onCellSelect?(key: string, row: number, column: number): void }) {
