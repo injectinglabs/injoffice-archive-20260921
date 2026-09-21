@@ -213,7 +213,7 @@ test('OS open requests remain queued while an editor is busy and preserve source
   host.emitApp('open-file', { preventDefault() { prevented = true; } }, filename);
   host.emitApp('open-file', { preventDefault() {} }, filename);
   assert.equal(prevented, true);
-  assert.equal(await host.invoke('document:next-external'), null);
+  assert.equal((await host.invoke('document:next-external')).pending, true, 'busy is distinct from an empty queue');
   host.emit('document:busy', false);
   const opened = await host.invoke('document:next-external');
   assert.equal(opened.name, 'External.docx'); assert.equal(opened.untitled, undefined);
@@ -430,4 +430,24 @@ test('theme:set requires a trusted sender and a known preference before touching
   assert.equal(await host.invoke('theme:set', 'system'), false);
   assert.equal(host.nativeTheme.themeSource, 'system');
   assert.deepEqual(host.backgrounds, ['#1e1e1e', '#e9edf2', '#e9edf2']);
+});
+
+
+test('four queued paths survive a busy editor before the final open', async t => {
+  const host = await harness(t);
+  const { createBlankDocument } = require('../electron/new-document.cjs');
+  const bytes = await createBlankDocument('docx');
+  for (let i = 1; i <= 4; i++) {
+    const filename = path.join(host.directory, `File ${i}.docx`);
+    await fs.writeFile(filename, bytes);
+    host.emitApp('open-file', { preventDefault() {} }, filename);
+  }
+  const names = [];
+  for (let i = 0; i < 3; i++) names.push((await host.invoke('document:next-external')).name);
+  host.emit('document:busy', true);
+  assert.equal((await host.invoke('document:next-external')).pending, true);
+  host.emit('document:busy', false);
+  names.push((await host.invoke('document:next-external')).name);
+  assert.deepEqual(names, ['File 1.docx', 'File 2.docx', 'File 3.docx', 'File 4.docx']);
+  assert.equal(await host.invoke('document:next-external'), null);
 });

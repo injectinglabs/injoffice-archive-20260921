@@ -7,6 +7,19 @@ import { canFormatParagraphRange, paragraphAppearance, paragraphListLabels, runA
 import { editableDocxRuns } from '../../playground/src/docxRoundTrip'
 import { nativeDocxParagraphText, nativeDocxRunText } from '../../playground/src/docsNativePreview'
 
+/** Each hard break starts a fresh logical page, even at the end of the document.
+ * Natural overflow is measured separately within each flowing segment. */
+export function flowingPageMetrics(height: number, pageHeight: number, scrolled: number, breaks: number[]) {
+  let pages = 0, current = 1, start = 0;
+  for (const end of [...breaks, height]) {
+    const count = Math.max(1, Math.ceil((end - start) / pageHeight - .02));
+    if (scrolled >= start) current = pages + Math.min(count, Math.floor((scrolled - start) / pageHeight) + 1);
+    pages += count;
+    start = end;
+  }
+  return { page: Math.min(pages, current), pages };
+}
+
 interface DocumentPreviewProps {
   replaceImage?(id:string):void
   deleteImage(id:string):void
@@ -165,9 +178,10 @@ export default function DocumentPreview(props: DocumentPreviewProps) {
     const update=()=>{
       const height=paperNode.getBoundingClientRect().height,pageHeight=pageHeightPt*(96/72)*zoom
       if(!(pageHeight>0)||!(height>0))return
-      const pages=Math.max(1,Math.ceil(height/pageHeight-.02))
-      const scrolled=Math.max(0,canvasNode.getBoundingClientRect().top-paperNode.getBoundingClientRect().top)
-      metrics.current?.({page:Math.min(pages,Math.floor(scrolled/pageHeight)+1),pages})
+      const top=paperNode.getBoundingClientRect().top
+      const scrolled=Math.max(0,canvasNode.getBoundingClientRect().top-top)
+      const breaks=Array.from(paperNode.querySelectorAll('[data-docx-page-break]'),node=>node.getBoundingClientRect().bottom-top)
+      metrics.current?.(flowingPageMetrics(height,pageHeight,scrolled,breaks))
     }
     update()
     canvasNode.addEventListener('scroll',update,{passive:true})

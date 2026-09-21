@@ -360,7 +360,16 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle('document:discard-recovery', (event, id) => { trusted(event); if (closeAttempt) throw new Error('Workspace is closing.'); return recovery.remove(id); });
   ipcMain.handle('document:close', async (event, id) => { trusted(event); if (closeAttempt) throw new Error('Workspace is closing.'); store.get(id); await recovery.remove(id); checkpointErrors.delete(id); store.release(id); });
-  ipcMain.handle('document:next-external', event => { trusted(event); return withDialog(async () => { const filename = pendingPaths.shift(); return filename ? rememberDocument(await store.open(filename)) : null; }); });
+  ipcMain.handle('document:next-external', async event => {
+    trusted(event);
+    const opened = await withDialog(async () => {
+      const filename = pendingPaths.shift();
+      return filename ? rememberDocument(await store.open(filename)) : null;
+    });
+    // Busy editors/dialogs leave paths queued. Do not report that as an empty
+    // queue: the renderer would stop draining and silently strand the last file.
+    return opened ?? (pendingPaths.length ? { pending: true } : null);
+  });
   ipcMain.handle('document:recent', (event) => { trusted(event); return recentFiles.list(); });
   ipcMain.handle('document:remove-recent', (event, id) => { trusted(event); return recentFiles.remove(id); });
   ipcMain.handle('document:open-recent', (event, id) => {
