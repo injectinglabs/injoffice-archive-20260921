@@ -223,6 +223,14 @@
         "zero_height": { "type": "boolean" }
       }
     },
+    "autoFilter": {
+      "type": "object", "x-binding-name": "NativeWorkbookAutoFilterV1", "additionalProperties": false,
+      "description": "Worksheet AutoFilter range as authored. Criteria remain in the source XML.",
+      "required": ["ref"],
+      "properties": {
+        "ref": { "type": "string", "minLength": 2, "maxLength": 33, "pattern": "^[A-Z]{1,3}[1-9][0-9]{0,6}(?::[A-Z]{1,3}[1-9][0-9]{0,6})?$" }
+      }
+    },
     "sheetView": {
       "type": "object", "x-binding-name": "NativeWorkbookSheetViewV1", "additionalProperties": false,
       "description": "Read-only sheetView pane fact as authored (frozen counts, split twips, top-left cell). It is preview metadata, never a mutation target.",
@@ -345,6 +353,7 @@
         "part_name": { "type": "string", "minLength": 1, "maxLength": 8192 },
         "sheet_format": { "$ref": "#/$defs/sheetFormat" },
         "sheet_view": { "$ref": "#/$defs/sheetView" },
+        "auto_filter": { "$ref": "#/$defs/autoFilter" },
         "rows": { "type": "array", "maxItems": 1048576, "items": { "$ref": "#/$defs/rowDimension" } },
         "columns": { "type": "array", "maxItems": 16384, "items": { "$ref": "#/$defs/columnDimension" } },
         "cells": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/cell" } },

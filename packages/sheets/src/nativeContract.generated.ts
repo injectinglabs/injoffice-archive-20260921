@@ -2,7 +2,7 @@
 // Source: schemas/xlsx-native-v1.schema.json
 
 export const XLSX_NATIVE_SCHEMA_ID = "https://schemas.injoffice.dev/xlsx/native-v1.schema.json" as const
-export const XLSX_NATIVE_SCHEMA_SHA256 = "470fe4bd0fd533f6a6fcdcd1e9c232057fe5cb4cf111503a17e6a405edbf2736" as const
+export const XLSX_NATIVE_SCHEMA_SHA256 = "0efddef4b5473f7f6cc0ee42382ac2f6891782182fe8a2cc0575ef0d3b614a08" as const
 export const XLSX_NATIVE_PROTOCOL = "injoffice.xlsx.native" as const
 export const XLSX_NATIVE_VERSION = 1 as const
 export const XLSX_NATIVE_RESOURCE_LIMITS = {
@@ -342,6 +342,18 @@ export const XLSX_NATIVE_UNSUPPORTED_CLASSIFICATIONS = {
   }
 } as const
 export const XLSX_NATIVE_OBJECT_BINDINGS = {
+  "NativeWorkbookAutoFilterV1": {
+    "schemaName": "autoFilter",
+    "properties": [
+      "ref"
+    ],
+    "required": [
+      "ref"
+    ],
+    "types": {
+      "ref": "string"
+    }
+  },
   "NativeWorkbookBorderSideV1": {
     "schemaName": "borderSide",
     "properties": [
@@ -662,6 +674,7 @@ export const XLSX_NATIVE_OBJECT_BINDINGS = {
   "NativeWorkbookSheetV1": {
     "schemaName": "sheet",
     "properties": [
+      "auto_filter",
       "cells",
       "columns",
       "editable",
@@ -689,6 +702,7 @@ export const XLSX_NATIVE_OBJECT_BINDINGS = {
       "state"
     ],
     "types": {
+      "auto_filter": "NativeWorkbookAutoFilterV1",
       "cells": "[]NativeWorkbookCellV1",
       "columns": "[]NativeWorkbookColumnDimensionV1",
       "editable": "boolean",
@@ -1766,6 +1780,23 @@ export const XLSX_NATIVE_SCHEMA = {
         }
       }
     },
+    "autoFilter": {
+      "type": "object",
+      "x-binding-name": "NativeWorkbookAutoFilterV1",
+      "additionalProperties": false,
+      "description": "Worksheet AutoFilter range as authored. Criteria remain in the source XML.",
+      "required": [
+        "ref"
+      ],
+      "properties": {
+        "ref": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 33,
+          "pattern": "^[A-Z]{1,3}[1-9][0-9]{0,6}(?::[A-Z]{1,3}[1-9][0-9]{0,6})?$"
+        }
+      }
+    },
     "sheetView": {
       "type": "object",
       "x-binding-name": "NativeWorkbookSheetViewV1",
@@ -2151,6 +2182,9 @@ export const XLSX_NATIVE_SCHEMA = {
         "sheet_view": {
           "$ref": "#/$defs/sheetView"
         },
+        "auto_filter": {
+          "$ref": "#/$defs/autoFilter"
+        },
         "rows": {
           "type": "array",
           "maxItems": 1048576,
@@ -2312,6 +2346,10 @@ export interface NativeWorkbookSheetFormatV1 {
   readonly zero_height: boolean
 }
 
+export interface NativeWorkbookAutoFilterV1 {
+  readonly ref: string
+}
+
 export interface NativeWorkbookSheetViewV1 {
   readonly pane_state: NativePaneState
   readonly frozen_rows: number
@@ -2403,6 +2441,7 @@ export interface NativeWorkbookSheetV1 {
   readonly part_name: string
   readonly sheet_format?: NativeWorkbookSheetFormatV1
   readonly sheet_view?: NativeWorkbookSheetViewV1
+  readonly auto_filter?: NativeWorkbookAutoFilterV1
   readonly rows: ReadonlyArray<NativeWorkbookRowDimensionV1>
   readonly columns: ReadonlyArray<NativeWorkbookColumnDimensionV1>
   readonly cells: ReadonlyArray<NativeWorkbookCellV1>

@@ -41,12 +41,15 @@ describe('workbook mutation protocol v1', () => {
       op('column.set_width', { column: 4, width: 12.25 }, '7'),
       op('range.merge', { range: { row: 0, column: 0, end_row: 0, end_column: 2 } }, '8'),
       op('range.unmerge', { range: { row: 0, column: 0, end_row: 0, end_column: 2 } }, '9'),
+      op('sheet.freeze', { rows: 1, columns: 0 }, '10'),
+      op('sheet.filter', { filter: { ref: 'A1:C4', column: 0, values: ['Green'], blank: false } }, '11'),
+      op('range.sort', { range: { row: 0, column: 0, end_row: 3, end_column: 2 }, key_column: 0, descending: false, header: true }, '12'),
     ])
 
     const decoded = decodeWorkbookMutationBatch(input)
     expect(decoded.ok).toBe(true)
     if (!decoded.ok) return
-    expect(decoded.value.operations.map((operation) => operation.operation_id)).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9'])
+    expect(decoded.value.operations.map((operation) => operation.operation_id)).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'])
     expect(JSON.parse(encodeWorkbookMutationBatch(decoded.value))).toEqual(input)
   })
 
@@ -225,6 +228,14 @@ it('round-trips border edges and refuses malformed edges', () => {
    if (edge === null) continue
    expect(decodeWorkbookMutationBatch(base([op('style.patch', {range,style:{border_top:edge}})])).ok).toBe(false)
  }
+})
+
+it('accepts freeze, AutoFilter and sort and refuses malformed payloads', () => {
+  expect(decodeWorkbookMutationBatch(base([op('sheet.freeze', { rows: 0, columns: 0 }, 'unfreeze')])).ok).toBe(true)
+  expect(decodeWorkbookMutationBatch(base([op('sheet.filter', { filter: null }, 'clear')])).ok).toBe(true)
+  expect(decodeWorkbookMutationBatch(base([op('sheet.freeze', { rows: -1, columns: 0 }, 'neg')])).ok).toBe(false)
+  expect(decodeWorkbookMutationBatch(base([op('sheet.filter', { filter: { ref: 'A1:B1', column: 0, values: ['Green'], blank: false } }, 'header')])).ok).toBe(false)
+  expect(decodeWorkbookMutationBatch(base([op('range.sort', { range: { row: 0, column: 0, end_row: 2, end_column: 1 }, key_column: 3, descending: false, header: true }, 'key')])).ok).toBe(false)
 })
 
 it('validates whole row and column structural edits', () => {

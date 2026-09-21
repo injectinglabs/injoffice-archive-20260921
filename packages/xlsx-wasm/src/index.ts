@@ -38,6 +38,10 @@ type XlsxNativeMergeMutationV1 = Extract<SupportedWorkbookMutation, { kind: 'ran
 
 type XlsxNativeStructureMutationV1 = Extract<SupportedWorkbookMutation, { kind: 'row.insert' | 'row.delete' | 'column.insert' | 'column.delete' }>
 
+export type XlsxNativeViewMutationV1 = Extract<SupportedWorkbookMutation, { kind: 'sheet.freeze' }>
+export type XlsxNativeFilterMutationV1 = Extract<SupportedWorkbookMutation, { kind: 'sheet.filter' }>
+export type XlsxNativeSortMutationV1 = Extract<SupportedWorkbookMutation, { kind: 'range.sort' }>
+
 /** Strict JSON shape consumed by Go's NativeWorkbookMutationTransactionV1. */
 export interface XlsxNativeMutationTransactionV1 {
   /** Inner contract CAS: rev:<the exact source package SHA-256 digest>. */
@@ -48,6 +52,9 @@ export interface XlsxNativeMutationTransactionV1 {
   readonly merges?: ReadonlyArray<XlsxNativeMergeMutationV1>
   readonly structure?: ReadonlyArray<XlsxNativeStructureMutationV1>
   readonly charts?: ReadonlyArray<XlsxNativeChartMutationV1>
+  readonly view?: ReadonlyArray<XlsxNativeViewMutationV1>
+  readonly filters?: ReadonlyArray<XlsxNativeFilterMutationV1>
+  readonly sorts?: ReadonlyArray<XlsxNativeSortMutationV1>
 }
 
 export interface XlsxWasmAssetUrls {
@@ -115,6 +122,18 @@ export function adaptWorkbookMutationBatchV1(
   if (batch.operations.some(op => op.kind === 'range.merge'  || op.kind === 'range.unmerge')) {
     if (!batch.operations.every(op => op.kind === 'range.merge' || op.kind === 'range.unmerge')) throw new NativeWasmError('UNSUPPORTED_ORDER', 'Merge batches cannot mix with cell/style/layout operations.')
     return { expected_revision: workbook.revision, merges: batch.operations as XlsxNativeMergeMutationV1[] }
+  }
+  if (batch.operations.some(op => op.kind === 'sheet.freeze')) {
+    if (!batch.operations.every(op => op.kind === 'sheet.freeze')) throw new NativeWasmError('UNSUPPORTED_ORDER', 'Freeze batches cannot mix with other operations.')
+    return { expected_revision: workbook.revision, view: batch.operations as XlsxNativeViewMutationV1[] }
+  }
+  if (batch.operations.some(op => op.kind === 'sheet.filter')) {
+    if (!batch.operations.every(op => op.kind === 'sheet.filter')) throw new NativeWasmError('UNSUPPORTED_ORDER', 'Filter batches cannot mix with other operations.')
+    return { expected_revision: workbook.revision, filters: batch.operations as XlsxNativeFilterMutationV1[] }
+  }
+  if (batch.operations.some(op => op.kind === 'range.sort')) {
+    if (!batch.operations.every(op => op.kind === 'range.sort')) throw new NativeWasmError('UNSUPPORTED_ORDER', 'Sort batches cannot mix with other operations.')
+    return { expected_revision: workbook.revision, sorts: batch.operations as XlsxNativeSortMutationV1[] }
   }
   const cells: XlsxNativeCellMutationV1[] = []
   const styles: XlsxNativeStyleMutationV1[] = []
@@ -222,7 +241,7 @@ class XlsxWasmClientImpl implements XlsxWasmClient {
 
 function validateNativeTransaction(workbook: NativeWorkbookV2, input: XlsxNativeMutationTransactionV1): XlsxNativeMutationTransactionV1 {
   if (!isRecord(input)) throw new TypeError('XLSX native transaction must be an object.')
-  rejectUnknownKeys(input, ['expected_revision', 'cells', 'styles', 'layout', 'merges', 'structure', 'charts'])
+  rejectUnknownKeys(input, ['expected_revision', 'cells', 'styles', 'layout', 'merges', 'structure', 'charts', 'view', 'filters', 'sorts'])
   if (input.expected_revision !== workbook.revision) {
     throw new NativeWasmError(
       'STALE_REVISION',
@@ -235,9 +254,15 @@ function validateNativeTransaction(workbook: NativeWorkbookV2, input: XlsxNative
   const merges = optionalArray(input.merges, 'merges')
   const structure = optionalArray(input.structure, 'structure')
   const charts = optionalArray(input.charts, 'charts')
-  const operations = [...cells, ...styles, ...layout, ...merges, ...structure, ...charts]
+  const view = optionalArray(input.view, 'view')
+  const filters = optionalArray(input.filters, 'filters')
+  const sorts = optionalArray(input.sorts, 'sorts')
+  const operations = [...cells, ...styles, ...layout, ...merges, ...structure, ...charts, ...view, ...filters, ...sorts]
   if (structure.length && operations.length !== 1) throw new TypeError('Send one structural edit per transaction.')
   if (merges.length && operations.length !== merges.length) throw new TypeError('Merge batches cannot mix with cell/style/layout/chart operations.')
+  if (view.length && operations.length !== view.length) throw new TypeError('Freeze batches cannot mix with other operations.')
+  if (filters.length && operations.length !== filters.length) throw new TypeError('Filter batches cannot mix with other operations.')
+  if (sorts.length && operations.length !== sorts.length) throw new TypeError('Sort batches cannot mix with other operations.')
   const decoded = decodeWorkbookMutationBatch({
     protocol: WORKBOOK_MUTATION_PROTOCOL,
     version: WORKBOOK_MUTATION_VERSION,
@@ -256,6 +281,18 @@ function validateNativeTransaction(workbook: NativeWorkbookV2, input: XlsxNative
   if (merges.length) {
     if (normalized.some(op => op.kind !== 'range.merge' && op.kind !== 'range.unmerge')) throw new TypeError('XLSX native merges may contain only merge/unmerge operations.')
     return { expected_revision: workbook.revision, merges: normalized as XlsxNativeMergeMutationV1[] }
+  }
+  if (view.length) {
+    if (normalized.some(op => op.kind !== 'sheet.freeze')) throw new TypeError('XLSX native view may contain only sheet.freeze operations.')
+    return { expected_revision: workbook.revision, view: normalized as XlsxNativeViewMutationV1[] }
+  }
+  if (filters.length) {
+    if (normalized.some(op => op.kind !== 'sheet.filter')) throw new TypeError('XLSX native filters may contain only sheet.filter operations.')
+    return { expected_revision: workbook.revision, filters: normalized as XlsxNativeFilterMutationV1[] }
+  }
+  if (sorts.length) {
+    if (normalized.some(op => op.kind !== 'range.sort')) throw new TypeError('XLSX native sorts may contain only range.sort operations.')
+    return { expected_revision: workbook.revision, sorts: normalized as XlsxNativeSortMutationV1[] }
   }
   const normalizedCells = normalized.slice(0, cells.length)
   const normalizedStyles = normalized.slice(cells.length, cells.length + styles.length)

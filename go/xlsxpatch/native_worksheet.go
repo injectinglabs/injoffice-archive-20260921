@@ -46,6 +46,21 @@ func (extractor *nativeWorkbookExtractor) extractWorksheet(route nativeWorkbookS
 		}
 		switch token := token.(type) {
 		case xml.StartElement:
+			if token.Name.Space == extractor.namespace && token.Name.Local == "autoFilter" {
+				if sheet.AutoFilter != nil {
+					return sheet, fmt.Errorf("worksheet has multiple autoFilter elements")
+				}
+				filter, parseErr := parseNativeAutoFilter(decoder, token)
+				if parseErr != nil {
+					return sheet, parseErr
+				}
+				if filter != nil {
+					sheet.AutoFilter = filter
+				} else if err := extractor.addUnsupported("UNMODELED_WORKSHEET_FEATURE", "worksheet-features", "sheet:"+route.id, route.part, "", "worksheet feature is preserved exactly outside the v1 native projection"); err != nil {
+					return sheet, err
+				}
+				continue
+			}
 			if token.Name.Space == extractor.namespace && token.Name.Local == "sheetViews" {
 				views, parseErr := parseNativeSheetViews(decoder, token)
 				if parseErr != nil {

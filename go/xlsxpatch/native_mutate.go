@@ -22,6 +22,9 @@ type NativeWorkbookMutationTransactionV1 struct {
 	Merges           []MergeMutation      `json:"merges,omitempty"`
 	Structure        []StructureMutation  `json:"structure,omitempty"`
 	Charts           []ChartMutation      `json:"charts,omitempty"`
+	View             []ViewMutation       `json:"view,omitempty"`
+	Filters          []FilterMutation     `json:"filters,omitempty"`
+	Sorts            []SortMutation       `json:"sorts,omitempty"`
 }
 
 // NativeWorkbookMutationResultV1 returns both the exact saved package and its
@@ -119,6 +122,15 @@ func ApplyNativeWorkbookMutationTransactionV1(original []byte, transaction Nativ
 	if len(transaction.Merges) > 0 {
 		return applyNativeMergeTransaction(original, before, transaction.Merges)
 	}
+	if len(transaction.View) > 0 {
+		return applyNativeViewTransaction(original, before, transaction.View)
+	}
+	if len(transaction.Filters) > 0 {
+		return applyNativeFilterTransaction(original, before, transaction.Filters)
+	}
+	if len(transaction.Sorts) > 0 {
+		return applyNativeSortTransaction(original, before, transaction.Sorts)
+	}
 	if err := preflightNativeWorkbookMutationTargets(before, transaction); err != nil {
 		return nil, err
 	}
@@ -201,7 +213,7 @@ func validateNativeWorkbookMutationTransaction(transaction NativeWorkbookMutatio
 	if !nativeWorkbookRevision.MatchString(transaction.ExpectedRevision) {
 		return fmt.Errorf("xlsxpatch: native mutation: expected_revision must contain a full SHA-256")
 	}
-	total := len(transaction.Cells) + len(transaction.Styles) + len(transaction.Layout) + len(transaction.Merges) + len(transaction.Structure) + len(transaction.Charts)
+	total := len(transaction.Cells) + len(transaction.Styles) + len(transaction.Layout) + len(transaction.Merges) + len(transaction.Structure) + len(transaction.Charts) + len(transaction.View) + len(transaction.Filters) + len(transaction.Sorts)
 	if total == 0 {
 		return fmt.Errorf("xlsxpatch: native mutation: empty transaction")
 	}
@@ -219,6 +231,26 @@ func validateNativeWorkbookMutationTransaction(transaction NativeWorkbookMutatio
 			return fmt.Errorf("xlsxpatch: merge batches cannot mix with cell/style/layout operations")
 		}
 		return validateMergeMutations(transaction.Merges)
+	}
+	if len(transaction.View) > 0 {
+		if total != len(transaction.View) {
+			return fmt.Errorf("xlsxpatch: freeze batches cannot mix with other operations")
+		}
+		return validateViewMutations(transaction.View)
+	}
+	if len(transaction.Filters) > 0 {
+		if total != len(transaction.Filters) {
+			return fmt.Errorf("xlsxpatch: filter batches cannot mix with other operations")
+		}
+		_, err := validateFilterMutations(transaction.Filters)
+		return err
+	}
+	if len(transaction.Sorts) > 0 {
+		if total != len(transaction.Sorts) {
+			return fmt.Errorf("xlsxpatch: sort batches cannot mix with other operations")
+		}
+		_, err := validateSortMutations(transaction.Sorts)
+		return err
 	}
 	seen := make(map[string]bool, total)
 	for _, group := range [][]string{cellOperationIDs(transaction.Cells), styleOperationIDs(transaction.Styles), layoutOperationIDs(transaction.Layout), chartOperationIDs(transaction.Charts)} {
