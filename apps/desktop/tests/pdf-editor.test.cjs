@@ -110,6 +110,16 @@ function nodeMock(element) {
   return null;
 }
 
+/** A ribbon command button, located by its visible label (RibbonButton renders it in a span). */
+function ribbonButton(renderer, label) {
+  const found = renderer.root.findAllByType('button').filter(button => {
+    const text = node => typeof node === 'string' ? node : (node.children ?? []).map(text).join('');
+    return button.props.role !== 'tab' && text(button) === label;
+  });
+  assert.equal(found.length, 1, `one ribbon button labelled ${label}`);
+  return found[0];
+}
+
 test('PdfEditor mounts, reports busy, navigates pages, and applies an add-page command', async () => {
   assert.equal(fs.existsSync(path.resolve(__dirname, '../src/pdf-editor.css')), true);
   const source = fs.readFileSync(path.resolve(__dirname, '../src/PdfEditor.tsx'), 'utf8');
@@ -165,21 +175,95 @@ test('PdfEditor mounts, reports busy, navigates pages, and applies an add-page c
       }), { createNodeMock: nodeMock });
     });
 
-    const pageNext = () => renderer.root.findByProps({ 'aria-label': 'Next PDF page' });
+    const pageNext = () => renderer.root.findByProps({ 'aria-label': 'Next page' });
     await until(() => opens === 1 && !pageNext().props.disabled);
     assert.equal(renderer.root.findByProps({ 'aria-label': 'PDF editor: Test.pdf' }) != null, true);
     assert.equal(busy.includes(true), true);
     assert.equal(busy.at(-1), false);
 
     await act(async () => pageNext().props.onClick());
-    await until(() => renders === 2 && !renderer.root.findByProps({ 'aria-label': 'Previous PDF page' }).props.disabled);
+    await until(() => renders === 2 && !renderer.root.findByProps({ 'aria-label': 'Previous page' }).props.disabled);
     assert.equal(opens, 1);
 
-    const addPage = renderer.root.findAllByType('button').find(button => button.children.includes('Add page'));
+    const addPage = ribbonButton(renderer, 'Add page');
     await act(async () => addPage.props.onClick());
     await until(() => opens === 2 && changes.length === 1 && busy.at(-1) === false);
     assert.deepEqual(applied, [{ kind: 'add-page', page: 2 }]);
     assert.equal(pageCount, 3);
+    await act(async () => renderer.unmount());
+    renderer = undefined;
+  } finally {
+    if (renderer) await act(async () => renderer.unmount());
+    delete globalThis.__pdfView;
+    delete globalThis.__inspectPdf;
+    delete globalThis.__applyPdfCommand;
+    delete global.document;
+    delete global.window;
+  }
+});
+
+test('the PDF editor uses the shared Office ribbon: tabs, icons, find toggle and an export dialog', async () => {
+  let renderer;
+  const bytes = new Uint8Array([0x25, 0x50, 0x44, 0x46]);
+  global.document = { baseURI: 'https://injoffice.invalid/' };
+  global.window = { devicePixelRatio: 1, injDesktop: { pickAsset: async () => null, exportBytes: async () => null } };
+  globalThis.__inspectPdf = async () => summary(3);
+  globalThis.__applyPdfCommand = async current => current;
+  globalThis.__pdfView = {
+    getDocument: () => ({
+      promise: Promise.resolve({
+        numPages: 3,
+        getPage: async () => ({
+          getViewport: () => ({ width: 400, height: 500, convertToPdfPoint: (x, y) => [x, y], convertToViewportPoint: (x, y) => [x, y] }),
+          getAnnotations: async () => [],
+          getTextContent: async () => ({ items: [{ str: 'Page text' }] }),
+          render: () => ({ promise: Promise.resolve(), cancel() {} }),
+        }),
+      }),
+      destroy: async () => {},
+    }),
+  };
+  try {
+    const Editor = await loadEditor();
+    await act(async () => {
+      renderer = create(React.createElement(Editor, { name: 'Test.pdf', bytes, onChange() {}, viewOptions: { zoom: 100, navigation: true, focus: false } }), { createNodeMock: nodeMock });
+    });
+    await until(() => !renderer.root.findByProps({ 'aria-label': 'Next page' }).props.disabled);
+
+    const label = node => typeof node === 'string' ? node : (node.children ?? []).map(label).join('');
+    assert.deepEqual(renderer.root.findAllByProps({ role: 'tab' }).map(label), ['Home', 'Insert', 'View'], 'Office tab strip (File comes from the workspace context)');
+    assert.deepEqual(renderer.root.findAllByProps({ role: 'group' }).map(group => group.props['aria-label']),
+      ['Tools', 'Editing', 'Text', 'Markup', 'Shapes', 'Illustrations', 'Pages', 'Arrange', 'Page Navigation', 'Export']);
+
+    // Every command button carries a glyph and a tooltip; the title-bar Quick Access owns undo/redo.
+    const commands = renderer.root.findAllByType('button').filter(button => (button.props.className ?? '').includes('ribbon-button'));
+    assert.ok(commands.length >= 15);
+    for (const button of commands) {
+      assert.equal(button.findAllByType('svg').length, 1, `${label(button) || button.props['aria-label']} has an icon`);
+      assert.ok(button.props.title, `${label(button) || button.props['aria-label']} has a tooltip`);
+    }
+    assert.deepEqual(commands.filter(button => ['Undo', 'Redo'].includes(label(button))), []);
+    assert.deepEqual(renderer.root.findAllByProps({ role: 'toolbar' }), [], 'no quick access strip inside the editor');
+    assert.equal(renderer.root.findAllByProps({ className: 'pdf-search' }).length, 0, 'the find bar is closed by default');
+
+    // Find opens the search bar with the All pages toggle; closing it puts the chrome back.
+    await act(async () => ribbonButton(renderer, 'Find').props.onClick());
+    const findBar = renderer.root.findByProps({ 'aria-label': 'Find text in this PDF' });
+    assert.equal(findBar.props.className, 'pdf-search');
+    const allPages = renderer.root.findAllByType('button').find(button => button.props['aria-label'] === 'All pages' || label(button) === 'All pages');
+    assert.equal(allPages.props['aria-pressed'], false);
+    await act(async () => allPages.props.onClick());
+    assert.equal(renderer.root.findAllByType('button').find(button => label(button) === 'All pages').props['aria-pressed'], true);
+    await act(async () => ribbonButton(renderer, 'Find').props.onClick());
+    assert.equal(renderer.root.findAllByProps({ className: 'pdf-search' }).length, 0);
+
+    // Export pages is a dialog carrying the range hint, not a permanent row.
+    assert.equal(renderer.root.findAllByType('dialog').length, 0);
+    await act(async () => ribbonButton(renderer, 'Export pages…').props.onClick());
+    const dialog = renderer.root.findByType('dialog');
+    assert.equal(dialog.props.className, 'pdf-export-dialog');
+    assert.match(label(dialog), /For example: 1-3, 5/);
+    assert.equal(renderer.root.findByProps({ 'aria-label': 'PDF pages to export' }).props.placeholder, '1');
     await act(async () => renderer.unmount());
     renderer = undefined;
   } finally {
