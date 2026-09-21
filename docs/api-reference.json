@@ -14105,6 +14105,51 @@
               "signature": "export declare function characterWidthToPixels(width: number, maximumDigitWidthPixels: number): number"
             },
             {
+              "name": "CHART_MUTATION_KINDS",
+              "kind": "const",
+              "signature": "export declare const CHART_MUTATION_KINDS: readonly ['chart.insert', 'chart.update', 'chart.delete']"
+            },
+            {
+              "name": "CHART_TYPES",
+              "kind": "const",
+              "signature": "export declare const CHART_TYPES: readonly ['column', 'bar', 'line', 'pie']"
+            },
+            {
+              "name": "ChartAnchor",
+              "kind": "type",
+              "signature": "ChartAnchor"
+            },
+            {
+              "name": "ChartDeleteMutation",
+              "kind": "type",
+              "signature": "ChartDeleteMutation"
+            },
+            {
+              "name": "ChartIdentity",
+              "kind": "type",
+              "signature": "ChartIdentity"
+            },
+            {
+              "name": "ChartInsertMutation",
+              "kind": "type",
+              "signature": "ChartInsertMutation"
+            },
+            {
+              "name": "ChartMutation",
+              "kind": "type",
+              "signature": "ChartMutation"
+            },
+            {
+              "name": "ChartTypeV1",
+              "kind": "type",
+              "signature": "ChartTypeV1"
+            },
+            {
+              "name": "ChartUpdateMutation",
+              "kind": "type",
+              "signature": "ChartUpdateMutation"
+            },
+            {
               "name": "ColumnSetWidthMutation",
               "kind": "type",
               "signature": "ColumnSetWidthMutation"
@@ -14203,6 +14248,11 @@
               "name": "decodeNativeConditionalScaleFillPreviewsV1",
               "kind": "function",
               "signature": "export declare function decodeNativeConditionalScaleFillPreviewsV1(input: unknown): NativeConditionalScaleFillPreviewV1[]"
+            },
+            {
+              "name": "decodeNativeEditableChartsV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeEditableChartsV1(value: unknown): NativeEditableChartV1[]"
             },
             {
               "name": "decodeNativeRichTextPreviewV1",
@@ -14638,6 +14688,11 @@
               "name": "NativeDrawingObjectV1",
               "kind": "type",
               "signature": "export interface NativeDrawingObjectV1"
+            },
+            {
+              "name": "NativeEditableChartV1",
+              "kind": "type",
+              "signature": "NativeEditableChartV1"
             },
             {
               "name": "NativeFormControlCaptionBoxV1",
@@ -15863,6 +15918,11 @@
               "name": "XLSX_NATIVE_VERSION",
               "kind": "const",
               "signature": "export declare const XLSX_NATIVE_VERSION: 1"
+            },
+            {
+              "name": "XlsxNativeChart",
+              "kind": "type",
+              "signature": "XlsxNativeChart"
             }
           ]
         },
@@ -15874,6 +15934,51 @@
               "name": "assertNativeWorkbookV2",
               "kind": "function",
               "signature": "export declare function assertNativeWorkbookV2(input: unknown): asserts input is NativeWorkbookV2"
+            },
+            {
+              "name": "CHART_MUTATION_KINDS",
+              "kind": "const",
+              "signature": "export declare const CHART_MUTATION_KINDS: readonly ['chart.insert', 'chart.update', 'chart.delete']"
+            },
+            {
+              "name": "CHART_TYPES",
+              "kind": "const",
+              "signature": "export declare const CHART_TYPES: readonly ['column', 'bar', 'line', 'pie']"
+            },
+            {
+              "name": "ChartAnchor",
+              "kind": "type",
+              "signature": "ChartAnchor"
+            },
+            {
+              "name": "ChartDeleteMutation",
+              "kind": "type",
+              "signature": "ChartDeleteMutation"
+            },
+            {
+              "name": "ChartIdentity",
+              "kind": "type",
+              "signature": "ChartIdentity"
+            },
+            {
+              "name": "ChartInsertMutation",
+              "kind": "type",
+              "signature": "ChartInsertMutation"
+            },
+            {
+              "name": "ChartMutation",
+              "kind": "type",
+              "signature": "ChartMutation"
+            },
+            {
+              "name": "ChartTypeV1",
+              "kind": "type",
+              "signature": "ChartTypeV1"
+            },
+            {
+              "name": "ChartUpdateMutation",
+              "kind": "type",
+              "signature": "ChartUpdateMutation"
             },
             {
               "name": "compactNativeGeneralNumberPreviewV1",
@@ -15924,6 +16029,11 @@
               "name": "decodeNativeConditionalScaleFillPreviewsV1",
               "kind": "function",
               "signature": "export declare function decodeNativeConditionalScaleFillPreviewsV1(input: unknown): NativeConditionalScaleFillPreviewV1[]"
+            },
+            {
+              "name": "decodeNativeEditableChartsV1",
+              "kind": "function",
+              "signature": "export declare function decodeNativeEditableChartsV1(value: unknown): NativeEditableChartV1[]"
             },
             {
               "name": "decodeNativeRichTextPreviewV1",
@@ -16109,6 +16219,11 @@
               "name": "NativeDrawingObjectV1",
               "kind": "type",
               "signature": "export interface NativeDrawingObjectV1"
+            },
+            {
+              "name": "NativeEditableChartV1",
+              "kind": "type",
+              "signature": "NativeEditableChartV1"
             },
             {
               "name": "NativeFormControlCaptionBoxV1",
@@ -16406,6 +16521,11 @@
               "signature": "export declare function projectNativeWorkbookV2(input: unknown): NativeWorkbookRenderModelV2"
             },
             {
+              "name": "RangeRef",
+              "kind": "type",
+              "signature": "RangeRef"
+            },
+            {
               "name": "selectNativeConditionalFillPreviewV1",
               "kind": "function",
               "signature": "export declare function selectNativeConditionalFillPreviewV1(workbook: NativeWorkbookV2, sheetId: string, objects: NativeWorkbookObjectsV1): NativeConditionalFillPreviewV1 | undefined"
@@ -16469,6 +16589,11 @@
               "name": "WorkbookMutationValidationError",
               "kind": "class",
               "signature": "export declare class WorkbookMutationValidationError extends Error"
+            },
+            {
+              "name": "XlsxNativeChart",
+              "kind": "type",
+              "signature": "XlsxNativeChart"
             }
           ]
         }
@@ -17983,6 +18108,11 @@
               "name": "XlsxNativeCellMutationV1",
               "kind": "type",
               "signature": "export type XlsxNativeCellMutationV1 = Extract<SupportedWorkbookMutation,"
+            },
+            {
+              "name": "XlsxNativeChartMutationV1",
+              "kind": "type",
+              "signature": "export type XlsxNativeChartMutationV1 = Extract<SupportedWorkbookMutation,"
             },
             {
               "name": "XlsxNativeLayoutMutationV1",
