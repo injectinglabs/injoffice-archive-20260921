@@ -72,7 +72,7 @@ function observation(validated, testCase, runner, replayIndex) {
 
 test('published manifest binds exact local fixtures, corpus expectations, schemas, and semantic digests', () => {
   const validated = validatedManifest()
-  assert.equal(validated.manifest.protocol, 'injoffice.native-office-production-e2e/v1')
+  assert.equal(validated.manifest.protocol, 'injoffice.native-office-production-e2e/v2')
   assert.equal(validated.cases.size, 9)
   assert.equal(validated.fixtures.size, 8)
   for (const testCase of validated.cases.values()) {
@@ -125,7 +125,13 @@ test('adapter request is offline, bounded, and carries verifier-owned exact byte
 
 test('manifest tamper, authority weakening, path escape, and output-digest drift fail closed', () => {
   const cases = [
+    [(candidate) => { candidate.version = 1 }, /unsupported production E2E manifest protocol\/version/],
+    [(candidate) => { candidate.baseline.commit = '0'.repeat(40) }, /manifest baseline drift/],
     [(candidate) => { candidate.authority.forbidden.pop() }, /exact mandatory no-legacy set/],
+    ...['docx', 'pptx', 'xlsx'].map((format) => [
+      (candidate) => { candidate.contracts[format].schemaSha256 = '0'.repeat(64) },
+      new RegExp(`manifest\\.contracts\\.${format} digest drift`),
+    ]),
     [(candidate) => { candidate.cases[0].expect.semantic.sha256 = '0'.repeat(64) }, /semantic\.sha256 is stale/],
     [(candidate) => { candidate.fixtures[0].path = '../escape.docx' }, /not canonical-safe|escapes/],
   ]

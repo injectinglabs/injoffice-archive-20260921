@@ -13,7 +13,7 @@ import {
 } from './verify-native-office-production-e2e.mjs'
 
 const scriptRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-export const HOST_OBSERVATION_DIR = 'testdata/native-office-production-e2e/v1/host-observations'
+export const HOST_OBSERVATION_DIR = 'testdata/native-office-production-e2e/v2/host-observations'
 export const DEFAULT_REQUEST_DIR = `${HOST_OBSERVATION_DIR}/adapter-requests`
 export const HOST_OBSERVATION_CHECKIN = `${HOST_OBSERVATION_DIR}/observations.json`
 
