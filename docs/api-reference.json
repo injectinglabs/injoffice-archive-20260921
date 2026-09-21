@@ -4984,11 +4984,6 @@
               "signature": "export interface NativeDocxParagraphPropertiesV1"
             },
             {
-              "name": "NativeDocxParagraphPropertyPatchV1",
-              "kind": "interface",
-              "signature": "export interface NativeDocxParagraphPropertyPatchV1"
-            },
-            {
               "name": "NativeDocxParagraphSliceV1",
               "kind": "interface",
               "signature": "export interface NativeDocxParagraphSliceV1"
@@ -6218,11 +6213,6 @@
               "name": "NativeDocxParagraphPropertiesV1",
               "kind": "interface",
               "signature": "export interface NativeDocxParagraphPropertiesV1"
-            },
-            {
-              "name": "NativeDocxParagraphPropertyPatchV1",
-              "kind": "interface",
-              "signature": "export interface NativeDocxParagraphPropertyPatchV1"
             },
             {
               "name": "NativeDocxParagraphV1",
