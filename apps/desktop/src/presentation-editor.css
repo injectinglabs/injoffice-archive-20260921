@@ -92,8 +92,6 @@
 .presentation-table-tracks { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-block: 10px; }
 .presentation-table-tracks button { padding: 7px; font-size: 11px; }
 
-.presentation-background-control { display: flex; align-items: center; gap: 6px; color: var(--text-muted); font-size: 11px; }
-.presentation-background-control select { padding: 5px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: var(--text); }
 
 .presentation-arrange { border-top: 1px solid var(--border); padding-top: 15px; margin-top: 18px; }
 .presentation-arrange h3 { margin: 0 0 8px; font-size: 11px; font-weight: 600; color: var(--text-muted); }
@@ -107,8 +105,6 @@
 .presentation-editor .ribbon-tabs [role=tab][aria-selected=true] { color: var(--pptx); border-bottom-color: var(--pptx); }
 .presentation-editor .ribbon-button[aria-pressed=true], .presentation-editor .ribbon-button[aria-expanded=true] { background: var(--pptx-soft); color: var(--pptx); border-color: var(--border); }
 .presentation-editor .ribbon-button:hover:not(:disabled) { background: var(--pptx-soft); border-color: var(--border); }
-.presentation-editor .ribbon .presentation-background-control { flex-direction: row; align-items: center; gap: 6px; font-size: 12px; color: var(--text); }
-.presentation-editor .ribbon .presentation-background-control .ribbon-icon { width: 17px; height: 17px; }
 
 /* Office's mini toolbar: it appears over the shape only while the caret is in its text. */
 .presentation-floating-toolbar { position: fixed; z-index: 30; display: flex; align-items: center; gap: 8px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-raised); box-shadow: 0 6px 20px var(--shadow); }
@@ -120,3 +116,6 @@
 .presentation-status-note { cursor: help; font-size: 13px; }
 .presentation-status-slide { color: var(--text-secondary); }
 .presentation-status > span:not(.presentation-status-slide, .presentation-status-note) { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.presentation-background-gallery { display: flex; align-items: flex-start; gap: 6px; }
+.presentation-editor .presentation-background-swatch { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 5px 6px; }
+.presentation-background-swatch svg { width: 44px; height: 28px; }
