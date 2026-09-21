@@ -11,16 +11,15 @@ import { canFormatParagraphRange, canFormatRun, paragraphAppearance, runAppearan
 import type { FormattingPatch, FormattingValues } from './FormattingToolbar';
 
 export type FormattingPreview = { kind: 'docx'; document: NativeDocxDocumentV1 } | { kind: 'xlsx'; workbook: NativeWorkbookV2 } | { kind: 'pptx'; deck: NativePptxDeck } | { kind: 'pdf' };
+/** All modeled paragraph locations, including table cells and non-body stories. */
+export function documentParagraphs(document: NativeDocxDocumentV1): NativeDocxParagraphV1[] {
+  return [document.body, ...document.headers, ...document.footers, ...document.notes, ...document.comment_stories]
+    .flatMap(story => story.blocks.flatMap(block => block.paragraph ? [block.paragraph] : block.table?.rows.flatMap(row => row.cells.flatMap(cell => cell.paragraphs)) ?? []));
+}
 export function docxSelection(document: NativeDocxDocumentV1, key: string) {
   const target = editableDocxRuns(document).find(value => value.key === key);
   if (!target) return;
-  const paragraphs: NativeDocxParagraphV1[] = [];
-  for (const story of [document.body, ...document.headers, ...document.footers, ...document.notes, ...document.comment_stories]) {
-    for (const block of story.blocks) {
-      if (block.paragraph) paragraphs.push(block.paragraph);
-      else for (const row of block.table?.rows ?? []) for (const cell of row.cells) paragraphs.push(...cell.paragraphs);
-    }
-  }
+  const paragraphs = documentParagraphs(document);
   const paragraph = paragraphs.find(value => value.id === target.paragraphId);
   const run = paragraph?.runs.find(value => value.id === target.runId);
   return paragraph && run ? { target, paragraph, run } : undefined;
