@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import type { FormattingPatch, FormattingValues } from './FormattingToolbar'
+import { shortcutLabel } from './shortcuts'
 import './context-menu.css'
 
 /** One entry of an Office-style context menu. Disabled entries keep their explanatory title, exactly like the toolbars. */
@@ -8,14 +9,13 @@ export type ContextMenuItem =
   | { separator: true }
 export type ContextMenuAnchor = { x: number; y: number; source: HTMLElement | null }
 
-/** Shortcut hints in the workspace's "Ctrl / ⌘ K" spelling used by the command palette details in App.tsx. */
+/** Shortcut hints spelled for this platform, like Office: ⌘X on macOS, Ctrl+X elsewhere. */
 export const SHORTCUTS = {
-  cut: 'Ctrl / ⌘ X', copy: 'Ctrl / ⌘ C', paste: 'Ctrl / ⌘ V', bold: 'Ctrl / ⌘ B', italic: 'Ctrl / ⌘ I', underline: 'Ctrl / ⌘ U',
-  find: 'Ctrl / ⌘ F', undo: 'Ctrl / ⌘ Z', redo: 'Ctrl / ⌘ Y', apply: 'Ctrl / ⌘ Enter', cancel: 'Esc',
+  cut: shortcutLabel('cut'), copy: shortcutLabel('copy'), paste: shortcutLabel('paste'), bold: shortcutLabel('bold'), italic: shortcutLabel('italic'), underline: shortcutLabel('underline'),
+  find: shortcutLabel('find'), undo: shortcutLabel('undo'), redo: shortcutLabel('redo'), apply: shortcutLabel('apply'), cancel: shortcutLabel('cancel'),
 } as const
 /** The renderer cannot read the clipboard: the host denies clipboard permissions and execCommand('paste') is unsupported. */
-export const PASTE_UNAVAILABLE = 'Paste with Ctrl / ⌘ V; menu paste is not permitted by the app clipboard policy'
-export const XLSX_STRUCTURE_UNAVAILABLE = 'Row and column insert/delete are not supported by the native XLSX transaction'
+export const PASTE_UNAVAILABLE = `Paste with ${SHORTCUTS.paste}; menu paste is not permitted by the app clipboard policy`
 export const PPTX_CLIPBOARD_UNAVAILABLE = 'Slide objects have no clipboard in this editor'
 
 const MARGIN = 8
@@ -38,6 +38,22 @@ export function nextMenuIndex(items: readonly ContextMenuItem[], current: number
   return current
 }
 function isEnabled(item: ContextMenuItem | undefined): item is Exclude<ContextMenuItem, { separator: true }> { return !!item && !('separator' in item) && !item.disabled }
+
+/**
+ * Office hides a command that this selection can never run and only greys the ones it could run in
+ * another moment (Cut/Copy/Paste). Builders therefore pass `undefined` for an entry that does not
+ * apply; this drops them and the separators that would be left leading, trailing or doubled.
+ */
+export function menuItems(entries: Array<ContextMenuItem | undefined>): ContextMenuItem[] {
+  const items: ContextMenuItem[] = []
+  for (const entry of entries) {
+    if (!entry) continue
+    if ('separator' in entry && (!items.length || 'separator' in items[items.length - 1]!)) continue
+    items.push(entry)
+  }
+  while (items.length && 'separator' in items[items.length - 1]!) items.pop()
+  return items
+}
 
 /** Anchor state for an editor: `open` goes on `onContextMenu`, the anchor renders `<ContextMenu>`. */
 export function useContextMenu() {
@@ -139,24 +155,26 @@ export interface DocumentMenuContext {
 export function documentContextMenu(context: DocumentMenuContext): ContextMenuItem[] {
   const { values, disabled } = context
   const selection = selectionState()
-  const character = disabled || !values || values.characterEditable === false
-  const alignment = (value: string, label: string): ContextMenuItem => ({ id: `align-${value}`, label, disabled: disabled || !values, checked: values?.alignment === value, run: () => context.onFormat({ alignment: value }) })
-  return [
+  // Formatting this selection can never work without values or with an uneditable run: hide those
+  // entries. `disabled` only means the workspace is busy, so those entries stay, greyed.
+  const formattable = !!values && values.characterEditable !== false
+  const alignment = (value: string, label: string): ContextMenuItem | undefined => values && ({ id: `align-${value}`, label, disabled, checked: values.alignment === value, run: () => context.onFormat({ alignment: value }) })
+  return menuItems([
     { id: 'cut', label: 'Cut', shortcut: SHORTCUTS.cut, disabled: disabled || !selection.inEditable, title: selection.inEditable ? undefined : 'Select text inside the segment you are editing to cut', run: () => command('cut') },
     { id: 'copy', label: 'Copy', shortcut: SHORTCUTS.copy, disabled: !selection.selected, title: selection.selected ? undefined : 'Select text to copy', run: () => command('copy') },
     { id: 'paste', label: 'Paste', shortcut: SHORTCUTS.paste, disabled: true, title: PASTE_UNAVAILABLE, run: () => {} },
     { separator: true },
-    { id: 'bold', label: 'Bold', shortcut: SHORTCUTS.bold, disabled: character, checked: !!values?.bold, run: () => context.onFormat({ bold: !values?.bold }) },
-    { id: 'italic', label: 'Italic', shortcut: SHORTCUTS.italic, disabled: character, checked: !!values?.italic, run: () => context.onFormat({ italic: !values?.italic }) },
-    { id: 'underline', label: 'Underline', shortcut: SHORTCUTS.underline, disabled: character, checked: !!values?.underline, run: () => context.onFormat({ underline: !values?.underline }) },
+    formattable ? { id: 'bold', label: 'Bold', shortcut: SHORTCUTS.bold, disabled, checked: !!values?.bold, run: () => context.onFormat({ bold: !values?.bold }) } : undefined,
+    formattable ? { id: 'italic', label: 'Italic', shortcut: SHORTCUTS.italic, disabled, checked: !!values?.italic, run: () => context.onFormat({ italic: !values?.italic }) } : undefined,
+    formattable ? { id: 'underline', label: 'Underline', shortcut: SHORTCUTS.underline, disabled, checked: !!values?.underline, run: () => context.onFormat({ underline: !values?.underline }) } : undefined,
     { separator: true },
     alignment('left', 'Align left'), alignment('center', 'Center'), alignment('right', 'Align right'), alignment('both', 'Justify'),
     { separator: true },
-    { id: 'hyperlink', label: 'Hyperlink…', disabled: disabled || !context.link, title: context.link ? undefined : 'Place the caret in a linkable text segment', run: () => { context.onRibbonTab('Insert'); openRibbonControl(context.anchor.source, '.office-link-control > button') } },
-    { id: 'table', label: 'Insert table…', disabled: disabled || !context.table, title: context.table ? undefined : 'Select a body paragraph to insert a table after it', run: () => { context.onRibbonTab('Insert'); openRibbonControl(context.anchor.source, '.document-insert-table > button') } },
+    context.link ? { id: 'hyperlink', label: 'Hyperlink…', disabled, run: () => { context.onRibbonTab('Insert'); openRibbonControl(context.anchor.source, '.office-link-control > button') } } : undefined,
+    context.table ? { id: 'table', label: 'Insert table…', disabled, run: () => { context.onRibbonTab('Insert'); openRibbonControl(context.anchor.source, '.document-insert-table > button') } } : undefined,
     { separator: true },
     { id: 'find', label: 'Find / replace', shortcut: SHORTCUTS.find, run: context.onFind },
-  ]
+  ])
 }
 
 /** Cell address under a right-click on the worksheet grid, read from the cell's title ("B3" or "B3 · merged …"). */
@@ -204,18 +222,17 @@ export function copyThroughGrid(grid: HTMLElement | null): boolean {
 export function spreadsheetContextMenu(context: SpreadsheetMenuContext): ContextMenuItem[] {
   const { disabled } = context
   const copy = () => copyThroughGrid(context.anchor.source)
-  const structure = (id: string, label: string): ContextMenuItem => ({ id, label, disabled: true, title: XLSX_STRUCTURE_UNAVAILABLE, run: () => {} })
-  return [
+  // Row and column insert/delete are not in the native transaction at all, so the menu leaves them
+  // out instead of offering four entries that can never run.
+  return menuItems([
     { id: 'cut', label: 'Cut', shortcut: SHORTCUTS.cut, disabled, run: () => { copy(); context.onClear() } },
     { id: 'copy', label: 'Copy', shortcut: SHORTCUTS.copy, disabled: !context.anchor.source, run: copy },
     { id: 'paste', label: 'Paste', shortcut: SHORTCUTS.paste, disabled: true, title: PASTE_UNAVAILABLE, run: () => {} },
     { id: 'clear', label: 'Clear contents', shortcut: 'Delete', disabled, run: context.onClear },
     { separator: true },
-    structure('row-insert', 'Insert rows'), structure('row-delete', 'Delete rows'), structure('column-insert', 'Insert columns'), structure('column-delete', 'Delete columns'),
-    { separator: true },
     { id: 'row-height', label: 'Row height…', disabled, run: () => revealToolbarField(context.anchor.source, 'Cell size', '[aria-label="Row height in points"]') },
     { id: 'column-width', label: 'Column width…', disabled, run: () => revealToolbarField(context.anchor.source, 'Cell size', '[aria-label="Column width in characters"]') },
-  ]
+  ])
 }
 
 /** Right-click on an unselected slide object selects it first, like a left click would. */
@@ -237,12 +254,12 @@ export interface PresentationMenuContext {
 export function presentationContextMenu(context: PresentationMenuContext): ContextMenuItem[] {
   const { disabled } = context
   const clipboard = (id: string, label: string, shortcut: string, title: string): ContextMenuItem => ({ id, label, shortcut, disabled: true, title, run: () => {} })
-  return [
+  return menuItems([
     clipboard('cut', 'Cut', SHORTCUTS.cut, PPTX_CLIPBOARD_UNAVAILABLE), clipboard('copy', 'Copy', SHORTCUTS.copy, PPTX_CLIPBOARD_UNAVAILABLE), clipboard('paste', 'Paste', SHORTCUTS.paste, PASTE_UNAVAILABLE),
-    { id: 'delete-object', label: 'Delete object', disabled: disabled || !context.object, title: context.object ? undefined : 'Select an editable text box, shape or picture', run: context.onDeleteObject },
+    context.object ? { id: 'delete-object', label: 'Delete object', disabled, run: context.onDeleteObject } : undefined,
     { separator: true },
-    { id: 'new-slide', label: 'New slide', disabled: disabled || !context.slide, run: context.onNewSlide },
-    { id: 'duplicate-slide', label: 'Duplicate slide', disabled: disabled || !context.slide, run: context.onDuplicateSlide },
-    { id: 'delete-slide', label: 'Delete slide', disabled: disabled || !context.canDeleteSlide, title: context.canDeleteSlide ? undefined : 'A presentation keeps at least one slide', run: context.onDeleteSlide },
-  ]
+    context.slide ? { id: 'new-slide', label: 'New slide', disabled, run: context.onNewSlide } : undefined,
+    context.slide ? { id: 'duplicate-slide', label: 'Duplicate slide', disabled, run: context.onDuplicateSlide } : undefined,
+    context.canDeleteSlide ? { id: 'delete-slide', label: 'Delete slide', disabled, run: context.onDeleteSlide } : undefined,
+  ])
 }
