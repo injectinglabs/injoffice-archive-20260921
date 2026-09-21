@@ -11,6 +11,16 @@ Thank you for improving InjOffice. Bug reports, focused fixes, tests, documentat
 
 For a security vulnerability, follow [SECURITY.md](SECURITY.md) instead of opening a public issue.
 
+Before submitting source, stage the intended files and run `npm run check:secrets`
+with Gitleaks 8.30.1 installed (`GITLEAKS_BIN` can select its executable). Required
+CI uses the same version and verifies its download checksum. The scan checks
+current tracked file contents, including bounded archive/encoding traversal;
+it does not audit all Git history or guarantee that every secret format is detected.
+Output is fully redacted. The only allowlist entry is an exact synthetic OOXML
+font-obfuscation key in its fixture and historical evidence copy; inline
+`gitleaks:allow` comments do not bypass the gate. Do not broaden the exception
+for a real credential: remove it and follow the private reporting policy.
+
 ## Local checks
 
 Use Node.js 22 or newer (CI uses Node 24):
@@ -35,7 +45,7 @@ The repository contains independent Go modules under `go/` (`xlsxpatch`, `docxpa
 
 ## Rendering and browser qualification
 
-PR CI is deliberately short (a few minutes) and keeps only the fast gates as the required `CI required` status: build, typecheck, `check:docs-api`, `check:unicode13`, `check:typescript-version`, `test:dependency-integrity`, `test:declaration-specifiers`, `check:packages`, the workspace unit tests (sharded across the `ts-tests` matrix from `scripts/ci-test-shards.json`, plus `test:native-office-completion`), the Go modules, the WASM size ceilings and contracts, and the officecompat fuzz shards. Full rendering qualification, exhaustive browser scenarios, and performance benchmarks are not merge gates either.
+PR CI is deliberately short (a few minutes) and keeps only the fast gates as the required `CI required` status: tracked-source secret scan, build, typecheck, `check:docs-api`, `check:unicode13`, `check:typescript-version`, `test:dependency-integrity`, `test:declaration-specifiers`, `check:packages`, the workspace unit tests (sharded across the `ts-tests` matrix from `scripts/ci-test-shards.json`, plus `test:native-office-completion`), the Go modules, the WASM size ceilings and contracts, and the officecompat fuzz shards. Full rendering qualification, exhaustive browser scenarios, and performance benchmarks are not merge gates either.
 
 The slower and audit-style checks currently do not run automatically after merge. They remain in the **Main audit** workflow (`.github/workflows/main-audit.yml`) and can be dispatched on demand via **Run workflow**. They were moved out of the PR job, not removed, so run them locally before opening a PR that touches the office pipeline, packaging, or the qualification harness. After `npm ci` and `npm run build`:
 

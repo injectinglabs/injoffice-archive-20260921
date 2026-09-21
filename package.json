@@ -38,6 +38,7 @@
     "check:packages": "node scripts/check-packages.mjs",
     "check:office-architecture": "node scripts/check-office-architecture.mjs",
     "check:office-provenance": "node scripts/check-office-provenance.mjs",
+    "check:secrets": "node scripts/check-secrets.mjs",
     "check:dependency-integrity": "node scripts/check-dependency-integrity.mjs",
     "generate:sbom": "node scripts/check-dependency-integrity.mjs --sbom",
     "generate:docs-api": "node scripts/generate-docs-api-reference.mjs",

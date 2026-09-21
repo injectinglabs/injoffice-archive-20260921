@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { readCompletionBaselineSnapshot } from './completion-baseline-snapshot.mjs'
@@ -19,12 +19,17 @@ const validate = (mutate) => {
 }
 const includes = (errors, text) => assert(errors.some((error) => error.includes(text)), errors.join('\n'))
 
-test('portable baseline preserves every historical blob and refuses altered evidence', () => {
+test('portable baseline retains exact required evidence and refuses altered bytes', () => {
   const snapshot = readCompletionBaselineSnapshot(testRoot, BASELINE)
   assert.equal(snapshot.commit, BASELINE)
   assert.equal(snapshot.tree, '34a2027f1bc0c13ffad8b5d4956e7bd42a1e025d')
   assert.equal(Object.keys(snapshot.files).length, 1215)
+  assert.equal(Object.values(snapshot.files).filter(entry => typeof entry.base64 === 'string').length, 189)
+  for (const path of ['README.md', 'docs/FUNCTIONS.md', 'packages/slides/src/canvasGeometry.ts']) {
+    assert.equal(snapshot.files[path].base64, undefined, `unneeded historical payload: ${path}`)
+  }
   for (const [path, entry] of Object.entries(snapshot.files)) {
+    if (entry.base64 === undefined) continue
     const bytes = Buffer.from(entry.base64, 'base64')
     const object = createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex')
     assert.equal(object, entry.object, path)
@@ -38,6 +43,29 @@ test('portable baseline preserves every historical blob and refuses altered evid
     writeFileSync(join(directory, 'baseline-420424b.json.gz'), corrupted)
     assert.throws(() => readCompletionBaselineSnapshot(temporary, BASELINE), /snapshot digest/)
     assert.equal(readCompletionBaselineSnapshot(temporary, '0'.repeat(40)), undefined)
+  } finally {
+    rmSync(temporary, { recursive: true, force: true })
+  }
+})
+
+test('all matrices validate using only the minimal portable snapshot', () => {
+  const temporary = mkdtempSync(join(tmpdir(), 'injoffice-no-history-'))
+  try {
+    const files = spawnSync('git', ['-C', testRoot, 'ls-files', '-z'], { encoding: 'utf8' })
+    assert.equal(files.status, 0)
+    for (const path of files.stdout.split('\0').filter(Boolean)) {
+      const destination = join(temporary, path)
+      mkdirSync(dirname(destination), { recursive: true })
+      copyFileSync(resolve(testRoot, path), destination)
+    }
+    assert.notEqual(spawnSync('git', ['-C', temporary, 'cat-file', '-e', BASELINE]).status, 0)
+    for (const version of [1, 2, 3]) {
+      const manifest = loadCompletionManifest(join(temporary, `testdata/native-office-completion/v${version}/manifest.json`))
+      assert.deepEqual(validateCompletionManifest(manifest, { root: temporary }), [], `portable matrix v${version}`)
+    }
+    const expanded = loadCompletionManifest(join(temporary, 'testdata/native-office-completion/v3/manifest.json'))
+    expanded.capabilities[0].authoritativeModules.push('packages/slides/src/canvasGeometry.ts')
+    includes(validateCompletionManifest(expanded, { root: temporary }), 'is absent from baseline')
   } finally {
     rmSync(temporary, { recursive: true, force: true })
   }
