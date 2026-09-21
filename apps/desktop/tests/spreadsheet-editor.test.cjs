@@ -198,8 +198,8 @@ test('SpreadsheetEditor arranges its controls as an Excel ribbon with labelled g
     }
     for (const summary of view.root.findAllByType('summary')) assert.equal(summary.findAllByType('svg').length, 1, `${text(summary)} popover has an icon`);
     const byLabel = Object.fromEntries(commandButtons.map(node => [node.props['aria-label'] ?? text(node), node]));
-    assert.equal(byLabel.Charts.props.disabled, true);
-    assert.match(byLabel.Charts.props.title, /not supported by the native XLSX transaction/);
+    assert.equal(byLabel.Charts.props.disabled, false);
+    assert.match(byLabel.Charts.props.title, /selected numeric range/);
     assert.match(byLabel['Sort range'].props.title, /not supported by the native XLSX transaction/);
     assert.equal(byLabel.Recalculate.props.disabled, false);
     assert.equal(view.root.findByProps({ 'aria-label': 'Cell value or formula' }) != null, true, 'name box and fx bar are untouched');

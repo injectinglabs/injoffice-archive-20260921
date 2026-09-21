@@ -1,7 +1,8 @@
 import { EditorStatus } from './EditorStatus';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
-import { createXlsxWasmClient, adaptWorkbookMutationBatchV1 } from '@injoffice/xlsx-wasm';
+import { createXlsxWasmClient, adaptWorkbookMutationBatchV1, type XlsxNativeChart } from '@injoffice/xlsx-wasm';
 import type { NativeWorkbookV2, StyleDelta } from '@injoffice/sheets/browser';
+import { SpreadsheetCharts } from './SpreadsheetCharts';
 import ContextMenu, { contextMenuCellKey, spreadsheetContextMenu, useContextMenu } from './ContextMenu';
 import SpreadsheetNumberFormat from './SpreadsheetNumberFormat';
 import { SheetToggle, SheetColorButton, SheetBordersMenu, SheetMenuButton, HORIZONTAL_ALIGNMENTS, VERTICAL_ALIGNMENTS } from './spreadsheet-home';
@@ -29,7 +30,7 @@ function cellInk(color?: string, fill?: string): string | undefined {
 
 export interface OfficeEditorProps { registerHistory?: (commands: { undo(): void; redo(): void; canUndo?: boolean; canRedo?: boolean }) => void; registerCommit?: (commit: () => Promise<boolean>) => void; initialRecoveryDraft?: unknown; onRecoveryDraftChange?: (draft: unknown | null) => void; name: string; bytes: Uint8Array; onChange: (bytes: Uint8Array) => void; onBusyChange?: (busy: boolean) => void; onDraftChange?: (dirty: boolean) => void; viewOptions?: { zoom: number; navigation: boolean; focus: boolean } }
 
-type Snapshot = { bytes: Uint8Array; workbook: NativeWorkbookV2; calculation?: LocalCalculationResult; calculationRevision?: string; charts: unknown[]; chartError?: string };
+type Snapshot = { bytes: Uint8Array; workbook: NativeWorkbookV2; calculation?: LocalCalculationResult; calculationRevision?: string; charts: XlsxNativeChart[]; chartError?: string };
 const initialSelection: Selection = { anchor: { row: 0, column: 0 }, end: { row: 0, column: 0 } };
 /** Excel scrolls the grid continuously; rows and columns are rendered in blocks that
     grow as the scroller approaches their edge and slide once the rendered window is full. */
@@ -206,12 +207,12 @@ export function SpreadsheetEditor(props: OfficeEditorProps & { initialRecoveryDr
     if (locked.current || !canEdit) return;
     setEntry(mode); updateDraft(text); setInline(inCell); setError('');
   }
-  async function readChartState(bytes: Uint8Array, workbook: NativeWorkbookV2): Promise<{charts: unknown[]; chartError?: string}> {
+  async function readChartState(bytes: Uint8Array, workbook: NativeWorkbookV2): Promise<{charts: XlsxNativeChart[]; chartError?: string}> {
     const inspect = client.current?.inspectObjects;
     if (typeof inspect !== 'function') return { charts: [] };
     try {
       const objects = await inspect.call(client.current, bytes, workbook.source.package_sha256);
-      return { charts: Array.isArray(objects?.charts) ? [...objects.charts] : [] };
+      return { charts: Array.isArray(objects?.editable_charts) ? [...objects.editable_charts] : [] };
     } catch (reason) { return { charts: [], chartError: reason instanceof Error ? reason.message : String(reason) }; }
   }
   async function calculateSnapshot(source: Snapshot): Promise<Snapshot> {
@@ -379,7 +380,7 @@ export function SpreadsheetEditor(props: OfficeEditorProps & { initialRecoveryDr
         <SheetMenuButton icon="cellsFormat" label="Format cells" disabled={disabled}><label>Row height (pt)<input aria-label="Row height in points" type="number" min="1" max="409.5" step="0.5" value={rowHeight} onChange={event => setRowHeight(event.target.value)}/></label><RibbonButton icon="rows" label="Set height" disabled={disabled} onClick={() => resize('row')} /><label>Column width (characters)<input aria-label="Column width in characters" type="number" min="1" max="255" step="0.5" value={columnWidth} onChange={event => setColumnWidth(event.target.value)}/></label><RibbonButton icon="columns" label="Set width" disabled={disabled} onClick={() => resize('column')} /></SheetMenuButton>
       </> },
     ] },
-    { id: 'Insert', label: 'Insert', groups: [{ id: 'charts', label: 'Charts', children: <RibbonButton icon="chart" label="Charts" disabled={true} title="Chart mutations are not supported by the native XLSX transaction" aria-pressed={chartsOpen} onClick={() => setChartsOpen(value => !value)} /> }] },
+    { id: 'Insert', label: 'Insert', groups: [{ id: 'charts', label: 'Charts', children: <RibbonButton icon="chart" label="Charts" disabled={disabled} title="Insert or edit a chart from the selected numeric range" aria-pressed={chartsOpen} onClick={() => setChartsOpen(value => !value)} /> }] },
     { id: 'Formulas', label: 'Formulas', groups: [
       { id: 'names', label: 'Defined Names', children: <RibbonButton icon="names" label="Names" disabled={true} title="Defined names are not supported by the native XLSX transaction" aria-pressed={namesOpen} onClick={()=>setNamesOpen(value=>!value)} /> },
       { id: 'calculation', label: 'Calculation', children: <RibbonButton icon="recalculate" label="Recalculate" disabled={disabled} onClick={() => void recalculate()} /> },
@@ -440,6 +441,7 @@ Blue"/></label><label><input type="checkbox" checked={filterBlank} onChange={eve
       })}</tr>)}</tbody></table>}
     </div>
     {menu.anchor && <ContextMenu anchor={menu.anchor} label="Worksheet" onClose={menu.close} items={[...spreadsheetContextMenu({ anchor: menu.anchor, disabled, onClear: () => { try { void execute(clearOperations(selection), 'Selection cleared'); } catch (reason) { setError(String(reason)); } } }), { separator: true }, ...(['row.insert','row.delete','column.insert','column.delete'] as const).map(action => ({ id: action, label: `${action.endsWith('.insert') ? 'Insert' : 'Delete'} ${action.startsWith('row.') ? 'rows' : 'columns'}…`, disabled: disabled || Boolean(structureReason), title: structureReason, run: () => setStructureAction(action) }))]} />}
+    {chartsOpen && snapshot && <SpreadsheetCharts charts={snapshot.charts} sheetId={sheetId} range={range} disabled={disabled} error={snapshot.chartError} onExecute={execute} onClose={() => setChartsOpen(false)} />}
     </div>
     <div className="sheet-bottom"><div className="sheet-tab-tools"><button aria-label="Add worksheet" title={addSheetReason} disabled={disabled || Boolean(addSheetReason)} onClick={() => { let number = 1; while (workbook?.sheets.some(value => value.name.toLowerCase() === `sheet${number}`)) number++; setSheetName(`Sheet${number}`); setSheetAction('add'); }}>+</button><button disabled={disabled} onClick={() => { setSheetName(sheet?.name ?? ''); setSheetAction('rename'); }}>Rename</button><button title={deleteSheetReason} disabled={disabled || Boolean(deleteSheetReason)} onClick={() => setSheetAction('delete')}>Delete</button></div><nav aria-label="Worksheets">{workbook?.sheets.filter(value => value.state === 'visible').map(value => <button key={value.id} aria-current={value.id === sheetId ? 'page' : undefined} disabled={busy || draft !== null} onClick={() => { setSheetId(value.id); setSelection(initialSelection); setLocation('A1'); resetView(); }}>{value.name}{!value.editable ? ' · read-only' : ''}</button>)}</nav></div>
     <EditorStatus label="Spreadsheet status"><span className="sheet-mode">{busy ? 'Applying native change…' : activeStatus}</span><span role="status">{notice}</span>{sheetNotes.map(item => <span key={item.label} className="sheet-note" title={item.note}>{item.label}</span>)}<span className={`sheet-calculation${snapshot?.calculation ? ' is-calculated' : ''}`} role="img" aria-label={calculationStatus} title={calculationStatus}>ƒx</span></EditorStatus>
