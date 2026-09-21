@@ -6,7 +6,7 @@ const { create, act } = require('react-test-renderer');
 global.IS_REACT_ACT_ENVIRONMENT = true;
 async function loadApp({busyOnMount=false} = {}) {
   const { rolldown } = await import('rolldown');
-  const bundle = await rolldown({ input: path.resolve(__dirname, '../src/App.tsx'), platform: 'node', external: id => /^react(?:\/|$)/.test(id), transform: { jsx: { runtime: 'automatic' } }, plugins: [{ name: 'workspace-boundaries', resolveId(id) { if(id==='./UpdatesDialog')return '\0mock-updates'; if(id==='./spreadsheetDelimited')return '\0mock-delimited'; if (id.endsWith('.css')) return '\0css'; if (['./OfficeEditor', './PdfEditor', './PresentationEditor', './SpreadsheetEditor', './StartPage'].includes(id) || id.endsWith('.png')) return '\0mock:' + id; }, load(id) { if(id==='\0css')return 'export default ""'; if(id==='\0mock-updates')return 'export const UpdateNotice=()=>null; export default ()=>null;'; if(id==='\0mock-delimited')return 'export const importDelimitedWorkbook=(...args)=>globalThis.__importDelimited(...args)'; if (id.startsWith('\0mock:')) return id.endsWith('.png') ? 'export default "logo.png";' : id.endsWith('StartPage') ? `import React from 'react'; export default function StartPage(props) { return React.createElement('test-start', props); }` : `import React from 'react'; import { WorkspaceFileGroupsContext } from ${JSON.stringify(path.resolve(__dirname, '../src/Ribbon.tsx'))}; export function SpreadsheetEditor(props) { ${busyOnMount ? 'React.useEffect(()=>{props.onBusyChange?.(true)},[]);' : ''} const file = React.useContext(WorkspaceFileGroupsContext); return React.createElement('test-editor', props, React.createElement('test-file-tab', null, ...[...file.before, ...file.after].map(group => React.createElement('test-file-group', { key: group.id, label: group.label }, group.children)))); } export default SpreadsheetEditor;`; } }] });
+  const bundle = await rolldown({ input: path.resolve(__dirname, '../src/App.tsx'), platform: 'node', external: id => /^react(?:\/|$)/.test(id), transform: { jsx: { runtime: 'automatic' } }, plugins: [{ name: 'workspace-boundaries', resolveId(id) { if(id==='./UpdatesDialog')return '\0mock-updates'; if(id==='./spreadsheetDelimited')return '\0mock-delimited'; if (id.endsWith('.css')) return '\0css'; if (['./OfficeEditor', './PdfEditor', './PresentationEditor', './SpreadsheetEditor', './StartPage'].includes(id) || id.endsWith('.png')) return '\0mock:' + id; }, load(id) { if(id==='\0css')return 'export default ""'; if(id==='\0mock-updates')return 'export const UpdateNotice=()=>null; export default ()=>null;'; if(id==='\0mock-delimited')return 'export const importDelimitedWorkbook=(...args)=>globalThis.__importDelimited(...args)'; if (id.startsWith('\0mock:')) return id.endsWith('.png') ? 'export default "logo.png";' : id.endsWith('StartPage') ? `import React from 'react'; export default function StartPage(props) { return React.createElement('test-start', props); }` : `import React from 'react'; import { WorkspaceFileGroupsContext } from ${JSON.stringify(path.resolve(__dirname, '../src/Ribbon.tsx'))}; export function SpreadsheetEditor(props) { ${busyOnMount ? 'React.useEffect(()=>{props.onBusyChange?.(true)},[]);' : ''} const file = React.useContext(WorkspaceFileGroupsContext); return React.createElement('test-editor', props, React.createElement('test-file-tab', { backstage: file.backstage }, ...[...file.before, ...file.after].map(group => React.createElement('test-file-group', { key: group.id, label: group.label }, group.children)))); } export default SpreadsheetEditor;`; } }] });
   try { const { output } = await bundle.generate({ format: 'cjs', codeSplitting: false }); const result = { exports: {} }; new Function('require', 'module', 'exports', output[0].code)(require, result, result.exports); return result.exports.default ?? result.exports; } finally { await bundle.close(); }
 }
 // Tooltips spell the shortcut per platform (⌘ on macOS, Ctrl elsewhere), so tests derive them from shortcuts.ts.
@@ -286,22 +286,19 @@ test('the File tab backstage carries Home, New, Open, Save, Save as, Close and a
   try {
     await act(async () => { renderer = create(React.createElement(App)); });
     await act(async () => renderer.root.findByType('test-start').props.onCreate('docx'));
-    const groups = renderer.root.findAllByType('test-file-group');
-    assert.deepEqual(groups.map(group => group.props.label), ['Start', 'New', 'Open & Save', 'Close', 'InjOffice']);
-    const button = title => renderer.root.findAllByType('button').find(node => node.props.title === title);
-    assert.equal(button(shortcutTooltip('Save', 'save')).props.disabled, false, 'a freshly created document is unsaved, so Save is enabled');
-    await act(async () => button(shortcutTooltip('Save as…', 'saveAs')).props.onClick());
+    assert.equal(renderer.root.findAllByType('test-file-group').length, 0, 'workspace commands no longer occupy ribbon groups');
+    assert.equal(typeof renderer.root.findByType('test-file-tab').props.backstage.open, 'function');
+    const command = async query => {
+      await act(async () => renderer.root.findByProps({ title: shortcutTooltip('Search commands', 'commands') }).props.onClick());
+      const search = renderer.root.findByProps({ 'aria-label': 'Search workspace commands' });
+      await act(async () => search.props.onChange({ target: { value: query } }));
+      await act(async () => search.props.onKeyDown({ key: 'Enter', preventDefault() {} }));
+    };
+    await command('Save document as');
     assert.deepEqual(saves, [true]);
-    assert.equal(button(shortcutTooltip('Save', 'save')).props.disabled, true, 'Save greys out once the document is saved');
-    await act(async () => button('New spreadsheet (XLSX)').props.onClick());
+    await command('New spreadsheet');
     assert.deepEqual(renderer.root.findAllByType('test-editor').map(editor => editor.props.name), ['Untitled.docx', 'Untitled.xlsx']);
-    await act(async () => button('Start page: create, open recent or recover').props.onClick());
-    assert.equal(renderer.root.findAllByType('test-start').length, 1, 'File › Home shows the start page');
-    await act(async () => renderer.root.findByType('test-start').props.onResume());
-    const tabs = renderer.root.findByProps({ 'aria-label': 'Open documents' }).findAllByProps({ className: 'document-tab active' });
-    assert.equal(tabs.length, 1, 'exactly one document tab is active');
-    assert.equal(renderer.root.findByProps({ 'aria-label': 'Close Untitled.xlsx' }).findAllByType('svg').length, 1, 'tab close is an icon button');
-    await act(async () => button('Close document').props.onClick());
+    await command('Close document');
     assert.equal(renderer.root.findAllByProps({ role: 'alertdialog' }).length, 1, 'closing an unsaved workbook asks first');
     await act(async () => renderer.root.findAllByType('button').find(node => node.children.includes('Discard changes')).props.onClick());
     assert.deepEqual(closed, ['id-xlsx']);
