@@ -237,3 +237,61 @@ test('the sheet area is the only scroller and renders rows continuously instead 
     delete globalThis.__xlsxClient;
   }
 });
+
+test('typing edits the selected cell, Enter commits and moves down, and the status row reads like Excel', async () => {
+  const css = fs.readFileSync(path.resolve(__dirname, '../src/spreadsheet.css'), 'utf8');
+  assert.match(css, /\.sheet-grid th\.is-active\{/, 'the active row and column headers highlight');
+
+  const client = mockClient();
+  globalThis.__xlsxClient = client;
+  const SpreadsheetEditor = await loadEditor();
+  const busy = [];
+  let view;
+  const status = () => view.root.findByProps({ className: 'sheet-status' }).findAllByType('span').map(text);
+  const grid = () => view.root.findByProps({ className: 'sheet-grid-scroll' });
+  const press = async (key, extra = {}) => {
+    const node = grid();
+    await act(async () => node.props.onKeyDown({ key, target: node, currentTarget: node, nativeEvent: {}, preventDefault() {}, ...extra }));
+  };
+  try {
+    await act(async () => {
+      view = create(React.createElement(SpreadsheetEditor, { name: 'Book.xlsx', bytes: new Uint8Array([1]), onChange: () => {}, onBusyChange: value => busy.push(value) }));
+    });
+    await until(() => busy.at(-1) === false && view.root.findAllByProps({ className: 'sheet-grid' }).length > 0);
+    assert.equal(status()[0], 'Ready');
+    assert.equal(status()[1], '', 'no shortcut sentence in the status row');
+    assert.equal(status().some(value => value.includes('Formula caches')), false, 'the caches note is a tooltip, not a second status line');
+    assert.match(view.root.findByProps({ className: 'sheet-calculation' }).props.title, /Formula caches/);
+
+    // A printable key starts the entry with that keystroke: Excel's "Enter" mode.
+    await press('R');
+    await until(() => view.root.findAllByProps({ className: 'sheet-inline-input' }).length === 1);
+    assert.equal(view.root.findByProps({ className: 'sheet-inline-input' }).props.value, 'R');
+    assert.equal(status()[0], 'Enter');
+
+    // Enter commits the entry and moves down; the name box follows the active cell.
+    const input = view.root.findByProps({ className: 'sheet-inline-input' });
+    await act(async () => input.props.onKeyDown({ key: 'Enter', nativeEvent: {}, preventDefault() {} }));
+    await until(() => client.applied.length >= 1 && busy.at(-1) === false && view.root.findAllByProps({ className: 'sheet-inline-input' }).length === 0);
+    assert.equal(client.applied[0].cells[0].value, 'R');
+    assert.equal(view.root.findByProps({ 'aria-label': 'Cell or range address' }).props.value, 'A2');
+    assert.equal(status()[0], 'Ready');
+
+    // F2 edits in place: Excel's "Edit" mode, seeded with the stored text.
+    await press('F2');
+    await until(() => view.root.findAllByProps({ className: 'sheet-inline-input' }).length === 1);
+    assert.equal(status()[0], 'Edit');
+    await act(async () => view.root.findByProps({ className: 'sheet-inline-input' }).props.onKeyDown({ key: 'Escape', nativeEvent: {}, preventDefault() {} }));
+    assert.equal(status()[0], 'Ready');
+
+    // Enter on a selected cell moves down instead of opening an editor.
+    await press('Enter');
+    assert.equal(view.root.findAllByProps({ className: 'sheet-inline-input' }).length, 0);
+    assert.equal(view.root.findByProps({ 'aria-label': 'Cell or range address' }).props.value, 'A3');
+    const headers = view.root.findAllByType('th').filter(node => node.props.className === 'is-active').map(text);
+    assert.deepEqual(headers, ['A', '3'], 'the active row and column headers are marked');
+  } finally {
+    if (view) await act(async () => view.unmount());
+    delete globalThis.__xlsxClient;
+  }
+});
