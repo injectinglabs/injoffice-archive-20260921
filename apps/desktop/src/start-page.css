@@ -17,6 +17,10 @@
 .start-current button > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .start-main { flex: 1; min-width: 0; overflow: auto; padding: 53px clamp(30px, 4.5vw, 72px) 42px; }
 .start-main-inner { max-width: 1120px; margin: 0 auto; }
+.start-command-search { display: flex; justify-content: center; margin: -22px 0 30px; }
+.start-page .start-command-search button { display: inline-flex; align-items: center; gap: 10px; width: min(520px, 100%); height: 34px; padding: 0 14px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--start-muted); font-size: 13px; text-align: left; }
+.start-page .start-command-search button:hover:enabled { background: var(--hover); border-color: var(--border-strong); color: var(--text-secondary); }
+.start-page .start-command-search svg { width: 16px; height: 16px; flex-shrink: 0; }
 .start-intro { display: flex; gap: 24px; align-items: center; justify-content: space-between; }
 .start-intro h1 { margin: 0; font-size: clamp(27px, 2.4vw, 36px); line-height: 1.2; font-weight: 500; letter-spacing: -1px; }
 .start-intro p { color: var(--start-muted); font-size: 14px; margin: 12px 0 0; line-height: 1.6; }
