@@ -5,6 +5,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"math"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -112,6 +113,7 @@ type styleRegistry struct {
 	appendedNumFmts [][]byte
 	appendedFonts   [][]byte
 	appendedFills   [][]byte
+	appendedBorders [][]byte
 	appendedCellXfs [][]byte
 }
 
@@ -1037,6 +1039,10 @@ func (registry *styleRegistry) resolveStyle(sourceIndex int, delta StyleDelta) (
 	if err != nil {
 		return 0, err
 	}
+	borderID, borderChanged, err := registry.resolveBorder(source, base, delta)
+	if err != nil {
+		return 0, err
+	}
 	numFmtID, numFmtChanged, err := registry.resolveNumberFormat(source, base, delta.NumberFormat)
 	if err != nil {
 		return 0, err
@@ -1045,10 +1051,16 @@ func (registry *styleRegistry) resolveStyle(sourceIndex int, delta StyleDelta) (
 	if err != nil {
 		return 0, err
 	}
-	if !fontChanged && !fillChanged && !numFmtChanged && !alignmentChanged {
+	if !borderChanged && !fontChanged && !fillChanged && !numFmtChanged && !alignmentChanged {
 		return sourceIndex, nil
 	}
 	start := bytes.Clone(source.rootStart)
+	if borderChanged {
+		start, err = rewriteStyleXFComponent(start, "borderId", "applyBorder", borderID, base.borderID)
+		if err != nil {
+			return 0, err
+		}
+	}
 	if fontChanged {
 		start, err = rewriteStyleXFComponent(start, "fontId", "applyFont", fontID, base.fontID)
 		if err != nil {
@@ -1087,6 +1099,9 @@ func (registry *styleRegistry) resolveStyle(sourceIndex int, delta StyleDelta) (
 		return existing, nil
 	}
 	parsed := source
+	if borderChanged {
+		parsed.borderID, parsed.applyBorder = borderID, appliedUnlessInherited(borderID, base.borderID)
+	}
 	parsed.raw, parsed.rootStart, parsed.body, parsed.alignment = candidate, start, body, alignment
 	parsed.selfClosing = bytes.HasSuffix(bytes.TrimSpace(candidate), []byte("/>"))
 	parsed.alignmentStart, parsed.alignmentEnd = alignmentStart, alignmentEnd
@@ -1728,12 +1743,12 @@ func canonicalizeStyleAlignmentStart(start []byte) ([]byte, error) {
 }
 
 func (registry *styleRegistry) changed() bool {
-	return len(registry.appendedNumFmts)+len(registry.appendedFonts)+len(registry.appendedFills)+len(registry.appendedCellXfs) > 0
+	return len(registry.appendedBorders)+len(registry.appendedNumFmts)+len(registry.appendedFonts)+len(registry.appendedFills)+len(registry.appendedCellXfs) > 0
 }
 
 func (registry *styleRegistry) ensureStyleRecordCapacity() error {
 	total := len(registry.numFmtByID) + len(registry.fonts) + len(registry.fills) +
-		len(registry.index.borders.entries) + len(registry.styleXfs) + len(registry.cellXfs)
+		len(registry.borders) + len(registry.styleXfs) + len(registry.cellXfs)
 	return ensureStyleRecordCountCapacity(total)
 }
 
@@ -1791,6 +1806,9 @@ func (registry *styleRegistry) render() ([]byte, error) {
 	if err := appendContainer(registry.index.fonts, registry.appendedFonts); err != nil {
 		return nil, err
 	}
+	if err := appendContainer(registry.index.borders, registry.appendedBorders); err != nil {
+		return nil, err
+	}
 	if err := appendContainer(registry.index.fills, registry.appendedFills); err != nil {
 		return nil, err
 	}
@@ -1811,4 +1829,66 @@ func (registry *styleRegistry) render() ([]byte, error) {
 		return nil, fmt.Errorf("generated style table is invalid: %w", err)
 	}
 	return updated, nil
+}
+
+func (registry *styleRegistry) resolveBorder(source, base styleXF, delta StyleDelta) (int, bool, error) {
+	currentID := effectiveStyleComponent(source.borderID, base.borderID, source.applyBorder)
+	if !delta.BorderTop.Present && !delta.BorderBottom.Present && !delta.BorderLeft.Present && !delta.BorderRight.Present {
+		return currentID, false, nil
+	}
+	desired, inherited := registry.borders[currentID], registry.borders[base.borderID]
+	if !desired.supported || !inherited.supported {
+		return 0, false, fmt.Errorf("cannot patch unsupported border")
+	}
+	patch := func(target **styleBorderSide, fallback *styleBorderSide, property StyleProperty[BorderEdge]) {
+		if !property.Present {
+			return
+		}
+		*target = fallback
+		if property.Value != nil {
+			if property.Value.Style == "none" {
+				*target = nil
+				return
+			}
+			*target = &styleBorderSide{style: property.Value.Style, color: property.Value.Color}
+		}
+	}
+	patch(&desired.top, inherited.top, delta.BorderTop)
+	patch(&desired.bottom, inherited.bottom, delta.BorderBottom)
+	patch(&desired.left, inherited.left, delta.BorderLeft)
+	patch(&desired.right, inherited.right, delta.BorderRight)
+	equal := func(a, b styleBorder) bool {
+		return reflect.DeepEqual(a.top, b.top) && reflect.DeepEqual(a.bottom, b.bottom) && reflect.DeepEqual(a.left, b.left) && reflect.DeepEqual(a.right, b.right)
+	}
+	if equal(desired, registry.borders[currentID]) {
+		return currentID, false, nil
+	}
+	for id, candidate := range registry.borders {
+		if candidate.supported && equal(desired, candidate) {
+			return id, true, nil
+		}
+	}
+	var out strings.Builder
+	qname := prefixedLocal(registry.index.root.qname, "border")
+	out.WriteString("<" + qname + ">")
+	for _, edge := range []struct {
+		name string
+		side *styleBorderSide
+	}{{"left", desired.left}, {"right", desired.right}, {"top", desired.top}, {"bottom", desired.bottom}} {
+		name := prefixedLocal(qname, edge.name)
+		if edge.side == nil {
+			out.WriteString("<" + name + "/>")
+		} else {
+			fmt.Fprintf(&out, `<%s style="%s"><%s rgb="FF%s"/></%s>`, name, edge.side.style, prefixedLocal(qname, "color"), edge.side.color[1:], name)
+		}
+	}
+	out.WriteString("</" + qname + ">")
+	desired.raw = []byte(out.String())
+	if err := registry.ensureStyleRecordCapacity(); err != nil {
+		return 0, false, err
+	}
+	id := len(registry.borders)
+	registry.borders = append(registry.borders, desired)
+	registry.appendedBorders = append(registry.appendedBorders, desired.raw)
+	return id, true, nil
 }

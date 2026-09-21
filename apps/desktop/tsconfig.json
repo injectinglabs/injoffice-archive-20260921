@@ -39,7 +39,6 @@
     "src/presentationCommands.ts",
     "src/spreadsheet-chart-geometry.ts",
     "src/spreadsheetCalculation.ts",
-    "src/spreadsheetCommands.ts",
     "src/spreadsheetDelimited.ts",
     "src/spreadsheetSheetPolicy.ts",
     "src/App.tsx",

@@ -220,3 +220,13 @@ describe('workbook mutation protocol v1', () => {
     }
   })
 })
+
+it('round-trips border edges and refuses malformed edges', () => {
+ const range = { row: 0, column: 0, end_row: 1, end_column: 1 }
+ const batch = base([op('style.patch', { range, style: { border_top: {style:'double',color:'#123ABC'}, border_left:null, border_bottom:{style:'none',color:'#000000'} } })])
+ expect(decodeWorkbookMutationBatch(batch).ok).toBe(true)
+ for (const edge of [{style:'thin'}, {style:'thin',color:'#abcdef'}, {style:'invalid',color:'#000000'}, {style:'thin',color:'#000000',extra:1}, null]) {
+   if (edge === null) continue
+   expect(decodeWorkbookMutationBatch(base([op('style.patch', {range,style:{border_top:edge}})])).ok).toBe(false)
+ }
+})
