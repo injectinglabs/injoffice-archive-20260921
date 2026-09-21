@@ -126,7 +126,7 @@ test('PdfEditor mounts, reports busy, navigates pages, and applies an add-page c
   assert.equal(/from ['"]\.\/OfficeEditor['"]/.test(source), false);
 
   let pageCount = 2, opens = 0, renders = 0, renderer;
-  const applied = [], changes = [], busy = [];
+  const applied = [], changes = [], busy = [], initialErrors = [];
   const bytes = new Uint8Array([0x25, 0x50, 0x44, 0x46]);
   global.document = { baseURI: 'https://injoffice.invalid/' };
   global.window = { devicePixelRatio: 1 };
@@ -169,6 +169,7 @@ test('PdfEditor mounts, reports busy, navigates pages, and applies an add-page c
       renderer = create(React.createElement(Editor, {
         name: 'Test.pdf',
         bytes,
+        onInitialLoadError: reason => initialErrors.push(reason),
         onChange: value => changes.push(value),
         onBusyChange: value => busy.push(value),
         viewOptions: { zoom: 100, navigation: true, focus: false },
@@ -190,6 +191,10 @@ test('PdfEditor mounts, reports busy, navigates pages, and applies an add-page c
     await until(() => opens === 2 && changes.length === 1 && busy.at(-1) === false);
     assert.deepEqual(applied, [{ kind: 'add-page', page: 2 }]);
     assert.equal(pageCount, 3);
+    globalThis.__inspectPdf = async () => { throw new Error('later PDF reload refused'); };
+    await act(async () => ribbonButton(renderer, 'Add page').props.onClick());
+    await until(() => JSON.stringify(renderer.toJSON()).includes('later PDF reload refused'));
+    assert.deepEqual(initialErrors, []);
     await act(async () => renderer.unmount());
     renderer = undefined;
   } finally {
@@ -354,4 +359,18 @@ test('right-clicking the PDF page opens the shared context menu with the page co
     delete global.document;
     delete global.window;
   }
+});
+
+
+test('PdfEditor reports an initial parser rejection to the workspace', async () => {
+  global.window = { devicePixelRatio: 1 };
+  const errors = [];
+  globalThis.__inspectPdf = async () => { throw new Error('invalid PDF object stream'); };
+  const Editor = await loadEditor();
+  let view;
+  try {
+    await act(async () => { view = create(React.createElement(Editor, { name: 'Corrupt.pdf', bytes: new Uint8Array([37,80,68,70,45]), onChange() {}, onInitialLoadError: reason => errors.push(reason) })); });
+    await until(() => errors.length > 0);
+    assert.deepEqual(errors, ['invalid PDF object stream']);
+  } finally { if (view) await act(async () => view.unmount()); delete globalThis.__inspectPdf; delete global.window; }
 });

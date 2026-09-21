@@ -443,3 +443,33 @@ test('Rows and columns menu confirms whole-axis mutations for the selected range
   }
  } finally {if(view)await act(async()=>view.unmount());delete globalThis.__xlsxClient;}
 });
+
+
+test('SpreadsheetEditor reports the first parser rejection to the workspace', async () => {
+  const errors = [];
+  globalThis.__xlsxClient = { extract: async () => { throw new Error('invalid XML in xlsx package'); }, terminate() {} };
+  const Editor = await loadEditor();
+  let view;
+  try {
+    await act(async () => { view = create(React.createElement(Editor, { name: 'Corrupt.xlsx', bytes: new Uint8Array([80,75,3,4]), onChange() {}, onInitialLoadError: reason => errors.push(reason) })); });
+    await until(() => errors.length > 0);
+    assert.deepEqual(errors, ['invalid XML in xlsx package']);
+  } finally { if (view) await act(async () => view.unmount()); delete globalThis.__xlsxClient; }
+});
+
+
+test('a workbook reload failure after a successful load stays in the editor', async () => {
+  const client = mockClient(), errors = [];
+  globalThis.__xlsxClient = client;
+  const Editor = await loadEditor();
+  const props = { name: 'Book.xlsx', bytes: new Uint8Array([1]), onChange() {}, onInitialLoadError: reason => errors.push(reason) };
+  let view;
+  try {
+    await act(async () => { view = create(React.createElement(Editor, props)); });
+    await until(() => view.root.findAllByProps({ className: 'sheet-grid' }).length > 0);
+    client.extract = async () => { throw new Error('reload refused'); };
+    await act(async () => view.update(React.createElement(Editor, { ...props, bytes: new Uint8Array([2]) })));
+    assert.deepEqual(errors, []);
+    assert.match(JSON.stringify(view.toJSON()), /reload refused/);
+  } finally { if (view) await act(async () => view.unmount()); delete globalThis.__xlsxClient; }
+});

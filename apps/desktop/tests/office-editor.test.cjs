@@ -447,8 +447,9 @@ test('a rejected draft stays visible while another paragraph accepts the caret a
   mockWindow();
   const client = mockClient(twoParagraphDocument());
   let calls = 0, commit, recovery;
+  const initialErrors = [];
   client.apply = async () => { calls++; throw new Error('Run is read-only'); };
-  const { view } = await mountEditor(client, { registerCommit: fn => { commit = fn; }, onRecoveryDraftChange: value => { recovery = value; } });
+  const { view } = await mountEditor(client, { onInitialLoadError: reason => initialErrors.push(reason), registerCommit: fn => { commit = fn; }, onRecoveryDraftChange: value => { recovery = value; } });
   t.mock.timers.enable({ apis: ['setTimeout'] });
   try {
     await act(async () => clickRun(view, 'r1'));
@@ -469,6 +470,7 @@ test('a rejected draft stays visible while another paragraph accepts the caret a
     await act(async () => { saved = await commit(); });
     assert.equal(saved, false, 'uncommitted drafts must never be reported as saved');
     assert.equal(calls, 2, 'the same rejected value does not retry on clicks or Save');
+    assert.deepEqual(initialErrors, []);
   } finally { await act(async () => view.unmount()); }
 });
 
