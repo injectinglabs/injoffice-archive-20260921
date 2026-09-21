@@ -37,7 +37,10 @@
 .backstage-exports .sheet-export > div { position: static; display: grid; gap: 16px; width: auto; box-shadow: none; }
 @media (max-width: 650px) { .backstage-rail { width: 142px; } .backstage-rail nav button { padding-left: 22px; } .backstage-content { padding: 42px 20px; } .backstage-properties { grid-template-columns: 1fr; gap: 10px; } }
 
-.ribbon-file { border: 0; border-radius: 0; padding: 9px 13px; background: transparent; color: var(--accent); font: inherit; font-weight: 500; cursor: pointer; }
+/* Word shows File as a solid accent tab in the tab row, not a bordered button: same height and
+   padding as its neighbours, squared off, so the row reads as one strip. */
+.ribbon-file { flex-shrink: 0; align-self: stretch; border: 0; border-radius: 0; padding: 9px 15px; background: var(--accent-fill); color: var(--accent-text); font: inherit; font-weight: 500; line-height: 1.2; cursor: pointer; }
+.ribbon-file:hover { background: var(--accent); }
 .ribbon-file:focus-visible { outline: 2px solid var(--accent); outline-offset: -4px; }
 
 .backstage-exports > [role="group"] { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; }
