@@ -29,6 +29,23 @@
 .ribbon-button.ribbon-primary:hover:not(:disabled) { background: var(--accent-hover); }
 .ribbon-icon { width: 17px; height: 17px; flex-shrink: 0; }
 
+/* Combo boxes, colour buttons and alignment toggles. Widths are fixed so a group
+   keeps its geometry when the selection changes; an unknown value shows an empty box. */
+.ribbon-combo { flex: 0 0 auto; }
+.ribbon-combo-font { width: 138px; }
+.ribbon-combo-size { width: 62px; }
+.ribbon-combo-style { width: 150px; }
+.ribbon-combo-list { width: 124px; }
+.formatting-alignment { display: inline-flex; align-items: center; gap: 2px; }
+.ribbon-color { position: relative; display: inline-flex; }
+.ribbon-color-button { gap: 2px; padding-inline: 5px; }
+.ribbon-chevron { width: 0; height: 0; border: 3.5px solid transparent; border-bottom: 0; border-top-color: currentColor; }
+.ribbon-color-glyph { display: inline-flex; flex-direction: column; align-items: center; gap: 2px; }
+.ribbon-color-bar { width: 17px; height: 4px; border-radius: 1px; background: var(--border-strong); }
+.ribbon-color-palette { position: absolute; z-index: 30; top: calc(100% + 4px); left: 0; display: grid; grid-template-columns: repeat(3, 22px); gap: 5px; padding: 6px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-raised); box-shadow: 0 8px 24px var(--shadow); }
+.ribbon-color .ribbon-swatch { width: 22px; height: 22px; min-height: 22px; padding: 0; border: 1px solid var(--border-strong); border-radius: 3px; cursor: pointer; }
+.ribbon-color .ribbon-swatch[aria-pressed="true"] { outline: 2px solid var(--accent); outline-offset: 1px; }
+
 .ribbon select, .ribbon input:not([type="color"]), .ribbon summary { font: inherit; font-size: 12px; min-height: 30px; padding: 4px 7px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: var(--text); }
 .ribbon select:disabled, .ribbon input:disabled { opacity: .45; }
 .ribbon label { display: flex; flex-direction: column; gap: 3px; color: var(--text-muted); font-size: 11px; }

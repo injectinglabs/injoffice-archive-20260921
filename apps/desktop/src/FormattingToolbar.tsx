@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { RibbonButton, RibbonRows } from './Ribbon'
+import { ColorButton, RibbonButton, RibbonCombo, RibbonRows, type RibbonColor } from './Ribbon'
 
 export interface FormattingValues {
   font?: string; size?: number; bold?: boolean; italic?: boolean; underline?: boolean;
@@ -9,12 +9,30 @@ export type FormattingPatch = Partial<FormattingValues>;
 /** `font` and `paragraph` render one Office ribbon group each; `all` is the classic single toolbar. */
 export type FormattingSection = 'all' | 'font' | 'paragraph';
 
+/** The text-colour palette shared by the ribbon, the mini toolbar and the slide inspector. */
+export const TEXT_COLORS: RibbonColor[] = [['#000000', 'Black'], ['#20242B', 'Dark gray'], ['#687386', 'Gray'], ['#2459AD', 'Blue'], ['#B33C3C', 'Red'], ['#217447', 'Green']];
+
+/** The alignment buttons Office shows for each host, in ribbon order. */
+export function alignmentOptions(kind: 'docx' | 'xlsx' | 'pptx'): Array<{ value: string; label: string; icon: 'alignLeft' | 'alignCenter' | 'alignRight' | 'alignJustify' | 'alignDistribute' }> {
+  const base = [
+    { value: 'left', label: 'Align left', icon: 'alignLeft' as const },
+    { value: 'center', label: 'Center', icon: 'alignCenter' as const },
+    { value: 'right', label: 'Align right', icon: 'alignRight' as const },
+  ];
+  return kind === 'docx' ? [...base, { value: 'both', label: 'Justify', icon: 'alignJustify' as const }, { value: 'distribute', label: 'Distribute', icon: 'alignDistribute' as const }] : base;
+}
+
 /** Status text describing what the formatting controls currently apply to. */
 export function formattingScope(kind: 'docx' | 'xlsx' | 'pptx', values: FormattingValues | undefined, scopeLabel?: string): string {
   if (!values) return kind === 'xlsx' ? 'Select a cell to format' : 'Select text to format';
   return kind === 'xlsx' ? 'Selected cell' : kind === 'docx' ? scopeLabel ?? 'Selected segment · direct formatting' : 'Selected text segment';
 }
 
+/**
+ * The Font and Paragraph ribbon groups. Every control shows the value in effect
+ * at the caret; where it is unknown or mixed across the selection the control is
+ * empty (Word's behaviour) rather than carrying a placeholder word.
+ */
 export default function FormattingToolbar({ kind, values, disabled, onChange, scopeLabel, section = 'all', children }: {
   scopeLabel?:string; kind: 'docx' | 'xlsx' | 'pptx'; values?: FormattingValues; disabled: boolean; onChange(patch: FormattingPatch): void; section?: FormattingSection; children?: ReactNode;
 }) {
@@ -22,10 +40,8 @@ export default function FormattingToolbar({ kind, values, disabled, onChange, sc
   const characterInactive = inactive || values?.characterEditable === false;
   const fonts = [...new Set([values?.font || 'Arial', 'Arial', 'Calibri', 'Cambria', 'Georgia', 'Times New Roman', 'Verdana', 'DejaVu Sans'])];
   const sizes = [...new Set([values?.size || 11, 8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 60, 72])].sort((a, b) => a - b);
-  const colors = [['#20242B', 'Dark gray'], ['#000000', 'Black'], ['#2459AD', 'Blue'], ['#B33C3C', 'Red'], ['#217447', 'Green'], ['#687386', 'Gray']];
-  if (values?.color && !colors.some(([color]) => color === values.color?.toUpperCase())) colors.unshift([values.color.toUpperCase(), 'Current color']);
-  const family = <select aria-label="Font family" title="Font family" disabled={characterInactive} value={values?.font || ''} onChange={event => onChange({ font: event.target.value })}>{!values?.font && <option value="">{scopeLabel?'Mixed / inherited font':'Inherited font'}</option>}{fonts.map(font => <option key={font}>{font}</option>)}</select>;
-  const size = <select aria-label="Font size" title="Font size" disabled={characterInactive} value={values?.size || ''} onChange={event => onChange({ size: Number(event.target.value) })}>{!values?.size && <option value="">{scopeLabel?'Mixed / inherited size':'Inherited size'}</option>}{sizes.map(size => <option key={size} value={size}>{size}</option>)}</select>;
+  const family = <RibbonCombo className="ribbon-combo-font" label="Font family" disabled={characterInactive} value={values?.font ?? ''} options={fonts.map(font => ({ value: font, label: font }))} onChange={font => onChange({ font })} />;
+  const size = <RibbonCombo className="ribbon-combo-size" label="Font size" disabled={characterInactive} value={values?.size === undefined ? '' : String(values.size)} options={sizes.map(size => ({ value: String(size), label: String(size) }))} onChange={size => onChange({ size: Number(size) })} />;
   // Only the DOCX editor binds ⌘B/⌘I/⌘U; other hosts get no shortcut hint they cannot honour.
   const keyed = kind === 'docx';
   const emphasis = <>
@@ -33,10 +49,10 @@ export default function FormattingToolbar({ kind, values, disabled, onChange, sc
     <RibbonButton icon="italic" label="Italic" shortcut={keyed ? 'italic' : undefined} labelHidden aria-pressed={values?.italic ?? 'mixed'} disabled={characterInactive} onClick={() => onChange({ italic: !values?.italic })} />
     {kind === 'docx' && <RibbonButton icon="underline" label="Underline" shortcut="underline" labelHidden aria-pressed={values?.underline ?? 'mixed'} disabled={characterInactive} onClick={() => onChange({ underline: !values?.underline })} />}
   </>;
-  const color = <select aria-label="Text color" title="Text color" disabled={characterInactive} value={values?.color?.toUpperCase() || ''} onChange={event => onChange({ color: event.target.value })}>{!values?.color && <option value="">{scopeLabel?'Mixed / inherited color':'Inherited color'}</option>}{colors.map(([color, name]) => <option key={color} value={color}>{name}</option>)}</select>;
-  const alignment = <select aria-label="Text alignment" title="Text alignment" disabled={inactive} value={values?.alignment || ''} onChange={event => onChange({ alignment: event.target.value })}>
-    {!values?.alignment && <option value="">Inherited alignment</option>}{kind === 'xlsx' && <option value="general">General alignment</option>}<option value="left">Align left</option><option value="center">Center</option><option value="right">Align right</option>{kind === 'docx' && <><option value="both">Justify</option><option value="distribute">Distribute</option></>}
-  </select>;
+  const color = <ColorButton label="Text color" icon="fontColor" disabled={characterInactive} value={values?.color?.toUpperCase()} colors={TEXT_COLORS} onChange={color => onChange({ color })} />;
+  const alignment = <span className="formatting-alignment">
+    {alignmentOptions(kind).map(option => <RibbonButton key={option.value} icon={option.icon} label={option.label} labelHidden aria-pressed={values?.alignment === option.value} disabled={inactive} onClick={() => onChange({ alignment: option.value })} />)}
+  </span>;
   if (section === 'font') return <div className="formatting-toolbar formatting-toolbar-font" aria-label="Font formatting"><RibbonRows><div className="formatting-group">{family}{size}</div><div className="formatting-group">{emphasis}{children}{color}</div></RibbonRows></div>;
   if (section === 'paragraph') return <div className="formatting-toolbar formatting-toolbar-paragraph" aria-label="Paragraph alignment"><div className="formatting-group">{alignment}</div>{children}</div>;
   return <div className="formatting-toolbar" aria-label="Formatting">
