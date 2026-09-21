@@ -328,7 +328,7 @@ describe('DOCX WASM package client', () => {
     }] } }
     await expect(client.apply(new Uint8Array([1]), fixtureDocument, formatting)).resolves.toEqual(new Uint8Array([4, 5, 6]))
     // The colour is normalised to the upper-case form the contract reads back.
-    expect(JSON.parse(worker.requests[1].payload as string)).toEqual({ mutations: [{
+    expect(JSON.parse((worker.requests[1] as { payload: string }).payload)).toEqual({ mutations: [{
       target_kind: 'run',
       target_id: fixtureRun.id,
       expected_xml_sha256: fixtureRun.anchor.xml_sha256,

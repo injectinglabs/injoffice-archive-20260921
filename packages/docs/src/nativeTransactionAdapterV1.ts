@@ -121,6 +121,9 @@ export interface NativeDocxRunFormatPayloadV1 {
   }>
 }
 
+/** The envelope shape a producer that only replaces text builds and returns. */
+export type NativeDocxTextMutationEnvelopeV1 = NativeDocxOfficeMutationEnvelopeV1 & { payload: NativeDocxTextMutationPayloadV1 }
+
 export interface NativeDocxOfficeMutationEnvelopeV1 {
   protocol: typeof OFFICE_MUTATION_PROTOCOL
   version: typeof OFFICE_MUTATION_VERSION
@@ -159,7 +162,7 @@ export type NativeDocxTransactionAdapterResultV1 =
   | {
       ok: true
       value: {
-        envelope: NativeDocxOfficeMutationEnvelopeV1
+        envelope: NativeDocxTextMutationEnvelopeV1
         encoded_envelope: string
       }
     }
@@ -505,7 +508,7 @@ function adaptDecoded(document: NativeDocxDocumentV1, transaction: NativeDocxPro
   }))
   if (mutations.length === 0) return fail('SEMANTIC_NO_OP', '/steps', 'transaction produces no native text change')
   const payload: NativeDocxTextMutationPayloadV1 = { mutations }
-  const envelope: NativeDocxOfficeMutationEnvelopeV1 = {
+  const envelope: NativeDocxTextMutationEnvelopeV1 = {
     protocol: OFFICE_MUTATION_PROTOCOL,
     version: OFFICE_MUTATION_VERSION,
     format: 'docx',
