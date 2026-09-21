@@ -181,7 +181,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
    so the Quick Access Toolbar starts to their right. Windows and Linux keep the standard frame. */
 .platform-mac .app-titlebar { padding-left: 78px; }
 /* Without a document the title bar is absent; the bar that lands at the top keeps the lights clear. */
-.platform-mac > .app-error:first-child, .platform-mac > .app-import-progress:first-child, .platform-mac > .recovery-panel:first-child { padding-left: 90px; }
+.platform-mac > .app-error:first-child, .platform-mac > .app-import-progress:first-child { padding-left: 90px; }
 .titlebar-quick-access, .titlebar-tools { display: flex; align-items: center; gap: 2px; min-width: 0; }
 .titlebar-tools { justify-content: flex-end; }
 .app-titlebar .titlebar-button { min-height: 28px; padding: 3px 6px; color: var(--text-secondary); }
@@ -262,12 +262,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .document-tab button:last-child svg { width: 12px; height: 12px; }
 .document-tab button:last-child:hover:enabled { background: var(--border); color: var(--text); }
 .tab-format { font-size: 8.5px; font-weight: 700; margin-right: 6px; }
-.recovery-panel { background: var(--accent-soft); padding: 18px 28px; border-bottom: 1px solid var(--accent-border); }
-.recovery-panel h2 { font-size: 18px; margin: 0 0 4px; }
-.recovery-panel p { margin: 0 0 12px; color: var(--text-muted); }
-.recovery-panel>div { display: flex; align-items: center; gap: 10px; padding: 7px 0; }
-.recovery-panel span { flex: 1; }
-.recovery-panel small { margin-left: 16px; color: var(--text-muted); }
 
 .command-palette { width: min(560px, calc(100vw - 40px)); margin: 12vh auto auto; padding: 0; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-raised); color: var(--ink); box-shadow: 0 24px 80px var(--shadow); }
 .command-palette::backdrop { background: var(--backdrop); }

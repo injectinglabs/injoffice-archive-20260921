@@ -1,5 +1,6 @@
 .updates-dialog { width: min(460px, calc(100vw - 48px)); max-height: calc(100vh - 64px); padding: 28px; border: 1px solid var(--border); border-radius: 16px; color: var(--text); background: var(--surface-raised); box-shadow: 0 24px 80px var(--shadow); }
 .updates-dialog::backdrop { background: var(--backdrop); }
+.updates-dialog:focus { outline: none; }
 .updates-heading { display: flex; align-items: center; gap: 14px; }
 .updates-heading img { width: 42px; height: 42px; object-fit: contain; }
 .updates-heading h2 { margin: 0; font-size: 20px; font-weight: 650; }

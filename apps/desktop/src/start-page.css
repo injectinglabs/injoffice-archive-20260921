@@ -3,7 +3,7 @@
 .start-page button { cursor: pointer; }
 .start-page button:disabled { cursor: default; opacity: .45; }
 .start-page button:focus-visible, .start-page input:focus-visible, .start-page select:focus-visible { outline: 2px solid var(--start-blue); outline-offset: 3px; }
-.start-sidebar { flex: 0 0 196px; display: flex; flex-direction: column; padding: 30px 14px 21px; background: var(--surface); border-right: 1px solid var(--border-subtle); }
+.start-sidebar { flex: 0 0 196px; width: 196px; min-width: 0; display: flex; flex-direction: column; padding: 30px 14px 21px; background: var(--surface); border-right: 1px solid var(--border-subtle); }
 /* macOS: the start page carries no title bar, so the sidebar's top strip holds the inset traffic
    lights and drags the window (the app title bar does that on the document screens). */
 .platform-mac .start-sidebar { padding-top: 52px; -webkit-app-region: drag; }
@@ -18,7 +18,26 @@
 .start-current { margin-top: 30px; padding: 0 10px; }
 .start-current > span { color: var(--start-muted); font-size: 11px; }
 .start-current button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 10px 0; background: none; border: 0; color: var(--start-ink); font-size: 12px; text-align: left; }
-.start-current button > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.start-current button > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.start-current button:hover:enabled { background: var(--hover); border-radius: 5px; }
+
+/* Office's Document Recovery: a compact card at the top of Home, not a full-width band. */
+.start-recovery { margin: 0 0 26px; padding: 16px 18px; border: 1px solid var(--accent-border); border-radius: 8px; background: var(--accent-soft); }
+.start-recovery-heading { display: flex; align-items: flex-start; gap: 11px; }
+.start-recovery-heading svg { width: 19px; height: 19px; flex-shrink: 0; margin-top: 2px; color: var(--accent); }
+.start-recovery h2 { margin: 0; font-size: 14px; font-weight: 600; }
+.start-recovery-heading p { margin: 3px 0 0; font-size: 12px; color: var(--text-secondary); }
+.start-recovery ul { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.start-recovery li { display: flex; align-items: center; gap: 11px; padding: 7px 8px; border-radius: 5px; background: var(--surface); }
+.start-recovery .start-file-badge { width: 22px; height: 26px; }
+.start-recovery .start-file-badge > span { top: 13px; font-size: 6px; }
+.start-recovery-file { flex: 1; min-width: 0; }
+.start-recovery-file strong { display: block; font-size: 12.5px; font-weight: 500; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.start-recovery-file small { display: block; margin-top: 3px; font-size: 11px; color: var(--start-muted); }
+.start-page .start-recovery button { flex-shrink: 0; padding: 5px 11px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: var(--text-secondary); font-size: 12px; }
+.start-page .start-recovery button:hover:enabled { background: var(--hover); }
+.start-page .start-recovery .start-recovery-open { border-color: var(--accent-fill); background: var(--accent-fill); color: var(--accent-text); }
+.start-page .start-recovery .start-recovery-open:hover:enabled { background: var(--accent-hover); }
 .start-main { flex: 1; min-width: 0; overflow: auto; padding: 53px clamp(30px, 4.5vw, 72px) 42px; }
 .start-main-inner { max-width: 1120px; margin: 0 auto; }
 .start-command-search { display: flex; justify-content: center; margin: -22px 0 30px; }
@@ -88,8 +107,8 @@
 .start-empty p { font-size: 12px; color: var(--start-muted); margin: 0; line-height: 1.7; max-width: 335px; }
 .start-empty button { margin-top: 14px; color: var(--accent); border: 0; background: transparent; font-size: 12px; padding: 5px 9px; }
 .start-unavailable { color: var(--warning-text); background: var(--warning-soft); padding: 12px 15px; font-size: 12px; margin: -25px 0 30px; border-radius: 4px; }
-@media (max-width: 1050px) { .start-sidebar { flex-basis: 180px; padding-inline: 10px; } .start-main { padding: 39px 30px 30px; } .start-intro { align-items: flex-start; flex-direction: column; gap: 19px; } .start-create { margin: 27px 0 32px; } .start-create-grid { gap: 14px; } .start-create-preview { height: 128px; } .start-create-caption { align-items: flex-start; flex-direction: column; gap: 4px; } .start-open-existing { align-items: flex-start; } .start-file-badge-large { width: 30px; height: 36px; } .start-file-badge-large > span { top: 19px; font-size: 7px; } .start-search input { width: 108px; } }
-@media (max-width: 760px) { .start-sidebar { flex-basis: 155px; } .start-brand { margin-left: 8px; font-size: 18px; } .start-brand img { width: 25px; } .start-main { padding: 30px 22px; } .start-create-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .start-recents-heading { align-items: flex-start; flex-direction: column; gap: 15px; } .start-recent-tools { width: 100%; } .start-search { flex: 1; min-width: 0; } .start-search input { width: 100%; } .start-recent-open time, .start-list-labels { display: none; } }
+@media (max-width: 1050px) { .start-sidebar { flex-basis: 180px; width: 180px; padding-inline: 10px; } .start-main { padding: 39px 30px 30px; } .start-intro { align-items: flex-start; flex-direction: column; gap: 19px; } .start-create { margin: 27px 0 32px; } .start-create-grid { gap: 14px; } .start-create-preview { height: 128px; } .start-create-caption { align-items: flex-start; flex-direction: column; gap: 4px; } .start-open-existing { align-items: flex-start; } .start-file-badge-large { width: 30px; height: 36px; } .start-file-badge-large > span { top: 19px; font-size: 7px; } .start-search input { width: 108px; } }
+@media (max-width: 760px) { .start-sidebar { flex-basis: 155px; width: 155px; } .start-brand { margin-left: 8px; font-size: 18px; } .start-brand img { width: 25px; } .start-main { padding: 30px 22px; } .start-create-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .start-recents-heading { align-items: flex-start; flex-direction: column; gap: 15px; } .start-recent-tools { width: 100%; } .start-search { flex: 1; min-width: 0; } .start-search input { width: 100%; } .start-recent-open time, .start-list-labels { display: none; } }
 
 .start-create-pdf { --create-color: var(--pdf); }
 .start-create-pdf .start-create-preview { background: var(--pdf-soft); }
