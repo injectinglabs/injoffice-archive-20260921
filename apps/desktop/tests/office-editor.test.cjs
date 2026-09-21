@@ -349,7 +349,7 @@ test('OfficeEditor carries one Word-like status row: page and words left, style 
   const { view } = await mountEditor(client);
   const text = node => node.children.map(child => typeof child === 'string' ? child : text(child)).join('');
   try {
-    const status = view.root.findByProps({ className: 'office-document-status' });
+    const status = view.root.findByProps({ 'aria-label': 'Document status' });
     const spans = status.findAllByType('span').map(text);
     assert.equal(spans[0], 'Page 1 of 1 · 2 words');
     assert.equal(spans.at(-1), 'Normal', 'the paragraph style sits on the right, as in Word');

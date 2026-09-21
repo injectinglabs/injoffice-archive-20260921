@@ -1,3 +1,4 @@
+import { EditorStatusContext } from './EditorStatus';
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal, flushSync } from 'react-dom';
 import OfficeEditor from './OfficeEditor';
@@ -40,6 +41,7 @@ function SessionEditor({ session, onSessionChange, viewOptions, registerSessionC
 }
 
 export default function App() {
+  const [statusTarget, setStatusTarget] = useState<HTMLDivElement | null>(null);
   const [document, setDocument] = useState<DocumentSession | null>(null);
   const [sessions, setSessions] = useState<DocumentSession[]>([]);
   const historyHandlers = useRef(new Map<number, HistoryCommands>());
@@ -445,11 +447,17 @@ export default function App() {
       </nav>}
       {sessions.map(item => <WorkspaceFileGroupsContext key={item.key} value={{ ...fileGroups, backstage: { ...fileGroups.backstage!, render: item.key === document?.key ? fileGroups.backstage!.render : () => null } }}><main key={item.key} className="editor-workspace" hidden={showHome || item.key !== document?.key} aria-label={item.name} aria-busy={item.editorBusy}>
         <div className="editor-content" inert={working || item.key !== document?.key ? true : undefined}>
-          <SessionEditor session={item} registerSessionHistory={registerSessionHistory} registerSessionCommit={registerSessionCommit} onSessionChange={changeSession} viewOptions={sessionViews.current.get(item.key) ?? viewOptions} />
+          <EditorStatusContext value={item.key === document?.key && !showHome ? statusTarget : null}><SessionEditor session={item} registerSessionHistory={registerSessionHistory} registerSessionCommit={registerSessionCommit} onSessionChange={changeSession} viewOptions={sessionViews.current.get(item.key) ?? viewOptions} /></EditorStatusContext>
         </div>
       </main></WorkspaceFileGroupsContext>)}
 
-      <footer className="app-status" hidden={showHome}><span className="status-message" role="status">{busy ? 'Working…' : draftDirty ? 'Draft changes · Save applies your edits.' : notice}</span><div className="status-view-controls"><div className="status-zoom"><button disabled={!document || viewOptions.zoom <= 50} aria-label="Zoom out" onClick={() => changeZoom(viewOptions.zoom - 10)}>−</button><input type="range" aria-label="Document zoom" min="50" max="200" step="5" disabled={!document} value={viewOptions.zoom} onChange={event => changeZoom(Number(event.target.value))} /><button disabled={!document || viewOptions.zoom >= 200} aria-label="Zoom in" onClick={() => changeZoom(viewOptions.zoom + 10)}>+</button><output>{viewOptions.zoom}%</output></div></div></footer>
+      <footer className="app-status" aria-label="Document status bar" hidden={showHome}><div className="status-left"><div className="status-editor-slot" ref={setStatusTarget} /><span className="status-message" role="status">{busy ? 'Working…' : draftDirty ? 'Draft changes · Save applies your edits.' : notice}</span></div><div className="status-view-controls">
+        {document && /\.(docx|xlsx|pptx)$/i.test(document.name) && <div className="status-modes" role="group" aria-label="Document views">
+          <button aria-pressed={!viewOptions.focus} onClick={() => setViewOptions(value => ({ ...value, focus: false, navigation: true }))}>{/\.docx$/i.test(document.name) ? 'Print Layout' : 'Normal'}</button>
+          {/\.docx$/i.test(document.name) && <button aria-pressed={viewOptions.focus} onClick={toggleFocus}>Focus</button>}
+          {/\.pptx$/i.test(document.name) && <button title="Fit slide to window" onClick={() => changeZoom(100)}>Fit slide to window</button>}
+        </div>}
+        <div className="status-zoom"><button disabled={!document || viewOptions.zoom <= 50} aria-label="Zoom out" onClick={() => changeZoom(viewOptions.zoom - 10)}>−</button><input type="range" aria-label="Document zoom" min="50" max="200" step="5" disabled={!document} value={viewOptions.zoom} onChange={event => changeZoom(Number(event.target.value))} /><button disabled={!document || viewOptions.zoom >= 200} aria-label="Zoom in" onClick={() => changeZoom(viewOptions.zoom + 10)}>+</button><output>{viewOptions.zoom}%</output></div></div></footer>
 
       <UpdateNotice onOpen={() => setUpdatesOpen(true)} />
       {updatesOpen && <UpdatesDialog onClose={() => setUpdatesOpen(false)} />}
