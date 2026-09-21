@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { FONT_SIZES, TEXT_COLORS, alignmentOptions, stepFontSize, type FormattingPatch, type FormattingValues } from './FormattingToolbar'
-import { ColorButton, RibbonButton, RibbonCombo } from './Ribbon'
+import { FONT_SIZES, TEXT_COLORS, stepFontSize, type FormattingPatch, type FormattingValues } from './FormattingToolbar'
+import { AlignmentToggles, ColorButton, RibbonButton, RibbonCombo } from './Ribbon'
 import './selection-toolbar.css'
 
 /** Screen box of the selected text's first line; the mini toolbar hangs above it. */
@@ -100,6 +100,6 @@ export default function SelectionToolbar({ values, disabled, onChange, within = 
     <ColorButton label="Text color" icon="fontColor" disabled={characterInactive} value={values?.color?.toUpperCase()} colors={TEXT_COLORS} onChange={color => onChange({ color })} />
     <span className="selection-toolbar-separator" aria-hidden="true" />
     <RibbonButton icon="list" label="Bullets" labelHidden title={onBullets ? 'Bullets' : SELECTION_UNSUPPORTED.bullets} disabled={inactive || !onBullets} aria-pressed={bullets ?? false} onClick={() => onBullets?.()} />
-    {alignmentOptions('docx').map(option => <RibbonButton key={option.value} icon={option.icon} label={option.label} labelHidden aria-pressed={values?.alignment === option.value} disabled={inactive} onClick={() => onChange({ alignment: option.value })} />)}
+    <AlignmentToggles className="selection-toolbar-alignment" kind="docx" horizontal={values?.alignment} disabled={inactive} onHorizontal={alignment => onChange({ alignment })} />
   </div>
 }
