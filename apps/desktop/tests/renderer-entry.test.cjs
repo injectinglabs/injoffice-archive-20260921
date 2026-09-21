@@ -70,3 +70,28 @@ test('main.tsx mounts App on #root', async () => {
     await bundle.close();
   }
 });
+
+// One title row like Office: macOS hides the system frame and insets the traffic lights into the
+// renderer's 40px .app-titlebar, which then has to drag the window and keep the lights clear.
+test('macOS insets the traffic lights into the app title bar and keeps that row draggable', () => {
+  const host = fs.readFileSync(path.join(root, 'electron/main.cjs'), 'utf8');
+  const chrome = host.match(/process\.platform === 'darwin' \? \{ titleBarStyle: 'hiddenInset', trafficLightPosition: \{ x: (\d+), y: (\d+) \} \} : \{\}/);
+  assert.ok(chrome, 'main.cjs hides the system title bar on macOS only');
+  const [x, y] = [Number(chrome[1]), Number(chrome[2])];
+  // A traffic-light cluster is about 62px wide and 16px tall; centre it in the 40px title bar.
+  assert.ok(y >= 10 && y + 16 <= 30, `traffic lights sit inside the 40px title bar (y=${y})`);
+  assert.match(host, /backgroundColor: canvasColor\(\),\n\s*\.\.\.macTitleBar,/, 'the window spreads the macOS title-bar options');
+
+  const styles = fs.readFileSync(path.join(root, 'src/styles.css'), 'utf8');
+  assert.match(styles, /\.app-titlebar \{[^}]*-webkit-app-region: drag;/, 'the app title bar drags the window');
+  assert.match(styles, /\.app-titlebar button[^{]*\{[^}]*-webkit-app-region: no-drag;/, 'its controls stay clickable');
+  const padding = styles.match(/\.platform-mac \.app-titlebar \{ padding-left: (\d+)px; \}/);
+  assert.ok(padding, 'the macOS title bar leaves room on the left for the traffic lights');
+  assert.ok(Number(padding[1]) >= x + 62, `Quick Access starts right of the lights (${padding[1]}px vs ${x}+62px)`);
+
+  // The start page has no title bar, so its sidebar carries the lights and the drag region.
+  const startPage = fs.readFileSync(path.join(root, 'src/start-page.css'), 'utf8');
+  assert.match(startPage, /\.platform-mac \.start-sidebar \{ padding-top: (\d+)px; -webkit-app-region: drag; \}/);
+  assert.ok(Number(startPage.match(/\.platform-mac \.start-sidebar \{ padding-top: (\d+)px/)[1]) >= y + 16);
+  assert.match(startPage, /\.platform-mac \.start-sidebar button[^{]*\{[^}]*-webkit-app-region: no-drag;/);
+});
