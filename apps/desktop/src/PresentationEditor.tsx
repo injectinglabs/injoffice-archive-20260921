@@ -13,6 +13,7 @@ import './presentation-editor.css';
 import PresentationPlayer from './PresentationPlayer';
 import { exportNativePptxSlideSvg } from '@injoffice/pptx-render';
 import { startPresentationMode, type PresentationModeState } from './presentationMode';
+import { engineErrorMessage } from './engine-result';
 
 export interface OfficeEditorProps { registerHistory?: (commands: { undo(): void; redo(): void; canUndo?: boolean; canRedo?: boolean }) => void; registerCommit?: (commit: () => Promise<boolean>) => void; initialRecoveryDraft?: unknown; onRecoveryDraftChange?: (draft: unknown | null) => void; name: string; bytes: Uint8Array; onChange: (bytes: Uint8Array) => void; onBusyChange?: (busy: boolean) => void; onDraftChange?: (dirty: boolean) => void; viewOptions?: { zoom: number; navigation: boolean; focus: boolean } }
 type Snapshot = { bytes: Uint8Array; deck: NativePptxDeck };
@@ -21,7 +22,7 @@ type PresentationEditorProps = OfficeEditorProps & { initialRecoveryDraft?: unkn
 const newId = () => `slides-${crypto.randomUUID()}`;
 /** PowerPoint's Design gallery, cut down to the backgrounds the native transaction can set. */
 const backgroundPresets: [string, string][] = [['FFFFFF', 'White'], ['F5F7FA', 'Light grey'], ['202B3C', 'Dark'], ['2459AD', 'Accent']];
-const describeError = (error: unknown) => error instanceof Error ? error.message : String(error);
+const describeError = (error: unknown) => engineErrorMessage(error);
 
 export default function PresentationEditor({ name, bytes, onChange, onBusyChange, onDraftChange, viewOptions, initialRecoveryDraft, onRecoveryDraftChange, registerCommit, registerHistory }: PresentationEditorProps) {
   const [presentation, setPresentation] = useState<PresentationModeState>();

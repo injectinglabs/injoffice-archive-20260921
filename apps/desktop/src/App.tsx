@@ -366,10 +366,10 @@ export default function App() {
   const searchLabel = `Search (${shortcutLabel('commands')})`, searchTitle = shortcutTooltip('Search commands', 'commands');
 
   const commands: WorkspaceCommand[] = [
-    { id: 'preferences', label: 'Preferences', detail: 'Local view defaults', disabled: busy, run: () => setSettingsOpen(true) },
+    { id: 'preferences', label: 'Preferences', detail: 'View defaults', disabled: busy, run: () => setSettingsOpen(true) },
     { id: 'home', label: 'Go to start page', disabled: busy, run: () => setShowHome(true) },
     ...(['docx', 'xlsx', 'pptx', 'pdf'] as const).map((format, index) => ({ id: `new-${format}`, label: ['New document', 'New spreadsheet', 'New presentation', 'New blank PDF'][index], detail: format.toUpperCase(), disabled: busy || !bridge, run: () => { void runAction('create', format); } })),
-    {id:'importText',label:'Import CSV or TSV',detail:'New workbook · literal text',disabled:busy||!bridge,run:()=>{void runAction('importText')}},
+    {id:'importText',label:'Import CSV or TSV',detail:'Import CSV or TSV as text',disabled:busy||!bridge,run:()=>{void runAction('importText')}},
     { id: 'open', label: 'Open file', detail: 'Ctrl / ⌘ O', disabled: busy || !bridge, run: () => { void runAction('open'); } },
     { id: 'save', label: 'Save document', detail: 'Ctrl / ⌘ S', disabled: busy || !document, run: () => { void runAction('save'); } },
     { id: 'save-as', label: 'Save document as…', disabled: busy || !document, run: () => { void runAction('saveAs'); } },
