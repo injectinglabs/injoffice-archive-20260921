@@ -8,6 +8,7 @@ const vm = require('node:vm');
 const { createRequire } = require('node:module');
 
 async function harness(t, {pdfExporter, recoveryAdapter, installEffect} = {}) {
+  let quitCalls = 0;
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'injoffice-creation-ipc-'));
   t.after(() => fs.rm(directory, { recursive: true, force: true }));
   const handlers = new Map();
@@ -57,7 +58,7 @@ async function harness(t, {pdfExporter, recoveryAdapter, installEffect} = {}) {
     setBackgroundColor(color) { backgrounds.push(color); }
   }
   const electron = {
-    app: { name: 'InjOffice', isPackaged: true, getPath: () => directory, on: (name, callback) => appEvents.set(name, callback), whenReady: () => ({ then(callback) { ready = Promise.resolve().then(callback); return ready; } }) },
+    app: { name: 'InjOffice', isPackaged: true, quit: () => { quitCalls++; }, getPath: () => directory, on: (name, callback) => appEvents.set(name, callback), whenReady: () => ({ then(callback) { ready = Promise.resolve().then(callback); return ready; } }) },
     BrowserWindow: Window,
     dialog: { showOpenDialog:async()=>openResult, showSaveDialog: async () => { saveCalls++; return saveResult; }, showMessageBoxSync: () => discardResponse, showMessageBox: async () => ({ response: 0 }) },
     ipcMain: { handle: (name, callback) => handlers.set(name, callback), on: (name, callback) => listeners.set(name, callback) },
@@ -84,6 +85,7 @@ async function harness(t, {pdfExporter, recoveryAdapter, installEffect} = {}) {
     ready: (ready, token = prepareToken) => listeners.get('document:close-ready')(event, {token, ready}),
     canceledCloses: () => canceledCloses,
     close: () => window.close(),
+    quitCalls: () => quitCalls,
     closed: () => closed,
     emitApp: (name, ...args) => appEvents.get(name)(...args),
     invoke: (name, ...args) => handlers.get(name)(event, ...args),
@@ -450,4 +452,27 @@ test('four queued paths survive a busy editor before the final open', async t =>
   names.push((await host.invoke('document:next-external')).name);
   assert.deepEqual(names, ['File 1.docx', 'File 2.docx', 'File 3.docx', 'File 4.docx']);
   assert.equal(await host.invoke('document:next-external'), null);
+});
+
+// Cmd+Q must actually leave: the window close is deferred for the recovery drain,
+// and on macOS an app with no windows stays in the Dock unless we finish the quit.
+test('Cmd+Q quits once the deferred close completes', async (t) => {
+  const host = await harness(t);
+  host.emitApp('before-quit');
+  host.close();
+  host.ready(true);
+  await new Promise(resolve => setImmediate(resolve));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.ok(host.quitCalls() > 0, 'the app quits after the drained close');
+});
+
+// A close the user cancels ("Keep editing") must not quit the app later.
+test('a canceled close clears the pending quit', async (t) => {
+  const host = await harness(t);
+  host.emitApp('before-quit');
+  host.close();
+  host.ready(false);
+  await new Promise(resolve => setImmediate(resolve));
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(host.quitCalls(), 0, 'a canceled close does not quit');
 });
