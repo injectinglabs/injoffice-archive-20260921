@@ -116,8 +116,8 @@ test('PresentationEditor reports busy, applies a slide insert, and Present mount
     await until(() => changes.length === 1 && busy.at(-1) === false && view.root.findAllByProps({ 'aria-label': 'Show slide 2' }).length > 0);
     assert.equal(client.applied[0].operations[0].kind, 'slide.insert');
     assert.deepEqual([...changes[0]], [2]);
-    await act(async () => button(view, 'Present').props.onClick());
-    assert.equal(globalThis.__presentationPlayer.initial.index, 1);
+    await act(async () => button(view, 'From Beginning').props.onClick());
+    assert.equal(globalThis.__presentationPlayer.initial.index, 0, 'From Beginning starts at the first slide');
     assert.equal(globalThis.__presentationPlayer.initial.deck.slides.length, 2);
     assert.equal(view.root.findByProps({ 'aria-label': 'PresentationPlayer' }) != null, true);
   } finally {
@@ -156,8 +156,11 @@ test('PresentationEditor arranges its controls as a PowerPoint ribbon with label
     const byLabel = Object.fromEntries(commandButtons.map(node => [node.props['aria-label'] ?? text(node), node]));
     assert.match(byLabel.Underline.props.title, /not supported by the native PPTX transaction/);
     assert.match(byLabel.Bullets.props.title, /not supported by the native PPTX transaction/);
-    assert.equal(byLabel.Present.props.disabled, false);
-    assert.equal(view.root.findByProps({ 'aria-label': 'Slide background' }) != null, true);
+    assert.equal(byLabel['From Beginning'].props.disabled, false);
+    assert.equal(byLabel['From Current Slide'].props.disabled, false);
+    const gallery = view.root.findByProps({ 'aria-label': 'Slide background' });
+    assert.equal(gallery.findAllByType('select').length, 0, 'the background is a gallery, not a select');
+    assert.deepEqual(gallery.findAllByType('button').map(node => node.props['aria-label']), ['White background', 'Light grey background', 'Dark background', 'Accent background']);
   } finally {
     if (view) await act(async () => view.unmount());
     delete globalThis.__pptxClient;
