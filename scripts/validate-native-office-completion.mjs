@@ -3,6 +3,7 @@ import { spawnSync } from 'node:child_process'
 import { existsSync, lstatSync, readFileSync, readdirSync, realpathSync, statSync } from 'node:fs'
 import { basename, dirname, extname, isAbsolute, posix, relative, resolve, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
+import { readCompletionBaselineSnapshot } from './completion-baseline-snapshot.mjs'
 
 export const PROTOCOL = 'injoffice.native-office-completion/v1'
 export const PROTOCOL_V2 = 'injoffice.native-office-completion/v2'
@@ -156,6 +157,13 @@ function readBaselineFile(root, repositoryPath, context, errors) {
     baselineFileCache.set(cacheKey, result)
   }
   if (result.status !== 0) {
+    try {
+      const entry = readCompletionBaselineSnapshot(root, activeBaseline)?.files[repositoryPath]
+      if (entry?.type === 'blob') return Buffer.from(entry.base64, 'base64')
+    } catch (error) {
+      errors.push(`${context}: ${error.message}`)
+      return undefined
+    }
     errors.push(`${context} is absent from baseline ${activeBaseline}: ${repositoryPath}`)
     return undefined
   }
@@ -167,7 +175,13 @@ function readBaselineTree(root) {
   let tree = baselineTreeCache.get(cacheKey)
   if (tree) return tree
   const result = spawnSync('git', ['-C', root, 'ls-tree', '-r', '-z', activeBaseline], { encoding: 'utf8', maxBuffer: 128 * 1024 * 1024 })
-  if (result.status !== 0) throw new Error(`cannot read baseline tree ${activeBaseline}: ${result.stderr?.trim() || `git exited ${result.status}`}`)
+  if (result.status !== 0) {
+    const snapshot = readCompletionBaselineSnapshot(root, activeBaseline)
+    if (!snapshot) throw new Error(`cannot read baseline tree ${activeBaseline}: ${result.stderr?.trim() || `git exited ${result.status}`}`)
+    tree = new Map(Object.entries(snapshot.files).map(([path, { mode, type, object }]) => [path, { mode, type, object }]))
+    baselineTreeCache.set(cacheKey, tree)
+    return tree
+  }
   tree = new Map()
   for (const record of result.stdout.split('\0')) {
     if (!record) continue
