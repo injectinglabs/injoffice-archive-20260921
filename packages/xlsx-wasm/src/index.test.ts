@@ -325,3 +325,9 @@ it('rich source client snapshots bytes and chooses only its read-only module', a
   expect(client).not.toHaveProperty('apply'); expect(client).not.toHaveProperty('extract')
   client.terminate(); expect(worker.terminated).toBe(true)
 })
+
+it('adapts structural edits as isolated native transactions', () => {
+ const batch = {...clearBatch(), operations:[{operation_id:'insert',sheet_id:fixtureWorkbook.sheets[0].id,kind:'row.insert',index:1,count:2}]} as WorkbookMutationBatchV1
+ expect(adaptWorkbookMutationBatchV1(fixtureWorkbook,batch)).toEqual({expected_revision:fixtureWorkbook.revision,structure:batch.operations})
+ expect(()=>adaptWorkbookMutationBatchV1(fixtureWorkbook,{...batch,operations:[...batch.operations,...clearBatch().operations]})).toThrow(/one structural edit/)
+})

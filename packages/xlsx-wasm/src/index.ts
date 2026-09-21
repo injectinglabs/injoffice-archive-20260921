@@ -33,6 +33,8 @@ export type XlsxNativeLayoutMutationV1 = Extract<SupportedWorkbookMutation, { ki
 
 type XlsxNativeMergeMutationV1 = Extract<SupportedWorkbookMutation, { kind: 'range.merge' | 'range.unmerge' }>
 
+type XlsxNativeStructureMutationV1 = Extract<SupportedWorkbookMutation, { kind: 'row.insert' | 'row.delete' | 'column.insert' | 'column.delete' }>
+
 /** Strict JSON shape consumed by Go's NativeWorkbookMutationTransactionV1. */
 export interface XlsxNativeMutationTransactionV1 {
   /** Inner contract CAS: rev:<the exact source package SHA-256 digest>. */
@@ -41,6 +43,7 @@ export interface XlsxNativeMutationTransactionV1 {
   readonly styles?: ReadonlyArray<XlsxNativeStyleMutationV1>
   readonly layout?: ReadonlyArray<XlsxNativeLayoutMutationV1>
   readonly merges?: ReadonlyArray<XlsxNativeMergeMutationV1>
+  readonly structure?: ReadonlyArray<XlsxNativeStructureMutationV1>
 }
 
 export interface XlsxWasmAssetUrls {
@@ -101,7 +104,11 @@ export function adaptWorkbookMutationBatchV1(
       `Mutation batch outer expected_revision must equal extracted source.package_sha256 ${JSON.stringify(workbook.source.package_sha256)}.`,
     )
   }
-  if (batch.operations.some(op => op.kind === 'range.merge' || op.kind === 'range.unmerge')) {
+  if (batch.operations.some(op => ['row.insert','row.delete','column.insert','column.delete'].includes(op.kind))) {
+    if (batch.operations.length !== 1) throw new NativeWasmError('UNSUPPORTED_ORDER', 'Send one structural edit per transaction.')
+    return { expected_revision: workbook.revision, structure: batch.operations as XlsxNativeStructureMutationV1[] }
+  }
+  if (batch.operations.some(op => op.kind === 'range.merge'  || op.kind === 'range.unmerge')) {
     if (!batch.operations.every(op => op.kind === 'range.merge' || op.kind === 'range.unmerge')) throw new NativeWasmError('UNSUPPORTED_ORDER', 'Merge batches cannot mix with cell/style/layout operations.')
     return { expected_revision: workbook.revision, merges: batch.operations as XlsxNativeMergeMutationV1[] }
   }
@@ -207,7 +214,7 @@ class XlsxWasmClientImpl implements XlsxWasmClient {
 
 function validateNativeTransaction(workbook: NativeWorkbookV2, input: XlsxNativeMutationTransactionV1): XlsxNativeMutationTransactionV1 {
   if (!isRecord(input)) throw new TypeError('XLSX native transaction must be an object.')
-  rejectUnknownKeys(input, ['expected_revision', 'cells', 'styles', 'layout', 'merges'])
+  rejectUnknownKeys(input, ['expected_revision', 'cells', 'styles', 'layout', 'merges', 'structure'])
   if (input.expected_revision !== workbook.revision) {
     throw new NativeWasmError(
       'STALE_REVISION',
@@ -218,7 +225,9 @@ function validateNativeTransaction(workbook: NativeWorkbookV2, input: XlsxNative
   const styles = optionalArray(input.styles, 'styles')
   const layout = optionalArray(input.layout, 'layout')
   const merges = optionalArray(input.merges, 'merges')
-  const operations = [...cells, ...styles, ...layout, ...merges]
+  const structure = optionalArray(input.structure, 'structure')
+  const operations = [...cells, ...styles, ...layout, ...merges, ...structure]
+  if (structure.length && operations.length !== 1) throw new TypeError('Send one structural edit per transaction.')
   if (merges.length && operations.length !== merges.length) throw new TypeError('Merge batches cannot mix with cell/style/layout operations.')
   const decoded = decodeWorkbookMutationBatch({
     protocol: WORKBOOK_MUTATION_PROTOCOL,
@@ -231,6 +240,10 @@ function validateNativeTransaction(workbook: NativeWorkbookV2, input: XlsxNative
   rejectUnpairedSurrogates(decoded.value)
   const normalized = decoded.value.operations
   for (const operation of normalized) validateNativeOperation(operation)
+  if (structure.length) {
+    if (normalized.some(op => !['row.insert','row.delete','column.insert','column.delete'].includes(op.kind))) throw new TypeError('Invalid structural operation.')
+    return { expected_revision: workbook.revision, structure: normalized as XlsxNativeStructureMutationV1[] }
+  }
   if (merges.length) {
     if (normalized.some(op => op.kind !== 'range.merge' && op.kind !== 'range.unmerge')) throw new TypeError('XLSX native merges may contain only merge/unmerge operations.')
     return { expected_revision: workbook.revision, merges: normalized as XlsxNativeMergeMutationV1[] }

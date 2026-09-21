@@ -20,6 +20,7 @@ type NativeWorkbookMutationTransactionV1 struct {
 	Styles           []StylePatchMutation `json:"styles,omitempty"`
 	Layout           []LayoutMutation     `json:"layout,omitempty"`
 	Merges           []MergeMutation      `json:"merges,omitempty"`
+	Structure        []StructureMutation  `json:"structure,omitempty"`
 }
 
 // NativeWorkbookMutationResultV1 returns both the exact saved package and its
@@ -111,6 +112,9 @@ func ApplyNativeWorkbookMutationTransactionV1(original []byte, transaction Nativ
 	if before.Revision != transaction.ExpectedRevision {
 		return nil, fmt.Errorf("xlsxpatch: native mutation: extracted revision %q disagrees with expected revision", before.Revision)
 	}
+	if len(transaction.Structure) > 0 {
+		return applyNativeStructureTransaction(original, before, transaction.Structure[0])
+	}
 	if len(transaction.Merges) > 0 {
 		return applyNativeMergeTransaction(original, before, transaction.Merges)
 	}
@@ -182,12 +186,18 @@ func validateNativeWorkbookMutationTransaction(transaction NativeWorkbookMutatio
 	if !nativeWorkbookRevision.MatchString(transaction.ExpectedRevision) {
 		return fmt.Errorf("xlsxpatch: native mutation: expected_revision must contain a full SHA-256")
 	}
-	total := len(transaction.Cells) + len(transaction.Styles) + len(transaction.Layout) + len(transaction.Merges)
+	total := len(transaction.Cells) + len(transaction.Styles) + len(transaction.Layout) + len(transaction.Merges) + len(transaction.Structure)
 	if total == 0 {
 		return fmt.Errorf("xlsxpatch: native mutation: empty transaction")
 	}
 	if total > maxNativeWorkbookTransactionOperations {
 		return fmt.Errorf("xlsxpatch: native mutation: transaction exceeds %d operations", maxNativeWorkbookTransactionOperations)
+	}
+	if len(transaction.Structure) > 0 {
+		if total != 1 {
+			return fmt.Errorf("xlsxpatch: send one structural edit per transaction")
+		}
+		return validateStructureMutation(transaction.Structure[0])
 	}
 	if len(transaction.Merges) > 0 {
 		if total != len(transaction.Merges) {

@@ -15687,7 +15687,7 @@
             {
               "name": "UNSUPPORTED_STRUCTURAL_MUTATION_KINDS",
               "kind": "const",
-              "signature": "export declare const UNSUPPORTED_STRUCTURAL_MUTATION_KINDS: readonly ['sheet.add', 'sheet.delete', 'sheet.rename', 'sheet.reorder', 'row.insert', 'row.delete', 'row.move', 'column.insert', 'column.delete', 'column.move', 'range.move']"
+              "signature": "export declare const UNSUPPORTED_STRUCTURAL_MUTATION_KINDS: readonly ['sheet.add', 'sheet.delete', 'sheet.rename', 'sheet.reorder', 'row.move', 'column.move', 'range.move']"
             },
             {
               "name": "UnsupportedStructuralMutationKind",
