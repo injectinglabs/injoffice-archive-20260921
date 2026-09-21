@@ -112,3 +112,15 @@ test('paragraph toolbar can create lists when the document has no numbering defi
     assert.deepEqual(patches, [{ numbering_kind: 'bullet', numbering_level: 0 }, { numbering_kind: 'decimal', numbering_level: 0 }, { numbering_num_id: '0', numbering_level: 0 }]);
   } finally { await act(async () => view.unmount()); }
 });
+
+test('unsupported paragraph-style writes stay read-only even when style metadata is present', async () => {
+  const ParagraphToolbar = await load('ParagraphToolbar.tsx'); let view;
+  await act(async () => { view = create(React.createElement(ParagraphToolbar, { properties: { paragraph_style_id: 'Heading1' }, styles: [{ id: 'Heading1', name: 'Heading 1' }], disabled: false, onChange() { throw new Error('unsupported style write'); } })); });
+  try {
+    const style = view.root.findByProps({ 'aria-label': 'Paragraph style' });
+    assert.equal(style.props.disabled, true);
+    assert.equal(style.props.onChange, undefined);
+    assert.match(style.props.title, /not supported/);
+    assert.equal(style.props.value, 'Heading1');
+  } finally { await act(async () => view.unmount()); }
+});

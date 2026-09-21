@@ -39,7 +39,8 @@ interface DocumentPreviewProps {
 function runIdentity(partName: string, runId: string) { return `${partName}\0${runId}` }
 function baseParagraphId(paragraph: NativeDocxParagraphV1) { return `doc-paragraph-${encodeURIComponent(paragraph.anchor.part_name)}-${encodeURIComponent(paragraph.id)}` }
 function headingLevel(paragraph: NativeDocxParagraphV1, document: NativeDocxDocumentV1): number | undefined {
-  const level = paragraphAppearance(document, paragraph).paragraph.outline_level
+  const properties = paragraphAppearance(document, paragraph).paragraph
+  const level = 'outline_level' in properties && typeof properties.outline_level === 'number' ? properties.outline_level : undefined
   if (level !== undefined) return level < 9 ? level + 1 : undefined
   const match = /^heading[ _-]?([1-9])$/i.exec(paragraph.properties.paragraph_style_id ?? '')
   return match ? Number(match[1]) : undefined
@@ -140,7 +141,7 @@ export default function DocumentPreview(props: DocumentPreviewProps) {
     </p>
   }
   function story(value: NativeDocxStoryV1) {
-    return value.blocks.map((block, index) => block.paragraph ? paragraph(block.paragraph) : block.table ? <table className="office-doc-table" key={index} style={{width:block.table.width_twips === undefined ? undefined : `${block.table.width_twips / 20}pt`,tableLayout:block.table.layout}}>{block.table.grid_widths_twips && <colgroup>{block.table.grid_widths_twips.map((width,index)=><col key={index} style={{width:`${width / 20}pt`}} />)}</colgroup>}<tbody>{block.table.rows.map((row, r) => <tr key={r}>{row.cells.map((cell, c) => {
+    return value.blocks.map((block, index) => block.paragraph ? paragraph(block.paragraph) : block.table ? <table className="office-doc-table" key={index} style={{width:block.table.width_twips === undefined ? undefined : `${block.table.width_twips / 20}pt`,tableLayout:block.table.layout === 'autofit' ? 'auto' : block.table.layout}}>{block.table.grid_widths_twips && <colgroup>{block.table.grid_widths_twips.map((width,index)=><col key={index} style={{width:`${width / 20}pt`}} />)}</colgroup>}<tbody>{block.table.rows.map((row, r) => <tr key={r}>{row.cells.map((cell, c) => {
       const background = hexColor(cell.shading_rgb) ?? '#ffffff'
       return <td key={c} colSpan={cell.grid_span} style={{ backgroundColor: background }}>{cell.paragraphs.map(value => paragraph(value, background))}</td>
     })}</tr>)}</tbody></table> : <p key={index} className="office-preserved-content">Content preserved in the original file</p>)
