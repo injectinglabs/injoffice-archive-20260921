@@ -30,7 +30,8 @@
                 "text.replace",
                 "properties.patch",
                 "block.insert_after",
-                "hyperlink.set"
+                "hyperlink.set",
+                "page_break.insert"
               ],
               "mode": "read-write"
             },
@@ -69,7 +70,8 @@
                 "text.replace",
                 "properties.patch",
                 "block.insert_after",
-                "hyperlink.set"
+                "hyperlink.set",
+                "page_break.insert"
               ],
               "mode": "read-write"
             },
@@ -108,7 +110,8 @@
                 "text.replace",
                 "properties.patch",
                 "block.insert_after",
-                "hyperlink.set"
+                "hyperlink.set",
+                "page_break.insert"
               ],
               "mode": "read-write"
             },
@@ -147,7 +150,8 @@
                 "text.replace",
                 "properties.patch",
                 "block.insert_after",
-                "hyperlink.set"
+                "hyperlink.set",
+                "page_break.insert"
               ],
               "mode": "read-write"
             },
@@ -187,7 +191,8 @@
                 "properties.patch",
                 "block.insert_after",
                 "hyperlink.set",
-                "paragraph.split"
+                "paragraph.split",
+                "page_break.insert"
               ],
               "mode": "read-write"
             },

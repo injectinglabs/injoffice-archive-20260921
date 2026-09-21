@@ -86,6 +86,9 @@ func ApplyNativeMutationPayloadV1(packageBytes, payload []byte, outerExpectedRev
 			if mutation.Operation == "hyperlink.set" {
 				return applyNativeHyperlink(packageBytes, outerExpectedRevision, mutation)
 			}
+			if mutation.Image != nil || mutation.Operation == "page_break.insert" {
+				return applyNativeInsert(packageBytes, outerExpectedRevision, mutation)
+			}
 			return applyNativeParagraphStructure(packageBytes, outerExpectedRevision, mutation)
 		}
 	}

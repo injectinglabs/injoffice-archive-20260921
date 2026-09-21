@@ -57,9 +57,9 @@
         "mode": { "enum": ["read-write", "read-only"] },
         "allowed_operations": {
           "type": "array",
-          "maxItems": 7,
+          "maxItems": 8,
           "uniqueItems": true,
-          "items": { "enum": ["text.replace", "properties.patch", "paragraph.split", "hyperlink.set", "block.insert_after", "block.delete", "drawing.replace"] }
+          "items": { "enum": ["page_break.insert", "text.replace", "properties.patch", "paragraph.split", "hyperlink.set", "block.insert_after", "block.delete", "drawing.replace"] }
         },
         "refusal": { "$ref": "#/$defs/RefusalV1" }
       }

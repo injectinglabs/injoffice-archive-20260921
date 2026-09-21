@@ -74,6 +74,7 @@ func DecodeNativeDOCXFormatMutationPayloadV1(data []byte) ([]NativeDOCXFormatMut
 // nativeDOCXMutationV1 is the decoded union of the two payload shapes the
 // envelope carries: an exact text replacement, or a run-property patch.
 type nativeDOCXMutationV1 struct {
+	Image *nativeInsertImage
 	NativeDOCXTextMutationV1
 	Hyperlink           *nativeHyperlinkPatch
 	Operation           string
@@ -181,7 +182,7 @@ func decodeNativeDOCXTextMutationV1(decoder *json.Decoder, index int) (nativeDOC
 	}
 	seen := map[string]bool{}
 	values := map[string]string{}
-	allowed := map[string]bool{"target_kind": true, "target_id": true, "expected_xml_sha256": true, "text": true, "properties": true, "range": true, "operation": true, "split": true, "hyperlink": true}
+	allowed := map[string]bool{"target_kind": true, "target_id": true, "expected_xml_sha256": true, "text": true, "properties": true, "range": true, "operation": true, "split": true, "hyperlink": true, "image": true}
 	for decoder.More() {
 		fieldToken, tokenErr := decoder.Token()
 		if tokenErr != nil {
@@ -230,6 +231,14 @@ func decodeNativeDOCXTextMutationV1(decoder *json.Decoder, index int) (nativeDOC
 				return invalid("hyperlink URL is required")
 			}
 			mutation.Hyperlink = patch
+			continue
+		}
+		if field == "image" {
+			im, err := nativeDecodeInsertImage(rawValue)
+			if err != nil {
+				return invalid(err.Error())
+			}
+			mutation.Image = im
 			continue
 		}
 		if field == "split" {
@@ -283,21 +292,21 @@ func decodeNativeDOCXTextMutationV1(decoder *json.Decoder, index int) (nativeDOC
 		return invalid("field \"range\" is only meaningful beside run properties")
 	}
 	mutation.Operation = values["operation"]
-	if seen["operation"] || seen["split"] || seen["hyperlink"] {
+	if seen["operation"] || seen["split"] || seen["hyperlink"] || seen["image"] {
 		if mutation.Properties != nil || mutation.ParagraphProperties != nil || (mutation.Range != nil && mutation.Operation != "hyperlink.set") {
 			return invalid("structural operations cannot carry properties or range")
 		}
 		switch mutation.Operation {
 		case "hyperlink.set":
-			if mutation.Hyperlink == nil || seen["text"] || seen["split"] {
+			if mutation.Hyperlink == nil || seen["text"] || seen["split"] || seen["image"] {
 				return invalid("hyperlink.set requires only hyperlink and optional range")
 			}
 		case "block.insert_after":
-			if !seen["text"] || values["text"] != "" || seen["split"] || seen["hyperlink"] {
+			if seen["hyperlink"] || seen["split"] || (seen["image"] && seen["text"]) || (!seen["image"] && (!seen["text"] || values["text"] != "")) {
 				return invalid("insert_after requires only empty text")
 			}
-		case "paragraph.split":
-			if !seen["split"] || seen["text"] || seen["hyperlink"] {
+		case "paragraph.split", "page_break.insert":
+			if !seen["split"] || seen["text"] || seen["hyperlink"] || seen["image"] {
 				return invalid("paragraph.split requires only split")
 			}
 		default:

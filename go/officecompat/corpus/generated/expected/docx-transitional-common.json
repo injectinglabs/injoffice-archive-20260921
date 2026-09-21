@@ -29,7 +29,8 @@
               "allowed_operations": [
                 "text.replace",
                 "properties.patch",
-                "block.insert_after"
+                "block.insert_after",
+                "page_break.insert"
               ],
               "mode": "read-write"
             },
