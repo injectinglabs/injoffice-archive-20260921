@@ -4,7 +4,7 @@ import { resolve } from 'node:path'
 import { gunzipSync } from 'node:zlib'
 
 const commit = '420424b57f658a034f7d8cdd76aab20f048a32f4'
-const digest = '9fd082f8da616cc0eebc63230f8e107ad3c1a603bfe81e7fa614295145912f3b'
+const digest = '82a2eef18c6754acd85bea0873b63b178231b74a9498d42aa93997002978699a'
 const snapshots = new Map()
 
 // This immutable file snapshot preserves historical evidence in shallow clones

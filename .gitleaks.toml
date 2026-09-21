@@ -1,0 +1,15 @@
+title = "InjOffice public source"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Deterministic ECMA-376 font-obfuscation test key, including its historical evidence copy"
+targetRules = ["generic-api-key"]
+condition = "AND"
+regexTarget = "secret"
+regexes = ['''^00112233445566778899AABBCCDDEEFF$''']
+paths = [
+  '''(^|/)packages/docs/src/nativePagePaintCompilerV1\.test\.ts$''',
+  '''(^|/)testdata/native-office-completion/baseline-420424b\.json\.gz(?:!.*)?$''',
+]

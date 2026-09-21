@@ -159,7 +159,7 @@ function readBaselineFile(root, repositoryPath, context, errors) {
   if (result.status !== 0) {
     try {
       const entry = readCompletionBaselineSnapshot(root, activeBaseline)?.files[repositoryPath]
-      if (entry?.type === 'blob') return Buffer.from(entry.base64, 'base64')
+      if (entry?.type === 'blob' && typeof entry.base64 === 'string') return Buffer.from(entry.base64, 'base64')
     } catch (error) {
       errors.push(`${context}: ${error.message}`)
       return undefined
