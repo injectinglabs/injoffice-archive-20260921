@@ -150,6 +150,20 @@ export interface NativeDocxHyperlinkPayloadV1 {
   }>
 }
 
+export interface NativeDocxSectionPagePatchV1 {
+  width_twips: number
+  height_twips: number
+  orientation: 'portrait' | 'landscape'
+  margin_top_twips: number
+  margin_right_twips: number
+  margin_bottom_twips: number
+  margin_left_twips: number
+}
+
+export interface NativeDocxSectionPagePayloadV1 {
+  mutations: Array<{target_kind: 'section'; target_id: string; expected_xml_sha256: string; operation: 'section.page.patch'; page: NativeDocxSectionPagePatchV1}>
+}
+
 export interface NativeDocxStructurePayloadV1 {
   mutations: Array<{
     target_kind: 'paragraph'
@@ -168,7 +182,7 @@ export interface NativeDocxOfficeMutationEnvelopeV1 {
   mutation_id: string
   expected_revision: string
   /** One transaction carries exact text replacements or run-property patches, never both. */
-  payload: { mutations: Array<{ target_kind: 'paragraph'; target_id: string; expected_xml_sha256: string; operation: 'block.insert_after' | 'page_break.insert'; text?: string; image?: {data_base64: string; content_type: string; width_emu: number; height_emu: number; alt_text: string}; split?: {run_id: string; offset_utf16: number} }> } | NativeDocxTextMutationPayloadV1 | NativeDocxRunFormatPayloadV1 | NativeDocxStructurePayloadV1 | NativeDocxHyperlinkPayloadV1
+  payload: { mutations: Array<{ target_kind: 'paragraph'; target_id: string; expected_xml_sha256: string; operation: 'block.insert_after' | 'page_break.insert'; text?: string; image?: {data_base64: string; content_type: string; width_emu: number; height_emu: number; alt_text: string}; split?: {run_id: string; offset_utf16: number} }> } | NativeDocxTextMutationPayloadV1 | NativeDocxRunFormatPayloadV1 | NativeDocxStructurePayloadV1 | NativeDocxHyperlinkPayloadV1 | NativeDocxSectionPagePayloadV1
 }
 
 export type NativeDocxTransactionAdapterIssueCode =

@@ -57,9 +57,9 @@
         "mode": { "enum": ["read-write", "read-only"] },
         "allowed_operations": {
           "type": "array",
-          "maxItems": 8,
+          "maxItems": 9,
           "uniqueItems": true,
-          "items": { "enum": ["page_break.insert", "text.replace", "properties.patch", "paragraph.split", "hyperlink.set", "block.insert_after", "block.delete", "drawing.replace"] }
+          "items": { "enum": ["page_break.insert", "text.replace", "properties.patch", "paragraph.split", "hyperlink.set", "block.insert_after", "block.delete", "drawing.replace", "section.page.patch"] }
         },
         "refusal": { "$ref": "#/$defs/RefusalV1" }
       }
@@ -457,6 +457,7 @@
       "additionalProperties": false,
       "required": ["id", "anchor", "starts_at_block_id", "break_type", "title_page", "page", "header_refs", "footer_refs"],
       "properties": {
+        "edit_policy": { "$ref": "#/$defs/EditPolicyV1" },
         "id": { "$ref": "#/$defs/Identifier" },
         "anchor": { "$ref": "#/$defs/SourceAnchorV1" },
         "starts_at_block_id": { "$ref": "#/$defs/Identifier" },

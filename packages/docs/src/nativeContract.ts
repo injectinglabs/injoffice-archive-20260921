@@ -31,6 +31,7 @@ export type NativeDocxEditOperation =
   | 'hyperlink.set'
   | 'page_break.insert'
   | 'paragraph.split'
+  | 'section.page.patch'
   | 'block.insert_after'
   | 'block.delete'
   | 'drawing.replace'
@@ -358,6 +359,7 @@ export interface NativeDocxPageGeometryV1 {
 }
 
 export interface NativeDocxSectionV1 {
+  edit_policy?: NativeDocxEditPolicyV1
   id: string
   anchor: NativeDocxSourceAnchorV1
   /** First body block governed by this section. */
@@ -487,7 +489,7 @@ export const DOCX_NATIVE_V1_BINDING_FIELDS = {
   PageMarginsV1: ['top_twips', 'right_twips', 'bottom_twips', 'left_twips', 'header_twips', 'footer_twips', 'gutter_twips'],
   ColumnV1: ['id', 'ordinal', 'width_twips', 'space_after_twips'],
   PageGeometryV1: ['width_twips', 'height_twips', 'orientation', 'margins', 'columns', 'column_spacing_twips', 'column_layout', 'column_definitions', 'rtl_gutter', 'column_separator'],
-  SectionV1: ['id', 'anchor', 'starts_at_block_id', 'break_type', 'title_page', 'page_number_start', 'page', 'header_refs', 'footer_refs'],
+  SectionV1: ['edit_policy', 'id', 'anchor', 'starts_at_block_id', 'break_type', 'title_page', 'page_number_start', 'page', 'header_refs', 'footer_refs'],
   CommentV1: ['id', 'native_comment_id', 'author', 'initials', 'created_at', 'anchor', 'body_story_id'],
   UnsupportedCapabilityV1: ['id', 'code', 'capability', 'scope_id', 'anchor', 'preservation', 'message'],
   DocumentV1: ['protocol', 'version', 'document_id', 'revision', 'source', 'body', 'sections', 'headers', 'footers', 'notes', 'comment_stories', 'comments', 'capabilities', 'passthrough_parts', 'unsupported', 'note_numbering'],
@@ -507,7 +509,7 @@ const NOTE_SENTINEL_ID = /^(?:0|-?[1-9][0-9]{0,18})$/
 const PART_SEGMENT = /^(?:[A-Za-z0-9._~!$&'()*+,;=@-]|%[0-9A-F]{2})+$/
 const SHA256 = /^sha256:[0-9a-f]{64}$/
 const COLOR = /^(?:auto|[0-9A-F]{6})$/
-const operations = ['page_break.insert', 'text.replace', 'properties.patch', 'hyperlink.set', 'paragraph.split', 'block.insert_after', 'block.delete', 'drawing.replace'] as const
+const operations = ['page_break.insert', 'text.replace', 'properties.patch', 'hyperlink.set', 'paragraph.split', 'block.insert_after', 'block.delete', 'drawing.replace', 'section.page.patch'] as const
 const paragraphOperations: readonly NativeDocxEditOperation[] = ['page_break.insert', 'text.replace', 'properties.patch', 'hyperlink.set', 'paragraph.split', 'block.insert_after', 'block.delete']
 const tableOperations: readonly NativeDocxEditOperation[] = ['properties.patch', 'block.insert_after', 'block.delete']
 const drawingOperations: readonly NativeDocxEditOperation[] = ['drawing.replace']
@@ -1023,6 +1025,7 @@ function validateStory(value: unknown, path: string, expectedKinds: readonly Nat
 function validateSection(value: unknown, path: string, issues: NativeDocxValidationIssue[], ids: Set<string>, refs: PendingReference[], mainPart: string | null, bodyAnchor: AnchorBounds | null): void {
   const entry = object(value, path, DOCX_NATIVE_V1_BINDING_FIELDS.SectionV1, issues)
   if (!entry) return
+  if (entry.edit_policy !== undefined) validateEditPolicy(entry.edit_policy, `${path}/edit_policy`, issues, ['section.page.patch'])
   trackId(entry.id, `${path}/id`, issues, ids)
   validateAnchor(entry.anchor, `${path}/anchor`, issues, mainPart, bodyAnchor)
   const start = stringValue(entry.starts_at_block_id, `${path}/starts_at_block_id`, issues, ID)

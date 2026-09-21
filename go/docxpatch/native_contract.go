@@ -336,6 +336,7 @@ func nativeBoundedLength(length, maximum int) int {
 }
 
 type NativeSectionV1 struct {
+	EditPolicy      *NativeEditPolicyV1             `json:"edit_policy,omitempty"`
 	ID              string                          `json:"id"`
 	Anchor          NativeSourceAnchorV1            `json:"anchor"`
 	StartsAtBlockID string                          `json:"starts_at_block_id"`
@@ -425,7 +426,7 @@ var (
 	nativeNegativeZero          = regexp.MustCompile(`^-0(?:\.0*)?(?:[eE][+-]?[0-9]+)?$`)
 	nativeOperations            = map[string]bool{
 		"text.replace": true, "properties.patch": true, "block.insert_after": true,
-		"block.delete": true, "drawing.replace": true, "paragraph.split": true, "hyperlink.set": true,
+		"block.delete": true, "drawing.replace": true, "paragraph.split": true, "hyperlink.set": true, "section.page.patch": true,
 	}
 	nativeParagraphOperations = map[string]bool{"paragraph.split": true, "hyperlink.set": true, "text.replace": true, "properties.patch": true, "block.insert_after": true, "block.delete": true}
 	nativeTableOperations     = map[string]bool{"properties.patch": true, "block.insert_after": true, "block.delete": true}
@@ -1275,6 +1276,9 @@ func (v *nativeValidator) drawing(drawing *NativeDrawingV1, path, ownerPart stri
 }
 
 func (v *nativeValidator) section(section *NativeSectionV1, path, mainPart string, bodyAnchor *nativeAnchorBounds) {
+	if section.EditPolicy != nil {
+		v.editPolicy(section.EditPolicy, path+"/edit_policy", nativeSectionOperations)
+	}
 	v.id(section.ID, path+"/id")
 	v.anchor(&section.Anchor, path+"/anchor", mainPart, bodyAnchor)
 	v.requiredID(section.StartsAtBlockID, path+"/starts_at_block_id")

@@ -90,6 +90,9 @@ func ApplyNativeMutationPayloadV1(packageBytes, payload []byte, outerExpectedRev
 			if mutation.Image != nil || mutation.Operation == "page_break.insert" {
 				return applyNativeInsert(packageBytes, outerExpectedRevision, mutation)
 			}
+			if mutation.Operation == "section.page.patch" {
+				return applyNativeSectionPage(packageBytes, outerExpectedRevision, mutation)
+			}
 			return applyNativeParagraphStructure(packageBytes, outerExpectedRevision, mutation)
 		}
 	}

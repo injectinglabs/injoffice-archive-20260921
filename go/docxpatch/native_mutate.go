@@ -77,6 +77,7 @@ type nativeDOCXMutationV1 struct {
 	Image *nativeInsertImage
 	NativeDOCXTextMutationV1
 	Hyperlink           *nativeHyperlinkPatch
+	Page                *NativeDOCXSectionPagePatchV1
 	Operation           string
 	SplitRunID          string
 	SplitOffset         int
@@ -182,7 +183,7 @@ func decodeNativeDOCXTextMutationV1(decoder *json.Decoder, index int) (nativeDOC
 	}
 	seen := map[string]bool{}
 	values := map[string]string{}
-	allowed := map[string]bool{"target_kind": true, "target_id": true, "expected_xml_sha256": true, "text": true, "properties": true, "range": true, "operation": true, "split": true, "hyperlink": true, "image": true}
+	allowed := map[string]bool{"target_kind": true, "target_id": true, "expected_xml_sha256": true, "text": true, "properties": true, "range": true, "operation": true, "split": true, "hyperlink": true, "image": true, "page": true}
 	for decoder.More() {
 		fieldToken, tokenErr := decoder.Token()
 		if tokenErr != nil {
@@ -241,6 +242,14 @@ func decodeNativeDOCXTextMutationV1(decoder *json.Decoder, index int) (nativeDOC
 			mutation.Image = im
 			continue
 		}
+		if field == "page" {
+			var err error
+			mutation.Page, err = decodeNativeSectionPage(rawValue)
+			if err != nil {
+				return invalid(err.Error())
+			}
+			continue
+		}
 		if field == "split" {
 			members, err := nativeFlatJSONObject(rawValue)
 			if err != nil || len(members) != 2 {
@@ -292,6 +301,9 @@ func decodeNativeDOCXTextMutationV1(decoder *json.Decoder, index int) (nativeDOC
 		return invalid("field \"range\" is only meaningful beside run properties")
 	}
 	mutation.Operation = values["operation"]
+	if seen["page"] && values["operation"] != "section.page.patch" {
+		return invalid("page requires section.page.patch")
+	}
 	if seen["operation"] || seen["split"] || seen["hyperlink"] || seen["image"] {
 		if mutation.Properties != nil || mutation.ParagraphProperties != nil || (mutation.Range != nil && mutation.Operation != "hyperlink.set") {
 			return invalid("structural operations cannot carry properties or range")
@@ -300,6 +312,10 @@ func decodeNativeDOCXTextMutationV1(decoder *json.Decoder, index int) (nativeDOC
 		case "hyperlink.set":
 			if mutation.Hyperlink == nil || seen["text"] || seen["split"] || seen["image"] {
 				return invalid("hyperlink.set requires only hyperlink and optional range")
+			}
+		case "section.page.patch":
+			if !seen["page"] || seen["image"] || seen["hyperlink"] || seen["text"] || seen["split"] || values["target_kind"] != "section" {
+				return invalid("section.page.patch requires only a section and page geometry")
 			}
 		case "block.insert_after":
 			if seen["hyperlink"] || seen["split"] || (seen["image"] && seen["text"]) || (!seen["image"] && (!seen["text"] || values["text"] != "")) {
