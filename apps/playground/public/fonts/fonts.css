@@ -1,0 +1,36 @@
+/* Locally served, unmodified SIL OFL 1.1 fonts; see README.md and family licenses. */
+@font-face {
+  font-family: 'Sora';
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url('./sora/Sora[wght].ttf') format('truetype');
+}
+@font-face {
+  font-family: 'Instrument Sans';
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  src: url('./instrumentsans/InstrumentSans[wdth,wght].ttf') format('truetype');
+}
+@font-face {
+  font-family: 'Instrument Sans';
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./instrumentsans/InstrumentSans-Italic[wdth,wght].ttf') format('truetype');
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./ibmplexmono/IBMPlexMono-Regular.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('./ibmplexmono/IBMPlexMono-Medium.ttf') format('truetype');
+}
