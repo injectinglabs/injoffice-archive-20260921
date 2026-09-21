@@ -1826,8 +1826,10 @@ func (extractor *nativeExtractor) addUnsupported(code, capability, scopeID, part
 	extractor.unsupported = append(extractor.unsupported, entry)
 }
 
+// A paragraph the extractor fully models admits exact text replacement and
+// the bounded run-property patch applied by ApplyNativeFormatMutationsV1.
 func nativeMutableParagraphPolicy() NativeEditPolicyV1 {
-	return NativeEditPolicyV1{Mode: "read-write", AllowedOperations: []string{"text.replace"}}
+	return NativeEditPolicyV1{Mode: "read-write", AllowedOperations: []string{"text.replace", "properties.patch"}}
 }
 
 func nativeExtractOnlyTablePolicy() NativeEditPolicyV1 {
