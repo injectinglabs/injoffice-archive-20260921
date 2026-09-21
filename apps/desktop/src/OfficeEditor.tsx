@@ -12,7 +12,7 @@ import HyperlinkControl from './HyperlinkControl'
 import PageLayoutControl,{type PagePatch} from './PageLayoutControl'
 import InsertTableControl from './InsertTableControl'
 import ParagraphToolbar, { type ParagraphPatch } from './ParagraphToolbar'
-import FormattingToolbar, { formattingScope, type FormattingPatch } from './FormattingToolbar'
+import FormattingToolbar, { type FormattingPatch } from './FormattingToolbar'
 import Ribbon, { RibbonButton, visibleRibbonTabs, type RibbonTabSpec } from './Ribbon'
 import SelectionToolbar from './SelectionToolbar'
 import ContextMenu, { activateRunAt, documentContextMenu, useContextMenu } from './ContextMenu'
@@ -69,6 +69,10 @@ interface LocalEngine {
   terminate(): void
 }
 
+/** Idle pause after which typed text is committed through the engine (Word commits as you type). */
+export const IDLE_COMMIT_MS = 1500
+/** How long a caret-side notice (an edit the engine cannot make here) stays on screen. */
+const NOTICE_MS = 2000
 function operationId() { return `desktop-${crypto.randomUUID()}` }
 function errorMessage(error: unknown) { return error instanceof Error ? error.message : String(error) }
 function captureDraftCaret(text: string) {
@@ -184,6 +188,9 @@ export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDr
   const [snapshot, setSnapshot] = useState<Snapshot>()
   const [busy, setBusy] = useState(true)
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const noticeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  useEffect(() => () => { if (noticeTimer.current) clearTimeout(noticeTimer.current) }, [])
   const [selected, setSelected] = useState('')
   const [textRange,setTextRange] = useState<TextRange>()
   const [draft, setDraft] = useState('')
@@ -198,8 +205,10 @@ export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDr
   const composingRef = useRef(false)
   const applyHiddenRef = useRef<() => Promise<void>>(async () => {})
   const hiddenApplyRef = useRef<ReturnType<typeof createHiddenApplyScheduler> | undefined>(undefined)
+  // Word has no apply step: typing commits itself. The idle delay keeps one native
+  // round trip per pause instead of one per keystroke; blur, Enter and save commit sooner.
   if (!hiddenApplyRef.current) hiddenApplyRef.current = createHiddenApplyScheduler({
-    delayMs: 80,
+    delayMs: IDLE_COMMIT_MS,
     composing: () => composingRef.current,
     apply: () => applyHiddenRef.current(),
   })
@@ -272,14 +281,18 @@ export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDr
     if (draftPending.current) hiddenApplyRef.current?.schedule()
     else hiddenApplyRef.current?.cancel()
   }
-  function cancelDraft() {
-    if (busy) return
+  /** A caret-side, self-dismissing message. Edits the engine cannot make here never become chrome. */
+  function flashNotice(message: string) {
+    setNotice(message)
+    if (noticeTimer.current) clearTimeout(noticeTimer.current)
+    noticeTimer.current = setTimeout(() => { if (mounted.current) setNotice('') }, NOTICE_MS)
+  }
+  /** Leave the paragraph: commit pending text through the engine, then release the caret. */
+  function releaseDraft() {
+    if (busy || composingRef.current) return
+    if (draftPending.current) { void apply(); return }
     hiddenApplyRef.current?.cancel()
-    composingRef.current = false
-    draftPending.current = false
-    callbacks.current.onRecoveryDraftChange?.(null)
-    setDraft(target?.value ?? ''); setTextRange(undefined); setSelected(''); setError(''); setComposing(false)
-    callbacks.current.onBusyChange?.(false); callbacks.current.onDraftChange?.(false)
+    setTextRange(undefined); setSelected(''); setError('')
   }
   function accept(next: Snapshot) {
     if (!snapshot) return
@@ -448,7 +461,11 @@ export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDr
     try {
       const result = await engine.current.lines(snapshot, selected, text)
       if (mounted.current) { accept(result.snapshot); setSelected(result.key); setDraft(result.text); setCaretOffset(caret) }
-    } catch (reason) { if (mounted.current) setError(errorMessage(reason)) }
+    } catch (reason) {
+      // A break this paragraph cannot take is not an error state: say so beside the caret and
+      // keep the typed text, which the idle commit still writes to the file.
+      if (mounted.current) { flashNotice(errorMessage(reason)); if (draftPending.current) hiddenApplyRef.current?.schedule() }
+    }
     finally { if (mounted.current) setBusy(false) }
   }
   const commitLatest = useRef<() => Promise<boolean>>(async () => false)
@@ -540,14 +557,8 @@ export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDr
   const visibleTabs = visibleRibbonTabs(ribbonTabs).map(tab => tab.id)
   const activeRibbonTab = visibleTabs.includes(ribbonTab) ? ribbonTab : 'Home'
   return <div className={`office-editor ${isDocument ? 'office-editor-document' : ''}`} onKeyDown={event => { if ((event.ctrlKey || event.metaKey) && !event.altKey && ['b','i','u'].includes(event.key.toLowerCase()) && !(event.target as HTMLElement).closest('input,select,textarea')) {event.preventDefault();const key=event.key.toLowerCase(),property=key==='b'?'bold':key==='i'?'italic':'underline';void changeFormatting({[property]:!toolbarValues?.[property]});return} if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'f') { event.preventDefault(); setSearchOpen(true); requestAnimationFrame(() => searchInput.current?.focus()) } }}>
-    {snapshot && <Ribbon label="Document tools" tabs={ribbonTabs} active={activeRibbonTab} onChange={setRibbonTab}
-      trailing={isDocument && <span className="ribbon-note">{formattingScope('docx', toolbarValues, textRange ? 'Selected text range' : undefined)}</span>} />}
-    <div className="office-toolbar">
-      {isDocument && target && <><RibbonButton className="office-apply" icon="check" label="Apply change" shortcut="apply" disabled={busy || !hasDraft || composing} onClick={() => void apply()} /><RibbonButton icon="close" label="Cancel" shortcut="cancel" disabled={busy} onClick={cancelDraft} /></>}
-      {!snapshot && <><RibbonButton icon="undo" label="Undo" shortcut="undo" onClick={() => travel('undo')} disabled={busy || hasDraft || !undo.length} /><RibbonButton icon="redo" label="Redo" shortcut="redo" onClick={() => travel('redo')} disabled={busy || hasDraft || !redo.length} /></>}
-      {textRange && <span>{textRange.unsupported?'This selection includes unsupported content.':`${textRange.end_utf16-textRange.start_utf16} selected characters`}</span>}
-      {(busy || hasDraft || isDocument) && <span>{busy ? exportStage ? 'Exporting PDF…' : snapshot ? 'Applying change…' : 'Opening…' : hasDraft ? 'Save applies your pending text.' : target ? 'Ctrl / ⌘ + Enter to apply; Esc to cancel.' : 'Click text to edit.'}</span>}
-    </div>
+    {snapshot && <Ribbon label="Document tools" tabs={ribbonTabs} active={activeRibbonTab} onChange={setRibbonTab} />}
+    {!snapshot && busy && <div className="office-empty" role="status">Opening…</div>}
     {exportNotice&&<p className="office-document-note" role="status">{exportNotice}</p>}
     {exportStage&&<div className="office-document-note" role="status">{exportStage==='saving'?'Choose where to save the PDF…':`Exporting PDF · ${exportStage}…`}{exportStage!=='saving'&&<RibbonButton icon="close" label="Cancel PDF export" onClick={()=>void cancelPdfExport()} />}</div>}
     {searchOpen && <section className="document-search" aria-label="Find and replace editable text"><input ref={searchInput} type="search" aria-label="Find editable document text" placeholder="Find editable text" maxLength={1000} value={search} onChange={event => setSearch(event.target.value)} /><span role="status">{matches.length} matching segments</span><RibbonButton icon="find" label="Next match" disabled={!matches.length || busy || hasDraft} onClick={() => { const index = matches.findIndex(match => match.key === selected); choose(matches[(index + 1) % matches.length].key) }} /><input aria-label="Replacement text" placeholder="Replace with" maxLength={10000} value={replacement} onChange={event => setReplacement(event.target.value)} /><RibbonButton icon="replace" label="Replace all" disabled={!matches.length || busy || hasDraft || search === replacement} onClick={() => void replaceAll()} /><RibbonButton icon="close" label="Close document search" labelHidden onClick={() => setSearchOpen(false)} /><small>Case-sensitive; searches each editable text segment independently.</small></section>}
@@ -555,7 +566,7 @@ export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDr
     {snapshot && <>
       <div className={`office-preview ${isDocument ? 'office-document-preview' : ''}`} onContextMenu={event=>{activateRunAt(event);menu.open(event)}}>
         <div className="office-preview-scale" style={isDocument ? undefined : { zoom }}>
-        {snapshot.preview.kind === 'docx' && <DocumentPreview replaceImage={typeof window!=='undefined'&&window.injDesktop?.pickAsset?id=>void replaceImage(id):undefined} deleteImage={id=>void deleteImage(id)} images={(engine.current?.media(snapshot) ?? EMPTY_MEDIA).images} imageNotice={(engine.current?.media(snapshot) ?? EMPTY_MEDIA).notice} document={snapshot.preview.document} choose={choose} selected={selected} draft={draft} textRange={textRange} onTextRangeChange={setTextRange} caretOffset={caretOffset} joinPrevious={() => void joinPrevious()} insertLines={(text, caret) => void insertLines(text, caret)} updateDraft={updateDraft} apply={() => void apply()} cancel={cancelDraft} busy={busy} hasDraft={hasDraft} onCompositionChange={value=>{composingRef.current=value;setComposing(value);callbacks.current.onBusyChange?.(busy||value);if(!value&&draftPending.current)hiddenApplyRef.current?.schedule()}} zoom={zoom} navigation={(viewOptions?.navigation ?? true) && !viewOptions?.focus} />}
+        {snapshot.preview.kind === 'docx' && <DocumentPreview replaceImage={typeof window!=='undefined'&&window.injDesktop?.pickAsset?id=>void replaceImage(id):undefined} deleteImage={id=>void deleteImage(id)} images={(engine.current?.media(snapshot) ?? EMPTY_MEDIA).images} imageNotice={(engine.current?.media(snapshot) ?? EMPTY_MEDIA).notice} document={snapshot.preview.document} choose={choose} selected={selected} draft={draft} textRange={textRange} onTextRangeChange={setTextRange} caretOffset={caretOffset} joinPrevious={() => void joinPrevious()} insertLines={(text, caret) => void insertLines(text, caret)} updateDraft={updateDraft} commit={releaseDraft} notice={notice} busy={busy} hasDraft={hasDraft} onCompositionChange={value=>{composingRef.current=value;setComposing(value);callbacks.current.onBusyChange?.(busy||value);if(!value&&draftPending.current)hiddenApplyRef.current?.schedule()}} zoom={zoom} navigation={(viewOptions?.navigation ?? true) && !viewOptions?.focus} />}
         </div>
       </div>
       <SelectionToolbar values={toolbarValues} disabled={busy||composing} onChange={patch=>void changeFormatting(patch)} />
