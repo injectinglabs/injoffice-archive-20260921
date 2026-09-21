@@ -5,7 +5,7 @@ const PdfEditor = lazy(() => import('./PdfEditor'));
 const PresentationEditor = lazy(() => import('./PresentationEditor'));
 const SpreadsheetEditor = lazy(() => import('./SpreadsheetEditor').then(module => ({ default: module.SpreadsheetEditor })));
 import StartPage from './StartPage';
-import OpenError, { classifyOpenError, type OpenErrorKind } from './OpenError';
+import OpenError, { classifyOpenError, containerFailure, type OpenErrorKind } from './OpenError';
 import UpdatesDialog, { UpdateNotice } from './UpdatesDialog';
 import PreferencesDialog from './PreferencesDialog';
 import { readPreferences, writePreferences, initialView, type ViewOptions } from './preferences';
@@ -203,6 +203,19 @@ export default function App() {
       if (action === 'externalOpen' && !opened) externalPending.current = false;
       if (opened) {
         const bytes = new Uint8Array(opened.bytes);
+        // A file from disk that is not even the right kind of container never gets a tab, a ribbon
+        // and a "Saved" status around an editor that can only show the engine's raw complaint.
+        // Documents this app just generated (New, CSV import) are trusted as they are.
+        const failure = action === 'create' || action === 'importText' ? undefined : containerFailure(opened.name, bytes);
+        if (failure) {
+          await bridge.close(opened.id).catch(() => { /* The host drops unopened sessions on its own. */ });
+          // Stop draining the queue: another open would clear the page before it is read.
+          externalPending.current = false;
+          setOpenFailure({ kind: 'extract', detail: failure, name: opened.name });
+          setShowHome(true);
+          await refreshRecent();
+          return;
+        }
         const next = { ...opened, key: ++sequence.current, initialName: opened.name, initialBytes: bytes, bytes, dirty: action === 'create' || action === 'recover' || action === 'importText' };
         updateDocument(next);
         if (next.dirty) checkpoint(next);
@@ -217,7 +230,7 @@ export default function App() {
       else {
         const message = cause instanceof Error ? cause.message : String(cause);
         const kind = action === 'importText' ? undefined : classifyOpenError(message);
-        if (kind) { setOpenFailure({ kind, detail: message, name: typeof target === 'string' && target.includes('.') ? target : undefined }); setShowHome(true); }
+        if (kind) { externalPending.current = false; setOpenFailure({ kind, detail: message, name: typeof target === 'string' && target.includes('.') ? target : undefined }); setShowHome(true); }
         else setError(message);
       }
     } finally {
@@ -302,6 +315,8 @@ export default function App() {
           const opened = await bridge.importDocument({ name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) });
           if (!opened) throw new Error('The workspace was busy. Try dropping this file again.');
           const bytes = new Uint8Array(opened.bytes);
+          const failure = containerFailure(opened.name, bytes);
+          if (failure) { await bridge.close(opened.id).catch(() => { /* The host drops unopened sessions on its own. */ }); throw new Error(failure); }
           staged.push({ ...opened, key: ++sequence.current, initialName: opened.name, initialBytes: bytes, bytes, dirty: true });
         } catch (cause) { failures.push(`${file.name}: ${cause instanceof Error ? cause.message : String(cause)}`); }
       }
@@ -324,7 +339,8 @@ export default function App() {
   const isDocx = document?.name.toLowerCase().endsWith('.docx') ?? false;
   const changeZoom = (zoom: number) => setViewOptions(value => ({ ...value, zoom: Math.max(50, Math.min(200, zoom)) }));
   const toggleFocus = () => setViewOptions(value => ({ ...value, focus: !value.focus }));
-  const localStatus = document?.untitled ? 'Not saved yet' : draftDirty || document?.dirty ? 'Unsaved changes' : document ? 'Saved on this device' : 'Local workspace';
+  // Office states the save state once, in the title bar. The status bar keeps messages and zoom.
+  const saveStatus = document?.untitled ? 'Not saved yet' : draftDirty || document?.dirty ? 'Unsaved changes' : 'Saved';
   const canUndo = !!document && !busy && (draftDirty || (historyState[document.key]?.undo ?? true));
   const canRedo = !!document && !busy && (draftDirty || (historyState[document.key]?.redo ?? true));
   const searchLabel = `Search (${shortcutLabel('commands')})`, searchTitle = shortcutTooltip('Search commands', 'commands');
@@ -384,7 +400,7 @@ export default function App() {
           <div className="title-document">
             <span className={`document-format format-${document.name.split('.').pop()?.toLowerCase()}`}>{document.name.split('.').pop()?.toUpperCase()}</span>
             <span className="document-name" title={document.name}>{document.name}</span>
-            <span className="title-save-status" role="status">{(document.dirty || draftDirty) && <span className="dirty-indicator" aria-hidden="true" />}{localStatus}</span>
+            <span className="title-save-status" role="status">{(document.dirty || draftDirty) && <span className="dirty-indicator" aria-hidden="true" />}{saveStatus}</span>
           </div>
           <button className="titlebar-search" disabled={busy} onClick={() => setCommandSearch(true)} title={searchTitle}><RibbonIcon name="find" /><span>{searchLabel}</span></button>
         </div>
@@ -415,7 +431,7 @@ export default function App() {
         </div>
       </main>)}</WorkspaceFileGroupsContext>
 
-      <footer className="app-status" hidden={showHome}><span className="status-message" role="status">{busy ? 'Working…' : draftDirty ? 'Draft changes · Save applies your edits.' : notice || localStatus}</span><div className="status-view-controls"><div className="status-zoom"><button disabled={!document || viewOptions.zoom <= 50} aria-label="Zoom out" onClick={() => changeZoom(viewOptions.zoom - 10)}>−</button><input type="range" aria-label="Document zoom" min="50" max="200" step="5" disabled={!document} value={viewOptions.zoom} onChange={event => changeZoom(Number(event.target.value))} /><button disabled={!document || viewOptions.zoom >= 200} aria-label="Zoom in" onClick={() => changeZoom(viewOptions.zoom + 10)}>+</button><output>{viewOptions.zoom}%</output></div></div></footer>
+      <footer className="app-status" hidden={showHome}><span className="status-message" role="status">{busy ? 'Working…' : draftDirty ? 'Draft changes · Save applies your edits.' : notice}</span><div className="status-view-controls"><div className="status-zoom"><button disabled={!document || viewOptions.zoom <= 50} aria-label="Zoom out" onClick={() => changeZoom(viewOptions.zoom - 10)}>−</button><input type="range" aria-label="Document zoom" min="50" max="200" step="5" disabled={!document} value={viewOptions.zoom} onChange={event => changeZoom(Number(event.target.value))} /><button disabled={!document || viewOptions.zoom >= 200} aria-label="Zoom in" onClick={() => changeZoom(viewOptions.zoom + 10)}>+</button><output>{viewOptions.zoom}%</output></div></div></footer>
 
       <UpdateNotice onOpen={() => setUpdatesOpen(true)} />
       {updatesOpen && <UpdatesDialog onClose={() => setUpdatesOpen(false)} />}
