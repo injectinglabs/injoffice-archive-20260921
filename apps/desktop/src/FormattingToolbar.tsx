@@ -9,6 +9,16 @@ export type FormattingPatch = Partial<FormattingValues>;
 /** `font` and `paragraph` render one Office ribbon group each; `all` is the classic single toolbar. */
 export type FormattingSection = 'all' | 'font' | 'paragraph';
 
+/** Office's font-size ladder, shared by the ribbon combo and the mini toolbar's grow/shrink buttons. */
+export const FONT_SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 60, 72];
+
+/** The next size up (`1`) or down (`-1`) the ladder, or undefined when the size in effect is unknown or at the end. */
+export function stepFontSize(size: number | undefined, direction: 1 | -1): number | undefined {
+  if (size === undefined || !Number.isFinite(size)) return undefined;
+  const ladder = [...new Set([size, ...FONT_SIZES])].sort((a, b) => a - b);
+  return ladder[ladder.indexOf(size) + direction];
+}
+
 /** The text-colour palette shared by the ribbon, the mini toolbar and the slide inspector. */
 export const TEXT_COLORS: RibbonColor[] = [['#000000', 'Black'], ['#20242B', 'Dark gray'], ['#687386', 'Gray'], ['#2459AD', 'Blue'], ['#B33C3C', 'Red'], ['#217447', 'Green']];
 
@@ -39,7 +49,7 @@ export default function FormattingToolbar({ kind, values, disabled, onChange, sc
   const inactive = disabled || !values;
   const characterInactive = inactive || values?.characterEditable === false;
   const fonts = [...new Set([values?.font || 'Arial', 'Arial', 'Calibri', 'Cambria', 'Georgia', 'Times New Roman', 'Verdana', 'DejaVu Sans'])];
-  const sizes = [...new Set([values?.size || 11, 8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 60, 72])].sort((a, b) => a - b);
+  const sizes = [...new Set([values?.size || 11, ...FONT_SIZES])].sort((a, b) => a - b);
   const family = <RibbonCombo className="ribbon-combo-font" label="Font family" disabled={characterInactive} value={values?.font ?? ''} options={fonts.map(font => ({ value: font, label: font }))} onChange={font => onChange({ font })} />;
   const size = <RibbonCombo className="ribbon-combo-size" label="Font size" disabled={characterInactive} value={values?.size === undefined ? '' : String(values.size)} options={sizes.map(size => ({ value: String(size), label: String(size) }))} onChange={size => onChange({ size: Number(size) })} />;
   // Only the DOCX editor binds ⌘B/⌘I/⌘U; other hosts get no shortcut hint they cannot honour.
