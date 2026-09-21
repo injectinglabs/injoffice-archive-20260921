@@ -193,3 +193,34 @@ test('slide thumbnails derive their width from the rail: number on the left, dec
     delete globalThis.__pptxClient;
   }
 });
+
+test('the Format pane is closed until Format is pressed and Arrange is one of its groups', async () => {
+  const client = mockClient();
+  globalThis.__pptxClient = client;
+  const PresentationEditor = await loadEditor();
+  const busy = [];
+  let view;
+  try {
+    await act(async () => {
+      view = create(React.createElement(PresentationEditor, { name: 'Deck.pptx', bytes: new Uint8Array([1]), onChange: () => {}, onBusyChange: value => busy.push(value) }));
+    });
+    await until(() => busy.at(-1) === false && view.root.findAllByProps({ 'aria-label': 'Show slide 1' }).length > 0);
+    const pane = () => view.root.findAllByType('aside').filter(node => node.props['aria-label'] === 'Format');
+    assert.equal(pane().length, 0, 'nothing is selected, so the slide keeps the width');
+    const format = view.root.findAllByType('button').find(node => text(node) === 'Format');
+    assert.equal(format.props['aria-pressed'], false);
+    await act(async () => format.props.onClick());
+    assert.equal(pane().length, 1, 'Format opens the pane on demand');
+    assert.equal(view.root.findAllByType('button').find(node => text(node) === 'Format').props['aria-pressed'], true);
+    await act(async () => view.root.findByProps({ 'aria-label': 'Close the Format pane' }).props.onClick());
+    assert.equal(pane().length, 0);
+    const arrange = view.root.findAllByType('button').find(node => text(node) === 'Arrange objects');
+    assert.equal(arrange.props.disabled, true, 'this slide has fewer than two arrangeable objects');
+    const source = fs.readFileSync(path.resolve(__dirname, '../src/SlideArrangePanel.tsx'), 'utf8');
+    assert.equal(/<details|<summary/.test(source), false, 'Arrange is a pane group, not a disclosure link');
+    assert.match(source, /aria-label="Arrange objects"/);
+  } finally {
+    if (view) await act(async () => view.unmount());
+    delete globalThis.__pptxClient;
+  }
+});
