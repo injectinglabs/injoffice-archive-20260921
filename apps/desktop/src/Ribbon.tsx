@@ -1,4 +1,4 @@
-import { Children, createContext, useContext, useId, type ButtonHTMLAttributes, type KeyboardEvent, type ReactNode, type Ref } from 'react'
+import { Children, createContext, useContext, useId, useState, type ButtonHTMLAttributes, type KeyboardEvent, type ReactNode, type Ref } from 'react'
 import RibbonIcon, { type RibbonIconName } from './RibbonIcons'
 import { shortcutKeys, shortcutTooltip, type ShortcutId } from './shortcuts'
 // ribbon.css is imported by each editor next to its own stylesheet so that
@@ -101,6 +101,68 @@ export function RibbonButton({ icon, label, shortcut, title, labelHidden, classN
     {!labelHidden && <span className="ribbon-button-label">{label}</span>}
     {children}
   </button>
+}
+
+/** One entry of a ribbon combo box. */
+export interface RibbonComboOption { value: string; label: string }
+
+export interface RibbonComboProps {
+  /** Accessible name; also the tooltip unless `title` is given. */
+  label: string
+  title?: string
+  /** The resolved value at the caret. An empty string means "not known / mixed": Office shows a blank box, never a word. */
+  value: string
+  options: RibbonComboOption[]
+  onChange(value: string): void
+  disabled?: boolean
+  /** Width class from ribbon.css (`ribbon-combo-font`, `-size`, `-style`, `-wide`). Widths are fixed so groups do not reflow. */
+  className?: string
+}
+
+/**
+ * Office's ribbon combo box: a fixed-width select that shows the value in effect
+ * at the caret. When the value is unknown or mixed across the selection the box
+ * is empty (just the chevron), exactly like Word — never a placeholder word.
+ */
+export function RibbonCombo({ label, title, value, options, onChange, disabled, className }: RibbonComboProps) {
+  return <select className={['ribbon-combo', className ?? ''].join(' ').trim()} aria-label={label} title={title ?? label} disabled={disabled} value={value} onChange={event => onChange(event.target.value)}>
+    {(value === '' || !options.some(option => option.value === value)) && <option value="" />}
+    {options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+  </select>
+}
+
+/** A palette entry: `[hex, name]`. */
+export type RibbonColor = [string, string]
+
+export interface ColorButtonProps {
+  /** Accessible name, e.g. "Text color". */
+  label: string
+  icon: RibbonIconName
+  /** The colour in effect, or undefined when it is unknown or mixed (the underline then stays empty). */
+  value?: string
+  colors: RibbonColor[]
+  onChange(color: string): void
+  disabled?: boolean
+  title?: string
+}
+
+/**
+ * Office's colour control: an icon button carrying the current colour as an
+ * underline plus a chevron that opens the palette. Never a native
+ * `<input type="color">` with a caption above it.
+ */
+export function ColorButton({ label, icon, value, colors, onChange, disabled, title }: ColorButtonProps) {
+  const [open, setOpen] = useState(false)
+  const swatches = value && !colors.some(([color]) => color.toUpperCase() === value.toUpperCase()) ? [[value.toUpperCase(), 'Current color'] as RibbonColor, ...colors] : colors
+  return <span className="ribbon-color" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false) }} onKeyDown={event => { if (event.key === 'Escape' && open) { event.stopPropagation(); setOpen(false) } }}>
+    <button type="button" className="ribbon-button ribbon-color-button" aria-label={label} title={title ?? label} aria-haspopup="true" aria-expanded={open} disabled={disabled} onClick={() => setOpen(shown => !shown)}>
+      <span className="ribbon-color-glyph"><RibbonIcon name={icon} /><span className="ribbon-color-bar" style={value ? { background: value } : undefined} /></span>
+      <span className="ribbon-chevron" aria-hidden="true" />
+    </button>
+    {open && <span className="ribbon-color-palette" role="group" aria-label={`${label} palette`}>
+      {swatches.map(([color, name]) => <button key={color} type="button" className="ribbon-swatch" aria-label={name} title={name} aria-pressed={!!value && color.toUpperCase() === value.toUpperCase()} style={{ background: color }} onClick={() => { onChange(color); setOpen(false) }} />)}
+    </span>}
+  </span>
 }
 
 /** Vertical stack of control rows inside one group (Office stacks Font as two rows). */
