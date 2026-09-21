@@ -248,7 +248,17 @@ export default function PdfEditor({ name, bytes, onInitialLoadError, onChange, o
     setNoteTarget({ref:target.ref,signature:target.signature});setTool('edit-note');setOldText(target.contents);setText(target.contents);setPlacement(placement);notifyDraft(true);setError('')
     persistDraft({tool:'edit-note',text:target.contents,oldText:target.contents,annotationRef:target.ref,annotationSignature:target.signature,placement})
   }
-  function pickTool(next: Tool) { if (hasDraft || busy) return; setTool(next); setText(''); setFieldName(''); setError(''); setNotice(''); if (next === 'highlight') setColor('#ffcd38') }
+  const canFinishTextDraft = (next: Tool) => tool === 'text' && ['view', 'replace', 'form'].includes(next)
+  async function pickTool(next: Tool) {
+    if (busy || locked.current || (hasDraft && !canFinishTextDraft(next))) return
+    if (hasDraft) {
+      if (text.trim()) {
+        if (!placement) { setError('Click the page to place your text before changing tools.'); return }
+        if (!await apply() || !live.current) return
+      } else cancel()
+    }
+    setTool(next); setText(''); setFieldName(''); setError(''); setNotice(''); if (next === 'highlight') setColor('#ffcd38')
+  }
   /** Right-click on the page: remember where it happened, in PDF coordinates, for "Add text here". */
   function openPageMenu(event: ReactMouseEvent<HTMLDivElement>) {
     const rect = event.currentTarget.getBoundingClientRect()
@@ -267,7 +277,7 @@ export default function PdfEditor({ name, bytes, onInitialLoadError, onChange, o
     const editable = !!summary?.editable, blocked = busy || hasDraft
     const tools: ContextMenuItem[] = ([['view', 'Select'], ['replace', 'Edit text'], ['highlight', 'Highlight']] as const).map(([value, label]) => ({
       id: value, label, checked: tool === value,
-      disabled: blocked || (value !== 'view' && !editable),
+      disabled: busy || (hasDraft && !canFinishTextDraft(value)) || (value !== 'view' && !editable),
       title: value === 'highlight' ? 'Drag across the page to highlight an area' : value === 'replace' ? 'Click an existing text span to replace it' : undefined,
       run: () => pickTool(value),
     }))
@@ -350,10 +360,9 @@ export default function PdfEditor({ name, bytes, onInitialLoadError, onChange, o
   const count = summary?.pages.length ?? 0
   const displayStart = placement && viewport?.convertToViewportPoint(...placement.at)
   const displayEnd = placement?.end && viewport?.convertToViewportPoint(...placement.end)
-  const toolDisabled = busy || hasDraft || !summary?.editable
   const pageDisabled = disabled || !summary?.editable
   const toolButton = (value: Exclude<Tool, 'edit-note'>, icon: RibbonIconName, label: string, options: { title?: string; labelHidden?: boolean } = {}) =>
-    <RibbonButton icon={icon} label={label} {...options} aria-pressed={tool === value} disabled={value === 'view' ? busy || hasDraft : toolDisabled} onClick={() => pickTool(value)} />
+    <RibbonButton icon={icon} label={label} {...options} aria-pressed={tool === value} disabled={busy || (hasDraft && !canFinishTextDraft(value)) || (value !== 'view' && !summary?.editable)} onClick={() => void pickTool(value)} />
   // Office's ribbon, applied to the tools this editor already has: the same shell as
   // the DOCX, XLSX and PPTX editors, with File contributed by the workspace context.
   const ribbonTabs: RibbonTabSpec[] = [
