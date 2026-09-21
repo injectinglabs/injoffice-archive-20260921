@@ -98,15 +98,16 @@ test('empty range disables insert; a valid range emits chart.insert', async () =
 
 test('SpreadsheetChartPreview paints series SVG; refused charts do not', async () => {
   const { SpreadsheetChartPreview, SpreadsheetCharts } = await loadCharts();
-  for (const kind of ['column', 'bar', 'line']) {
+  for (const kind of ['column', 'bar', 'line', 'pie']) {
     const chart = source();
     chart.chart_type = kind;
     const svg = renderToStaticMarkup(React.createElement(SpreadsheetChartPreview, { chart }));
     assert.match(svg, /class="sheet-chart-preview"/);
     assert.ok(!/NaN|Infinity|undefined/.test(svg));
     assert.match(svg, /&lt;Revenue &amp; cost&gt;/);
-    assert.equal((svg.match(/<rect /g) || []).length, kind === 'line' ? 0 : 2);
+    assert.equal((svg.match(/<rect /g) || []).length, kind === 'line' || kind === 'pie' ? 0 : 2);
     if (kind === 'line') assert.match(svg, /<path[^>]+d="M[^\"]+ L/);
+    if (kind === 'pie') assert.match(svg, /<path[^>]+d="M/);
   }
   const chart = source();
   chart.editable = false;

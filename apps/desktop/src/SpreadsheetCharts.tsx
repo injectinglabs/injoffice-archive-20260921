@@ -11,6 +11,21 @@ export function SpreadsheetChartPreview({ chart }: { chart: XlsxNativeChart }) {
   const left = horizontal ? 86 : 66, top = 12, width = horizontal ? 322 : 342, height = 210;
   const labelStep = Math.max(1, Math.ceil(n / (horizontal ? 8 : 6)));
   const short = (text: string) => text.length > 13 ? `${text.slice(0, 12)}…` : text;
+  if (chart.chart_type === 'pie') {
+    const values = chart.series[0]!.values.map(Number);
+    const total = values.reduce((sum, value) => sum + Math.max(0, value), 0) || 1;
+    let angle = -Math.PI / 2;
+    const cx = 215, cy = 120, radius = 88;
+    return <svg className="sheet-chart-preview" viewBox="0 0 430 258" role="img" aria-label={`${chart.title || 'Chart'}: pie, ${n} categories. Full values follow in Chart data.`}>
+      {values.map((value, i) => {
+        const slice = Math.max(0, value) / total * Math.PI * 2, start = angle, end = angle + slice;
+        angle = end;
+        const large = slice > Math.PI ? 1 : 0;
+        const d = `M${cx} ${cy} L${cx + Math.cos(start) * radius} ${cy + Math.sin(start) * radius} A${radius} ${radius} 0 ${large} 1 ${cx + Math.cos(end) * radius} ${cy + Math.sin(end) * radius} Z`;
+        return <path key={i} d={d} fill={CHART_COLORS[i % CHART_COLORS.length]}><title>{`${chart.categories[i]} — ${chart.series[0]!.name}: ${chart.series[0]!.values[i]}`}</title></path>;
+      })}
+    </svg>;
+  }
   return <svg className="sheet-chart-preview" viewBox="0 0 430 258" role="img" aria-label={`${chart.title || 'Chart'}: ${chart.chart_type}, ${n} categories, ${count} series. Full values follow in Chart data.`}>
     {g.ticks.map((tick, i) => horizontal ? <g key={i}><line x1={left + tick.position * width} x2={left + tick.position * width} y1={top} y2={top + height} stroke="#e3e9e6"/><text x={left + tick.position * width} y={top + height + 19} textAnchor="middle">{chartNumber(tick.value)}</text></g> : <g key={i}><line x1={left} x2={left + width} y1={top + (1 - tick.position) * height} y2={top + (1 - tick.position) * height} stroke="#e3e9e6"/><text x={left - 8} y={top + (1 - tick.position) * height + 4} textAnchor="end">{chartNumber(tick.value)}</text></g>)}
     {chart.categories.map((label, i) => i % labelStep === 0 ? <text key={i} x={horizontal ? left - 7 : left + (i + .5) * width / n} y={horizontal ? top + (i + .5) * height / n + 4 : top + height + 20} textAnchor={horizontal ? 'end' : 'middle'}><title>{label}</title>{short(label)}</text> : null)}
@@ -24,7 +39,7 @@ export function SpreadsheetChartPreview({ chart }: { chart: XlsxNativeChart }) {
 }
 function ChartTitleForm({chart, disabled, onExecute}: {chart:XlsxNativeChart; disabled:boolean; onExecute(operations:SheetOperation[],message:string):Promise<boolean>}) {
   const [title,setTitle] = useState(chart.title);
-  return <form className="sheet-chart-title" onSubmit={event=>{event.preventDefault();if(disabled || title===chart.title)return;void onExecute([{kind:'chart.update',identity:chart.identity,expected_fingerprint_sha256:chart.fingerprint_sha256,chart_type:chart.chart_type as 'column'|'bar'|'line',title,range:chart.range,anchor:chart.anchor}], 'Chart title updated');}}>
+  return <form className="sheet-chart-title" onSubmit={event=>{event.preventDefault();if(disabled || title===chart.title)return;void onExecute([{kind:'chart.update',identity:chart.identity,expected_fingerprint_sha256:chart.fingerprint_sha256,chart_type:chart.chart_type as 'column'|'bar'|'line'|'pie',title,range:chart.range,anchor:chart.anchor}], 'Chart title updated');}}>
     <label>Chart title<input aria-label="Chart title" maxLength={1024} disabled={disabled} value={title} onChange={event=>setTitle(event.target.value)}/></label><button type="submit" disabled={disabled || title===chart.title}>Apply title</button>
     {title!==chart.title && <small>Apply to save this title in the workbook.</small>}
   </form>;
@@ -33,10 +48,10 @@ export function SpreadsheetCharts({ charts, sheetId, range, disabled, error, onE
   charts: XlsxNativeChart[]; sheetId: string; range: RangeRef; disabled: boolean; error?: string;
   onExecute(operations: SheetOperation[], message: string): Promise<boolean>; onClose(): void;
 }) {
-  const [type, setType] = useState<'column'|'bar'|'line'>('column');
+  const [type, setType] = useState<'column'|'bar'|'line'|'pie'>('column');
   const [newTitle,setNewTitle] = useState('');
   const reason = chartSelectionReason(range), local = charts.filter(chart => chart.sheet_id === sheetId || !chart.sheet_id);
-  const options = <><option value="column">Column</option><option value="bar">Bar</option><option value="line">Line</option></>;
+  const options = <><option value="column">Column</option><option value="bar">Bar</option><option value="line">Line</option><option value="pie">Pie</option></>;
   return <aside className="sheet-charts" aria-label="Worksheet charts">
     <header><h2>Charts</h2><button onClick={onClose} aria-label="Close charts">Close</button></header>
     <div className="sheet-chart-create"><label>New chart title<input aria-label="New chart title" maxLength={1024} value={newTitle} onChange={event=>setNewTitle(event.target.value)}/></label><label>New chart type<select aria-label="New chart type" value={type} onChange={event => setType(event.target.value as typeof type)}>{options}</select></label><button disabled={disabled || !!reason || !!error || charts.length >= 32} title={reason} onClick={() => void onExecute([{kind:'chart.insert',chart_type:type,title:newTitle,range,anchor:chartAnchor(range)}], 'Chart inserted into workbook')}>Insert selected range</button><p>{reason ?? `Source ${address(range)}:${address({row:range.end_row,column:range.end_column})}. First row: series names. First column: categories.`}</p><small>Literal numbers only. Formulas, blanks, merged or hidden data are unsupported. Charts save inside the XLSX file.</small></div>
@@ -48,7 +63,7 @@ export function SpreadsheetCharts({ charts, sheetId, range, disabled, error, onE
         <ChartTitleForm key={chart.fingerprint_sha256} chart={chart} disabled={disabled} onExecute={onExecute}/>
         <SpreadsheetChartPreview chart={chart}/>
         <ul className="sheet-chart-legend">{chart.series.map((series, i) => <li key={i}><span style={{backgroundColor:CHART_COLORS[i]}}/>{series.name || `Series ${i + 1}`}</li>)}</ul>
-        <div className="sheet-chart-controls"><label>Type<select aria-label={`Chart ${index + 1} type`} value={chart.chart_type} disabled={disabled} onChange={event => void onExecute([{kind:'chart.update',identity:chart.identity,expected_fingerprint_sha256:chart.fingerprint_sha256,chart_type:event.target.value as typeof type,title:chart.title,range:chart.range,anchor:chart.anchor}], 'Chart type updated')}>{options}</select></label><button disabled={disabled || !!reason} title={reason} onClick={() => void onExecute([{kind:'chart.update',identity:chart.identity,expected_fingerprint_sha256:chart.fingerprint_sha256,chart_type:chart.chart_type as typeof type,title:chart.title,range,anchor:chart.anchor}], 'Chart source updated')}>Use selected range</button><button disabled={disabled} onClick={() => void onExecute([{kind:'chart.delete',identity:chart.identity,expected_fingerprint_sha256:chart.fingerprint_sha256}], 'Chart deleted')}>Delete chart</button></div>
+        <div className="sheet-chart-controls"><label>Type<select aria-label={`Chart ${index + 1} type`} value={chart.chart_type} disabled={disabled} onChange={event => void onExecute([{kind:'chart.update',identity:chart.identity,expected_fingerprint_sha256:chart.fingerprint_sha256,chart_type:event.target.value as typeof type,title:chart.title,range:chart.range,anchor:chart.anchor}], 'Chart type updated')}>{options}</select></label><button disabled={disabled || !!reason} title={reason} onClick={() => void onExecute([{kind:'chart.update',identity:chart.identity,expected_fingerprint_sha256:chart.fingerprint_sha256,chart_type:chart.chart_type === 'unsupported' ? type : chart.chart_type as typeof type,title:chart.title,range,anchor:chart.anchor}], 'Chart source updated')}>Use selected range</button><button disabled={disabled} onClick={() => void onExecute([{kind:'chart.delete',identity:chart.identity,expected_fingerprint_sha256:chart.fingerprint_sha256}], 'Chart deleted')}>Delete chart</button></div>
         <details className="sheet-chart-data"><summary>Chart data · {chart.categories.length} categories</summary><div><table><thead><tr><th>Category</th>{chart.series.map((series,i)=><th key={i}>{series.name}</th>)}</tr></thead><tbody>{chart.categories.map((label,i)=><tr key={i}><th>{label}</th>{chart.series.map((series,j)=><td key={j}>{series.values[i]}</td>)}</tr>)}</tbody></table></div></details>
       </> : <p className="sheet-chart-refusal">Preview and editing unavailable: {chart.refusal}. The chart is preserved in the workbook. Restore supported literal source values to re-enable charts created here.</p>}
     </section>)}
