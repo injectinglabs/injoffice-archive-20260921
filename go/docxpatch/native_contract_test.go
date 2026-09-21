@@ -407,7 +407,7 @@ func TestDecodeNativeDocumentV1BoundsWorkAndIssues(t *testing.T) {
 	body := candidate["body"].(map[string]any)
 	paragraph := body["blocks"].([]any)[0].(map[string]any)["paragraph"].(map[string]any)
 	paragraph["edit_policy"].(map[string]any)["allowed_operations"] = []any{
-		"text.replace", "properties.patch", "block.insert_after", "block.delete", "drawing.replace", "text.replace", "paragraph.split",
+		"text.replace", "properties.patch", "block.insert_after", "block.delete", "drawing.replace", "text.replace", "paragraph.split", "hyperlink.set",
 	}
 	payload, err := json.Marshal(candidate)
 	if err != nil {

@@ -53,3 +53,13 @@ test('docxSelection and formattingValues expose run appearance for the toolbar',
   assert.equal(values.size, 11);
   assert.equal(formattingValues({ kind: 'docx', document: model }, 'missing'), undefined);
 });
+
+
+test('linked DOCX text retains toolbar values while disabling unsupported character formatting', async () => {
+  const { formattingValues } = await loadFormatting();
+  const model = document();
+  model.body.blocks[0].paragraph.runs[0].hyperlink = {url: 'https://example.com', anchor: {}};
+  const values = formattingValues({kind: 'docx', document: model}, 'run-1');
+  assert.equal(values.bold, true);
+  assert.equal(values.characterEditable, false);
+});

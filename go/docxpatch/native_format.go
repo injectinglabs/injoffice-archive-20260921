@@ -83,6 +83,9 @@ func ApplyNativeMutationPayloadV1(packageBytes, payload []byte, outerExpectedRev
 			if len(decoded) != 1 {
 				return nil, nativeMutationError("INVALID_PAYLOAD", "", "structural operations require a single mutation")
 			}
+			if mutation.Operation == "hyperlink.set" {
+				return applyNativeHyperlink(packageBytes, outerExpectedRevision, mutation)
+			}
 			return applyNativeParagraphStructure(packageBytes, outerExpectedRevision, mutation)
 		}
 	}

@@ -124,13 +124,20 @@ type NativeReferenceV1 struct {
 	Role     string `json:"role,omitempty"`
 }
 
+type NativeHyperlinkV1 struct {
+	URL    string               `json:"url"`
+	Anchor NativeSourceAnchorV1 `json:"anchor"`
+}
+
 type NativeRunV1 struct {
-	Kind       string                 `json:"kind"`
-	ID         string                 `json:"id"`
-	Anchor     NativeSourceAnchorV1   `json:"anchor"`
-	Properties *NativeRunPropertiesV1 `json:"properties,omitempty"`
-	Text       *string                `json:"text,omitempty"`
-	PageField  string                 `json:"page_field,omitempty"`
+	CanEditHyperlink bool                   `json:"can_edit_hyperlink,omitempty"`
+	Hyperlink        *NativeHyperlinkV1     `json:"hyperlink,omitempty"`
+	Kind             string                 `json:"kind"`
+	ID               string                 `json:"id"`
+	Anchor           NativeSourceAnchorV1   `json:"anchor"`
+	Properties       *NativeRunPropertiesV1 `json:"properties,omitempty"`
+	Text             *string                `json:"text,omitempty"`
+	PageField        string                 `json:"page_field,omitempty"`
 	// Derived renderer metadata is represented for schema parity, but never accepted as source.
 	LayoutPageField *string            `json:"layout_page_field,omitempty"`
 	Control         string             `json:"control,omitempty"`
@@ -410,9 +417,9 @@ var (
 	nativeNegativeZero          = regexp.MustCompile(`^-0(?:\.0*)?(?:[eE][+-]?[0-9]+)?$`)
 	nativeOperations            = map[string]bool{
 		"text.replace": true, "properties.patch": true, "block.insert_after": true,
-		"block.delete": true, "drawing.replace": true, "paragraph.split": true,
+		"block.delete": true, "drawing.replace": true, "paragraph.split": true, "hyperlink.set": true,
 	}
-	nativeParagraphOperations = map[string]bool{"paragraph.split": true, "text.replace": true, "properties.patch": true, "block.insert_after": true, "block.delete": true}
+	nativeParagraphOperations = map[string]bool{"paragraph.split": true, "hyperlink.set": true, "text.replace": true, "properties.patch": true, "block.insert_after": true, "block.delete": true}
 	nativeTableOperations     = map[string]bool{"properties.patch": true, "block.insert_after": true, "block.delete": true}
 	nativeDrawingOperations   = map[string]bool{"drawing.replace": true}
 )
@@ -1052,6 +1059,15 @@ func (v *nativeValidator) run(run *NativeRunV1, path, ownerPart string, parentAn
 	}
 	if run.LayoutPageField != nil {
 		v.add("INVALID_VALUE", path+"/layout_page_field", "internal layout field markers are not authored source")
+	}
+	if run.Hyperlink != nil {
+		if run.Kind != "text" || !nativeHyperlinkURL(run.Hyperlink.URL) {
+			v.add("INVALID_VALUE", path+"/hyperlink", "hyperlink requires text and a web or email URL")
+		}
+		v.anchor(&run.Hyperlink.Anchor, path+"/hyperlink/anchor", ownerPart, parentAnchor)
+	}
+	if run.CanEditHyperlink && (run.Kind != "text" || run.PageField != "") {
+		v.add("INVALID_VALUE", path+"/can_edit_hyperlink", "only plain text can be linked")
 	}
 	v.id(run.ID, path+"/id")
 	runAnchor := v.anchor(&run.Anchor, path+"/anchor", ownerPart, parentAnchor)

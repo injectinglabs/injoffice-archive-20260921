@@ -28,6 +28,7 @@ export type NativeDocxEditMode = 'read-write' | 'read-only'
 export type NativeDocxEditOperation =
   | 'text.replace'
   | 'properties.patch'
+  | 'hyperlink.set'
   | 'paragraph.split'
   | 'block.insert_after'
   | 'block.delete'
@@ -137,6 +138,8 @@ export interface NativeDocxReferenceV1 {
 }
 
 export interface NativeDocxRunV1 {
+  can_edit_hyperlink?: boolean
+  hyperlink?: {url: string; anchor: NativeDocxSourceAnchorV1}
   kind: 'text' | 'control' | 'reference' | 'drawing'
   id: string
   anchor: NativeDocxSourceAnchorV1
@@ -457,7 +460,7 @@ export const DOCX_NATIVE_V1_BINDING_FIELDS = {
   DrawingV1: ['id', 'anchor', 'relationship_id', 'media_part', 'content_type', 'name', 'alt_text', 'placement', 'width_emu', 'height_emu', 'x_emu', 'y_emu', 'horizontal_relative_from', 'vertical_relative_from', 'wrap', 'wrap_distance_left_emu', 'wrap_distance_right_emu', 'textbox_text', 'textbox_fill_rgb', 'textbox_line_rgb', 'edit_policy', 'rotation_degrees', 'rotation_60000ths', 'flip_horizontal', 'flip_vertical', 'source_crop', 'inline_effect_extent_emu', 'floating_effect_extent_emu', 'floating_layer', 'stacking_order'],
   DrawingCropV1: ['left', 'top', 'right', 'bottom'],
   ReferenceV1: ['kind', 'target_id', 'role'],
-  RunV1: ['kind', 'id', 'anchor', 'properties', 'text', 'page_field', 'layout_page_field', 'control', 'reference', 'drawing'],
+  RunV1: ['can_edit_hyperlink', 'hyperlink', 'kind', 'id', 'anchor', 'properties', 'text', 'page_field', 'layout_page_field', 'control', 'reference', 'drawing'],
   NumberingReferenceV1: ['num_id', 'level', 'abstract_num_id'],
   ParagraphPropertiesV1: ['paragraph_style_id', 'numbering', 'alignment', 'keep_next', 'keep_lines', 'page_break_before', 'widow_control'],
   ParagraphV1: ['id', 'anchor', 'edit_policy', 'properties', 'runs'],
@@ -494,8 +497,8 @@ const NOTE_SENTINEL_ID = /^(?:0|-?[1-9][0-9]{0,18})$/
 const PART_SEGMENT = /^(?:[A-Za-z0-9._~!$&'()*+,;=@-]|%[0-9A-F]{2})+$/
 const SHA256 = /^sha256:[0-9a-f]{64}$/
 const COLOR = /^(?:auto|[0-9A-F]{6})$/
-const operations = ['text.replace', 'properties.patch', 'paragraph.split', 'block.insert_after', 'block.delete', 'drawing.replace'] as const
-const paragraphOperations: readonly NativeDocxEditOperation[] = ['text.replace', 'properties.patch', 'paragraph.split', 'block.insert_after', 'block.delete']
+const operations = ['text.replace', 'properties.patch', 'hyperlink.set', 'paragraph.split', 'block.insert_after', 'block.delete', 'drawing.replace'] as const
+const paragraphOperations: readonly NativeDocxEditOperation[] = ['text.replace', 'properties.patch', 'hyperlink.set', 'paragraph.split', 'block.insert_after', 'block.delete']
 const tableOperations: readonly NativeDocxEditOperation[] = ['properties.patch', 'block.insert_after', 'block.delete']
 const drawingOperations: readonly NativeDocxEditOperation[] = ['drawing.replace']
 
@@ -797,6 +800,17 @@ function validateRun(value: unknown, path: string, issues: NativeDocxValidationI
   const kind = enumValue(entry.kind, `${path}/kind`, ['text', 'control', 'reference', 'drawing'], issues)
   trackId(entry.id, `${path}/id`, issues, ids)
   const runAnchor = validateAnchor(entry.anchor, `${path}/anchor`, issues, ownerPart, parentAnchor)
+  if (entry.can_edit_hyperlink !== undefined) {
+    booleanValue(entry.can_edit_hyperlink, `${path}/can_edit_hyperlink`, issues)
+    if (entry.can_edit_hyperlink && (kind !== 'text' || entry.page_field !== undefined)) add(issues, 'INVALID_VALUE', `${path}/can_edit_hyperlink`, 'only plain text can be linked')
+  }
+  if (entry.hyperlink !== undefined) {
+    const link = object(entry.hyperlink, `${path}/hyperlink`, ['url', 'anchor'], issues)
+    if (link) {
+      if (kind !== 'text' || typeof link.url !== 'string' || link.url.length > 2048 || !/^(https?:\/\/[^/\s]+|mailto:[^\s]+)/.test(link.url) || /[\r\n\t \\<>]/.test(link.url)) add(issues, 'INVALID_VALUE', `${path}/hyperlink/url`, 'hyperlink requires a web or email URL')
+      validateAnchor(link.anchor, `${path}/hyperlink/anchor`, issues, ownerPart, parentAnchor)
+    }
+  }
   if (entry.properties !== undefined) validateRunProperties(entry.properties, `${path}/properties`, issues)
   if (entry.page_field !== undefined) {
     enumValue(entry.page_field, `${path}/page_field`, ['PAGE', 'NUMPAGES'], issues)

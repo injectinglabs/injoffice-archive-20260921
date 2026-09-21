@@ -30,6 +30,7 @@
                 "text.replace",
                 "properties.patch",
                 "block.insert_after",
+                "hyperlink.set",
                 "paragraph.split"
               ],
               "mode": "read-write"
@@ -47,6 +48,7 @@
                   "start_byte": 222,
                   "xml_sha256": "sha256:0e0d3ceb49fbb4e3159a96668c911c0ebf42ca5a0f4f5113b892354bafa170c1"
                 },
+                "can_edit_hyperlink": true,
                 "id": "run:eb2d52f19c42f8817e1d56fa",
                 "kind": "text",
                 "properties": {
