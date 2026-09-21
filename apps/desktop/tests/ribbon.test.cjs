@@ -196,3 +196,44 @@ test('the ribbon panel keeps Office geometry: 94px, one row centred, labels on o
     assert.ok(px(rule(combo), 'width') > 0, `${combo} has a fixed width`);
   }
 });
+
+test('a narrow ribbon collapses to icons, then moves the trailing groups behind an overflow chevron', async () => {
+  const { default: Ribbon, RibbonButton, ribbonGroupsThatFit, RIBBON_OVERFLOW_WIDTH } = await load('Ribbon.tsx');
+  // Everything fits: no overflow. Otherwise fill from the left, keeping room for the chevron.
+  assert.equal(ribbonGroupsThatFit([100, 100, 100], 400), 3);
+  assert.equal(ribbonGroupsThatFit([100, 100, 100], 300), 3);
+  assert.equal(ribbonGroupsThatFit([100, 100, 100], 260, 44), 2);
+  assert.equal(ribbonGroupsThatFit([100, 100, 100], 150, 44), 1);
+  assert.equal(ribbonGroupsThatFit([300], 100, 44), 1, 'one group always stays on the ribbon');
+  assert.equal(RIBBON_OVERFLOW_WIDTH > 0, true);
+
+  const groups = ['Font', 'Paragraph', 'Styles', 'Editing'].map(label => ({ id: label.toLowerCase(), label, children: h(RibbonButton, { icon: 'bold', label }) }));
+  const tabs = [{ id: 'Home', label: 'Home', groups }];
+  let view;
+  // Without a layout the panel renders every group with its labels (the wide case).
+  await act(async () => { view = create(h(Ribbon, { label: 'Document tools', tabs, active: 'Home', onChange() {} })); });
+  let panel = view.root.findByProps({ role: 'tabpanel' });
+  assert.equal(panel.props.className, 'ribbon-panel');
+  assert.deepEqual(panel.findAllByProps({ role: 'group' }).map(group => group.props['aria-label']), ['Font', 'Paragraph', 'Styles', 'Editing']);
+  assert.equal(view.root.findAllByProps({ className: 'ribbon-overflow' }).length, 0);
+
+  // Compact only: icons, no overflow chevron yet.
+  await act(async () => { view.update(h(Ribbon, { label: 'Document tools', tabs, active: 'Home', onChange() {}, panelLayout: { compact: true, visible: -1 } })); });
+  panel = view.root.findByProps({ role: 'tabpanel' });
+  assert.equal(panel.props.className, 'ribbon-panel ribbon-panel-compact');
+  assert.equal(view.root.findAllByProps({ className: 'ribbon-overflow' }).length, 0);
+
+  // Too narrow: the last two groups move into the popover behind the chevron.
+  await act(async () => { view.update(h(Ribbon, { label: 'Document tools', tabs, active: 'Home', onChange() {}, panelLayout: { compact: true, visible: 2 } })); });
+  panel = view.root.findByProps({ role: 'tabpanel' });
+  assert.deepEqual(panel.findAllByProps({ role: 'group' }).map(group => group.props['aria-label']), ['Font', 'Paragraph'], 'hidden groups leave the panel row');
+  const chevron = view.root.findByProps({ className: 'ribbon-button ribbon-overflow-button' });
+  assert.equal(chevron.props['aria-label'], 'More commands (2 groups)');
+  assert.equal(chevron.props['aria-expanded'], false);
+  assert.equal(view.root.findAllByProps({ className: 'ribbon-overflow-popover' }).length, 0);
+  await act(async () => chevron.props.onClick());
+  assert.equal(view.root.findByProps({ className: 'ribbon-button ribbon-overflow-button' }).props['aria-expanded'], true);
+  const popover = view.root.findByProps({ className: 'ribbon-overflow-popover' });
+  assert.deepEqual(popover.findAllByProps({ role: 'group' }).map(group => group.props['aria-label']), ['Styles', 'Editing'], 'the hidden groups are reachable in the popover');
+  await act(async () => view.unmount());
+});
