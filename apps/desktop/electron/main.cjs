@@ -35,6 +35,11 @@ function queueExternalPaths(filenames) {
 const primaryInstance = app.requestSingleInstanceLock ? app.requestSingleInstanceLock() : true;
 if (!primaryInstance) app.quit();
 app.on('open-file', (event, filename) => { event.preventDefault(); queueExternalPaths([filename]); });
+// Cmd+Q asks the window to close first. The close handler defers for the recovery
+// drain, so remember that a quit (not just a window close) was requested and finish
+// it once the drain lets the window go; macOS otherwise keeps the app in the Dock.
+let quitRequested = false;
+app.on('before-quit', () => { quitRequested = true; });
 app.on('second-instance', (_event, argv) => {
   queueExternalPaths(argv);
   if (window && !window.isDestroyed()) { if (window.isMinimized()) window.restore(); window.focus(); }
@@ -162,14 +167,18 @@ function createWindow() {
       }
       closeApproved = true;
       closingWindow.close();
+      if (quitRequested) app.quit();
     }).catch(error => { console.warn('Workspace close was canceled:', error.message); }).finally(() => {
       clearTimeout(timer);
       closeAttempt = undefined;
       drainingRecovery = false;
-      if (!closeApproved && !closingWindow.isDestroyed()) closingWindow.webContents.send('document:cancel-close', token);
+      if (!closeApproved && !closingWindow.isDestroyed()) {
+        quitRequested = false;
+        closingWindow.webContents.send('document:cancel-close', token);
+      }
     });
   });
-  window.on('closed', () => { if(pdfExportRequest)cancelDocxPdf(pdfExportRequest); store.releaseAll(); checkpointErrors.clear(); window = undefined; });
+  window.on('closed', () => { if(pdfExportRequest)cancelDocxPdf(pdfExportRequest); store.releaseAll(); checkpointErrors.clear(); window = undefined; if (quitRequested) app.quit(); });
   window.loadURL(entryURL);
 }
 
