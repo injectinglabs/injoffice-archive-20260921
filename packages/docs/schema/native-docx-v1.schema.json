@@ -400,6 +400,27 @@
         "labels": { "type": "array", "minItems": 1, "maxItems": 4096, "items": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[^\\u0000\\r\\n]+$" } }
       }
     },
+    "NumberingLevelDefinitionV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["level", "format", "text", "start"],
+      "properties": {
+        "level": { "type": "integer", "minimum": 0, "maximum": 8 },
+        "format": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "text": { "type": "string", "minLength": 1, "maxLength": 256 },
+        "suffix": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "start": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "NumberingDefinitionV1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["num_id", "levels"],
+      "properties": {
+        "num_id": { "$ref": "#/$defs/Identifier" },
+        "levels": { "type": "array", "minItems": 1, "maxItems": 9, "items": { "$ref": "#/$defs/NumberingLevelDefinitionV1" } }
+      }
+    },
     "HeaderFooterReferenceV1": {
       "type": "object",
       "additionalProperties": false,
@@ -517,7 +538,8 @@
         "capabilities": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/CapabilityV1" } },
         "passthrough_parts": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/PassthroughPartV1" } },
         "unsupported": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/UnsupportedCapabilityV1" } },
-        "note_numbering": { "type": "array", "maxItems": 2, "items": { "$ref": "#/$defs/NoteNumberingV1" } }
+        "note_numbering": { "type": "array", "maxItems": 2, "items": { "$ref": "#/$defs/NoteNumberingV1" } },
+        "numbering_definitions": { "type": "array", "maxItems": 10000, "items": { "$ref": "#/$defs/NumberingDefinitionV1" } }
       }
     }
   }

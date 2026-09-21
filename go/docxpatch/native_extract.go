@@ -256,7 +256,7 @@ func ExtractNativeDocumentV1WithOptions(data []byte, options NativeExtractionOpt
 			{Name: "full-document-regeneration", Level: "unsupported", Detail: nativeString("Unmodeled OOXML is preserved verbatim and must not be flattened")},
 		},
 		PassthroughParts: extractor.passthroughParts(), Unsupported: extractor.unsupported,
-		NoteNumbering: extractor.nativeNoteNumberingRecords(),
+		NoteNumbering: extractor.nativeNoteNumberingRecords(), NumberingDefinitions: nativeExtractNumberingDefinitions(pkg, mainPart, wordNS),
 	}
 	advertiseNativeInsert(doc)
 	nativeSetSectionPolicies(doc, extractor.bodyNode, mainXML, nativeDOCXPackageHasDigitalSignature(pkg))

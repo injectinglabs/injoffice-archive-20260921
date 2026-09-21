@@ -415,6 +415,9 @@ export interface NativeDocxDocumentV1 {
    * counter value `i + 1`; the extractor formats them with the one counter
    * implementation this codebase has, so no tier re-derives them. */
   note_numbering?: NativeDocxNoteNumberingV1[]
+  /** Authored w:num catalog from the numbering part. Absent when the package
+   * has no readable numbering instances. */
+  numbering_definitions?: NativeDocxNumberingDefinitionV1[]
 }
 
 export interface NativeDocxNoteNumberingV1 {
@@ -422,6 +425,19 @@ export interface NativeDocxNoteNumberingV1 {
   /** The authored ST_NumberFormat value, e.g. 'lowerRoman'. */
   format: string
   labels: string[]
+}
+
+export interface NativeDocxNumberingLevelDefinitionV1 {
+  level: number
+  format: string
+  text: string
+  suffix?: string
+  start: number
+}
+
+export interface NativeDocxNumberingDefinitionV1 {
+  num_id: string
+  levels: NativeDocxNumberingLevelDefinitionV1[]
 }
 
 export type NativeDocxIssueCode =
@@ -492,8 +508,10 @@ export const DOCX_NATIVE_V1_BINDING_FIELDS = {
   SectionV1: ['edit_policy', 'id', 'anchor', 'starts_at_block_id', 'break_type', 'title_page', 'page_number_start', 'page', 'header_refs', 'footer_refs'],
   CommentV1: ['id', 'native_comment_id', 'author', 'initials', 'created_at', 'anchor', 'body_story_id'],
   UnsupportedCapabilityV1: ['id', 'code', 'capability', 'scope_id', 'anchor', 'preservation', 'message'],
-  DocumentV1: ['protocol', 'version', 'document_id', 'revision', 'source', 'body', 'sections', 'headers', 'footers', 'notes', 'comment_stories', 'comments', 'capabilities', 'passthrough_parts', 'unsupported', 'note_numbering'],
+  DocumentV1: ['protocol', 'version', 'document_id', 'revision', 'source', 'body', 'sections', 'headers', 'footers', 'notes', 'comment_stories', 'comments', 'capabilities', 'passthrough_parts', 'unsupported', 'note_numbering', 'numbering_definitions'],
   NoteNumberingV1: ['kind', 'format', 'labels'],
+  NumberingLevelDefinitionV1: ['level', 'format', 'text', 'suffix', 'start'],
+  NumberingDefinitionV1: ['num_id', 'levels'],
 } as const
 
 const ID = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/
@@ -1291,6 +1309,36 @@ export function decodeNativeDocxDocument(value: unknown): DecodeNativeDocxResult
       const labels = array(entry.labels, `${path}/labels`, issues, DOCX_NATIVE_NOTE_NUMBERING_MAX_LABELS)
       if (labels.length === 0) add(issues, 'REQUIRED', `${path}/labels`, 'a numbering record requires at least one label')
       labels.forEach((label, labelIndex) => stringValue(label, `${path}/labels/${labelIndex}`, issues, NOTE_LABEL))
+    })
+  }
+  if (root.numbering_definitions !== undefined) {
+    const numIds = new Set<string>()
+    array(root.numbering_definitions, '/numbering_definitions', issues).forEach((entryValue, index) => {
+      const path = `/numbering_definitions/${index}`
+      const entry = object(entryValue, path, DOCX_NATIVE_V1_BINDING_FIELDS.NumberingDefinitionV1, issues)
+      if (!entry) return
+      const numId = stringValue(entry.num_id, `${path}/num_id`, issues, ID)
+      if (numId === '0') add(issues, 'INVALID_VALUE', `${path}/num_id`, 'numId 0 is Word\'s no-list sentinel and is not a catalogued instance')
+      if (numId && numIds.has(numId)) add(issues, 'DUPLICATE_ID', `${path}/num_id`, 'numbering instance id is duplicated')
+      if (numId) numIds.add(numId)
+      const levels = array(entry.levels, `${path}/levels`, issues, 9)
+      if (levels.length === 0) add(issues, 'REQUIRED', `${path}/levels`, 'a numbering instance requires at least one level')
+      const seenLevels = new Set<number>()
+      levels.forEach((levelValue, levelIndex) => {
+        const levelPath = `${path}/levels/${levelIndex}`
+        const level = object(levelValue, levelPath, DOCX_NATIVE_V1_BINDING_FIELDS.NumberingLevelDefinitionV1, issues)
+        if (!level) return
+        const ilvl = integer(level.level, `${levelPath}/level`, issues, 0)
+        if (ilvl !== undefined && ilvl > 8) add(issues, 'OUT_OF_RANGE', `${levelPath}/level`, 'must be 0..8')
+        if (ilvl !== undefined) {
+          if (seenLevels.has(ilvl)) add(issues, 'DUPLICATE_ID', `${levelPath}/level`, 'level index is duplicated')
+          seenLevels.add(ilvl)
+        }
+        stringValue(level.format, `${levelPath}/format`, issues, ID)
+        stringValue(level.text, `${levelPath}/text`, issues)
+        optionalString(level.suffix, `${levelPath}/suffix`, issues, ID)
+        integer(level.start, `${levelPath}/start`, issues, 0)
+      })
     })
   }
   const targets: Record<ReferenceTarget, Set<string>> = {

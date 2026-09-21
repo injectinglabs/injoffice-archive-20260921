@@ -35,6 +35,9 @@ type NativeDOCXRunPropertyPatchV1 struct {
 type NativeDOCXParagraphPropertyPatchV1 struct {
 	Alignment *string
 	Layout    map[string]*string
+	NumID     *string
+	Level     *int
+	Kind      *string
 }
 
 // NativeDOCXTextRangeV1 selects part of the target's text in UTF-16 code
@@ -119,6 +122,16 @@ func ApplyNativeMutationPayloadV1(packageBytes, payload []byte, outerExpectedRev
 	return ApplyNativeFormatMutationsV1(packageBytes, outerExpectedRevision, mutations)
 }
 
+func nativeFormatNumberingCount(mutations []NativeDOCXFormatMutationV1) int {
+	count := 0
+	for _, mutation := range mutations {
+		if nativeNumberingPatch(mutation.ParagraphProperties) {
+			count++
+		}
+	}
+	return count
+}
+
 // decodeNativeDOCXStructuredMutationField decodes the two object-valued
 // mutation fields the envelope carries beside its string fields. It walks
 // JSON tokens, like every other native payload boundary, and refuses an
@@ -149,6 +162,9 @@ func decodeNativeDOCXStructuredMutationField(field string, raw []byte) (nativeDO
 		return decoded, err
 	}
 	patch := &NativeDOCXRunPropertyPatchV1{}
+	paragraph := &NativeDOCXParagraphPropertyPatchV1{}
+	hasAlignment := false
+	hasNumbering := false
 	for member, value := range members {
 		switch member {
 		case "bold", "italic":
@@ -161,7 +177,13 @@ func decodeNativeDOCXStructuredMutationField(field string, raw []byte) (nativeDO
 			} else {
 				patch.Italic = &flag
 			}
-		case "underline", "font_family", "color", "highlight", "alignment":
+		case "underline", "font_family", "color", "highlight", "alignment", "numbering_num_id", "numbering_kind":
+			if member == "numbering_num_id" && bytes.Equal(value, []byte("null")) {
+				empty := ""
+				paragraph.NumID = &empty
+				hasNumbering = true
+				continue
+			}
 			text, decodeErr := decodeNativeMutationJSONString(value)
 			if decodeErr != nil {
 				return decoded, fmt.Errorf("member %q must be a JSON string", member)
@@ -175,25 +197,55 @@ func decodeNativeDOCXStructuredMutationField(field string, raw []byte) (nativeDO
 				patch.Color = &text
 			case "highlight":
 				patch.Highlight = &text
+			case "numbering_num_id":
+				paragraph.NumID = &text
+				hasNumbering = true
+			case "numbering_kind":
+				paragraph.Kind = &text
+				hasNumbering = true
 			default:
-				decoded.paragraph = &NativeDOCXParagraphPropertyPatchV1{Alignment: &text}
+				paragraph.Alignment = &text
+				hasAlignment = true
 			}
-		case "font_size_half_points":
+		case "font_size_half_points", "numbering_level":
+			if member == "numbering_level" && bytes.Equal(value, []byte("null")) {
+				hasNumbering = true
+				continue
+			}
 			size, ok := nativeJSONInt(value)
 			if !ok {
 				return decoded, fmt.Errorf("member %q must be a whole JSON number", member)
+			}
+			if member == "numbering_level" {
+				paragraph.Level = &size
+				hasNumbering = true
+				continue
 			}
 			patch.FontSizeHalfPoints = &size
 		default:
 			return decoded, fmt.Errorf("carries unknown member %q", member)
 		}
 	}
-	if decoded.paragraph != nil && len(members) != 1 {
-		return decoded, fmt.Errorf("must patch paragraph alignment on its own")
+	if hasAlignment && hasNumbering {
+		return decoded, fmt.Errorf("must patch numbering on its own")
 	}
-	if decoded.paragraph == nil {
-		decoded.runs = patch
+	if hasAlignment {
+		if len(members) != 1 {
+			return decoded, fmt.Errorf("must patch paragraph alignment on its own")
+		}
+		decoded.paragraph = paragraph
+		return decoded, nil
 	}
+	if hasNumbering {
+		for member := range members {
+			if member != "numbering_num_id" && member != "numbering_level" && member != "numbering_kind" {
+				return decoded, fmt.Errorf("must patch numbering on its own")
+			}
+		}
+		decoded.paragraph = paragraph
+		return decoded, nil
+	}
+	decoded.runs = patch
 	return decoded, nil
 }
 
@@ -255,13 +307,22 @@ func validateNativeDOCXFormatMutation(mutation *NativeDOCXFormatMutationV1) erro
 	}
 	if mutation.ParagraphProperties != nil {
 		if mutation.TargetKind != "paragraph" {
+			if nativeNumberingPatch(mutation.ParagraphProperties) {
+				return fmt.Errorf("numbering is a paragraph property and needs a paragraph target")
+			}
 			return fmt.Errorf("alignment is a paragraph property and needs a paragraph target")
 		}
 		if mutation.Range != nil {
+			if nativeNumberingPatch(mutation.ParagraphProperties) {
+				return fmt.Errorf("numbering applies to the whole paragraph and takes no range")
+			}
 			return fmt.Errorf("alignment applies to the whole paragraph and takes no range")
 		}
 		if len(mutation.ParagraphProperties.Layout) > 0 {
 			return validateNativeParagraphLayout(mutation.ParagraphProperties)
+		}
+		if nativeNumberingPatch(mutation.ParagraphProperties) {
+			return validateNativeNumberingPatch(mutation.ParagraphProperties)
 		}
 		if mutation.ParagraphProperties.Alignment == nil || !nativeAlignmentValues[*mutation.ParagraphProperties.Alignment] {
 			return fmt.Errorf("alignment must be left, center, right, both or distribute")
@@ -332,6 +393,12 @@ type nativeFormatRequest struct {
 func ApplyNativeFormatMutationsV1(packageBytes []byte, expectedRevision string, mutations []NativeDOCXFormatMutationV1) (*NativeDOCXMutationResultV1, error) {
 	if len(mutations) == 0 || len(mutations) > NativeDOCXMaxMutations {
 		return nil, nativeMutationError("INVALID_MUTATION_COUNT", "", fmt.Sprintf("mutation count must be 1..%d", NativeDOCXMaxMutations))
+	}
+	if numbering := nativeFormatNumberingCount(mutations); numbering != 0 {
+		if numbering != len(mutations) {
+			return nil, nativeMutationError("INVALID_PAYLOAD", "", "a transaction may not mix list numbering with other property patches")
+		}
+		return ApplyNativeNumberingMutationsV1(packageBytes, expectedRevision, mutations)
 	}
 	if !nativeSHA256.MatchString(expectedRevision) {
 		return nil, nativeMutationError("INVALID_REVISION", "", "expected revision must be sha256 followed by the full lowercase exact-byte digest")
