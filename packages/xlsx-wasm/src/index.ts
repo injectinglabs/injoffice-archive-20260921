@@ -33,7 +33,7 @@ export type XlsxNativeLayoutMutationV1 = Extract<SupportedWorkbookMutation, { ki
 
 type XlsxNativeMergeMutationV1 = Extract<SupportedWorkbookMutation, { kind: 'range.merge' | 'range.unmerge' }>
 
-export type XlsxNativeStructureMutationV1 = Extract<SupportedWorkbookMutation, { kind: 'row.insert' | 'row.delete' | 'column.insert' | 'column.delete' }>
+type XlsxNativeStructureMutationV1 = Extract<SupportedWorkbookMutation, { kind: 'row.insert' | 'row.delete' | 'column.insert' | 'column.delete' }>
 
 /** Strict JSON shape consumed by Go's NativeWorkbookMutationTransactionV1. */
 export interface XlsxNativeMutationTransactionV1 {
