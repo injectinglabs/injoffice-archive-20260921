@@ -163,3 +163,33 @@ test('PresentationEditor arranges its controls as a PowerPoint ribbon with label
     delete globalThis.__pptxClient;
   }
 });
+
+test('slide thumbnails derive their width from the rail: number on the left, deck aspect ratio, no fixed frame width', async () => {
+  const client = mockClient();
+  globalThis.__pptxClient = client;
+  const PresentationEditor = await loadEditor();
+  const busy = [];
+  let view;
+  try {
+    await act(async () => {
+      view = create(React.createElement(PresentationEditor, { name: 'Deck.pptx', bytes: new Uint8Array([1]), onChange: () => {}, onBusyChange: value => busy.push(value) }));
+    });
+    await until(() => busy.at(-1) === false && view.root.findAllByProps({ 'aria-label': 'Show slide 1' }).length > 0);
+    const thumbnail = view.root.findByProps({ 'aria-label': 'Show slide 1' });
+    assert.equal(thumbnail.props.className, 'presentation-thumbnail');
+    const [number, stage] = thumbnail.children;
+    assert.equal(number.props.className, 'presentation-slide-number', 'the slide number comes first, to the left of the thumbnail');
+    assert.equal(number.children.join(''), '1');
+    assert.equal(stage.props.className, 'presentation-thumb-stage');
+    assert.equal(stage.props.style.aspectRatio, '9144000 / 5143500', 'the stage keeps the deck aspect ratio');
+    assert.equal(stage.props.style.width, undefined, 'the stage takes its width from the pane, not from a fixed number');
+    const css = fs.readFileSync(path.resolve(__dirname, '../src/presentation-editor.css'), 'utf8');
+    assert.match(css, /\.presentation-thumb-stage \{[^}]*width: 100%/, 'the stage fills the rail column');
+    assert.match(css, /\.presentation-thumb-stage \{[^}]*overflow: hidden/);
+    const source = fs.readFileSync(path.resolve(__dirname, '../src/PresentationEditor.tsx'), 'utf8');
+    assert.equal(/148 \/ \(/.test(source), false, 'no hard-coded 148px thumbnail width');
+  } finally {
+    if (view) await act(async () => view.unmount());
+    delete globalThis.__pptxClient;
+  }
+});
