@@ -61,5 +61,10 @@ test('command palette opens modally, closes on Escape/cancel and backdrop, and k
   assert.equal(closed, 1);
   element.props.onClick({ target: dialog, clientX: 50, clientY: 50 });
   assert.equal(closed, 2);
+  const search = view.root.findByProps({ 'aria-label': 'Search workspace commands' });
+  search.props.onKeyDown({ key: 'Escape', preventDefault() {}, stopPropagation() {} });
+  assert.equal(closed, 3, 'Escape from the search field closes the palette');
+  element.props.onKeyDown({ key: 'Escape', preventDefault() {}, stopPropagation() {} });
+  assert.equal(closed, 4, 'Escape closes the palette when focus is on the dialog');
   await act(async () => view.unmount());
 });
