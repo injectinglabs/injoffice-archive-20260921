@@ -163,3 +163,64 @@ test('PresentationEditor arranges its controls as a PowerPoint ribbon with label
     delete globalThis.__pptxClient;
   }
 });
+
+test('slide thumbnails derive their width from the rail: number on the left, deck aspect ratio, no fixed frame width', async () => {
+  const client = mockClient();
+  globalThis.__pptxClient = client;
+  const PresentationEditor = await loadEditor();
+  const busy = [];
+  let view;
+  try {
+    await act(async () => {
+      view = create(React.createElement(PresentationEditor, { name: 'Deck.pptx', bytes: new Uint8Array([1]), onChange: () => {}, onBusyChange: value => busy.push(value) }));
+    });
+    await until(() => busy.at(-1) === false && view.root.findAllByProps({ 'aria-label': 'Show slide 1' }).length > 0);
+    const thumbnail = view.root.findByProps({ 'aria-label': 'Show slide 1' });
+    assert.equal(thumbnail.props.className, 'presentation-thumbnail');
+    const [number, stage] = thumbnail.children;
+    assert.equal(number.props.className, 'presentation-slide-number', 'the slide number comes first, to the left of the thumbnail');
+    assert.equal(number.children.join(''), '1');
+    assert.equal(stage.props.className, 'presentation-thumb-stage');
+    assert.equal(stage.props.style.aspectRatio, '9144000 / 5143500', 'the stage keeps the deck aspect ratio');
+    assert.equal(stage.props.style.width, undefined, 'the stage takes its width from the pane, not from a fixed number');
+    const css = fs.readFileSync(path.resolve(__dirname, '../src/presentation-editor.css'), 'utf8');
+    assert.match(css, /\.presentation-thumb-stage \{[^}]*width: 100%/, 'the stage fills the rail column');
+    assert.match(css, /\.presentation-thumb-stage \{[^}]*overflow: hidden/);
+    const source = fs.readFileSync(path.resolve(__dirname, '../src/PresentationEditor.tsx'), 'utf8');
+    assert.equal(/148 \/ \(/.test(source), false, 'no hard-coded 148px thumbnail width');
+  } finally {
+    if (view) await act(async () => view.unmount());
+    delete globalThis.__pptxClient;
+  }
+});
+
+test('the Format pane is closed until Format is pressed and Arrange is one of its groups', async () => {
+  const client = mockClient();
+  globalThis.__pptxClient = client;
+  const PresentationEditor = await loadEditor();
+  const busy = [];
+  let view;
+  try {
+    await act(async () => {
+      view = create(React.createElement(PresentationEditor, { name: 'Deck.pptx', bytes: new Uint8Array([1]), onChange: () => {}, onBusyChange: value => busy.push(value) }));
+    });
+    await until(() => busy.at(-1) === false && view.root.findAllByProps({ 'aria-label': 'Show slide 1' }).length > 0);
+    const pane = () => view.root.findAllByType('aside').filter(node => node.props['aria-label'] === 'Format');
+    assert.equal(pane().length, 0, 'nothing is selected, so the slide keeps the width');
+    const format = view.root.findAllByType('button').find(node => text(node) === 'Format');
+    assert.equal(format.props['aria-pressed'], false);
+    await act(async () => format.props.onClick());
+    assert.equal(pane().length, 1, 'Format opens the pane on demand');
+    assert.equal(view.root.findAllByType('button').find(node => text(node) === 'Format').props['aria-pressed'], true);
+    await act(async () => view.root.findByProps({ 'aria-label': 'Close the Format pane' }).props.onClick());
+    assert.equal(pane().length, 0);
+    const arrange = view.root.findAllByType('button').find(node => text(node) === 'Arrange objects');
+    assert.equal(arrange.props.disabled, true, 'this slide has fewer than two arrangeable objects');
+    const source = fs.readFileSync(path.resolve(__dirname, '../src/SlideArrangePanel.tsx'), 'utf8');
+    assert.equal(/<details|<summary/.test(source), false, 'Arrange is a pane group, not a disclosure link');
+    assert.match(source, /aria-label="Arrange objects"/);
+  } finally {
+    if (view) await act(async () => view.unmount());
+    delete globalThis.__pptxClient;
+  }
+});

@@ -175,7 +175,13 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .desktop-app { height: 100vh; min-height: 340px; display: flex; flex-direction: column; overflow: hidden; }
 [hidden] { display: none !important; }
 /* Office's title bar: Quick Access (Save, Undo, Redo) left, document name + state and the Search pill centred, view tools right. */
-.app-titlebar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; flex-shrink: 0; height: 40px; padding: 0 8px; background: var(--surface-muted); border-bottom: 1px solid var(--border-subtle); color: var(--text); }
+.app-titlebar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; flex-shrink: 0; height: 40px; padding: 0 8px; background: var(--surface-muted); border-bottom: 1px solid var(--border-subtle); color: var(--text); -webkit-app-region: drag; }
+.app-titlebar button, .app-titlebar input, .app-titlebar [role="toolbar"] { -webkit-app-region: no-drag; }
+/* macOS: the system title bar is hidden and its traffic lights are inset into this row (main.cjs),
+   so the Quick Access Toolbar starts to their right. Windows and Linux keep the standard frame. */
+.platform-mac .app-titlebar { padding-left: 78px; }
+/* Without a document the title bar is absent; the bar that lands at the top keeps the lights clear. */
+.platform-mac > .app-error:first-child, .platform-mac > .app-import-progress:first-child, .platform-mac > .recovery-panel:first-child { padding-left: 90px; }
 .titlebar-quick-access, .titlebar-tools { display: flex; align-items: center; gap: 2px; min-width: 0; }
 .titlebar-tools { justify-content: flex-end; }
 .app-titlebar .titlebar-button { min-height: 28px; padding: 3px 6px; color: var(--text-secondary); }
@@ -194,8 +200,19 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .titlebar-search { display: inline-flex; align-items: center; gap: 8px; width: min(320px, 28vw); min-width: 160px; height: 28px; padding: 0 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text-muted); font-size: 12px; text-align: left; }
 .titlebar-search:hover:enabled { background: var(--hover); border-color: var(--border-strong); color: var(--text-secondary); }
 .titlebar-search span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-/* Focus mode keeps the slim title bar (it holds the exit toggle) and hides the document tab strip. */
-.is-focused .document-tabs { display: none; }
+/* Focus mode, like Word's: the title bar (it holds the exit toggle), the document and the app
+   status bar stay; every command surface around them goes away. The editors already drop their
+   own side panes for viewOptions.focus; these rules cover the rows they keep. */
+.is-focused .document-tabs,
+.is-focused .ribbon,
+.is-focused .office-toolbar,
+.is-focused .office-document-note,
+.is-focused .office-document-status,
+.is-focused .sheet-status,
+.is-focused .presentation-inspector,
+.is-focused .pdf-tools,
+.is-focused .pdf-page-actions,
+.is-focused .pdf-export-row { display: none; }
 .editor-workspace { flex: 1; min-height: 0; overflow: auto; position: relative; }
 .editor-content { height: 100%; min-height: 0; }
 .primary-button, .dialog-actions .primary-button { color: var(--accent-text); background: var(--accent-fill); border: 1px solid var(--accent-fill); border-radius: 5px; font-weight: 500; padding: 10px 19px; font-size: 14px; }
