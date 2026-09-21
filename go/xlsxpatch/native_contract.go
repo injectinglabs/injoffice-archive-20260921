@@ -219,6 +219,7 @@ type NativeWorkbookSheetV1 struct {
 	PartName     string                            `json:"part_name"`
 	SheetFormat  *NativeWorkbookSheetFormatV1      `json:"sheet_format,omitempty"`
 	SheetView    *NativeWorkbookSheetViewV1        `json:"sheet_view,omitempty"`
+	AutoFilter   *NativeWorkbookAutoFilterV1       `json:"auto_filter,omitempty"`
 	Rows         []NativeWorkbookRowDimensionV1    `json:"rows"`
 	Columns      []NativeWorkbookColumnDimensionV1 `json:"columns"`
 	Cells        []NativeWorkbookCellV1            `json:"cells"`

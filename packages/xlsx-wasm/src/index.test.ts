@@ -243,6 +243,17 @@ describe('XLSX WASM package client', () => {
         anchor: { from_row: 0, from_column: 4, to_row: 18, to_column: 12 },
       }],
     })
+    const freeze = {
+      ...clearBatch(),
+      operations: [{
+        operation_id: 'freeze-1',
+        sheet_id: fixtureWorkbook.sheets[0].id,
+        kind: 'sheet.freeze' as const,
+        rows: 1,
+        columns: 0,
+      }],
+    }
+    expect(adaptWorkbookMutationBatchV1(fixtureWorkbook, freeze)).toEqual({ expected_revision: fixtureWorkbook.revision, view: freeze.operations })
 
     const client = createXlsxWasmClient({ workerFactory: () => new FakeWorker() })
     expect(() => client.apply(new Uint8Array([1]), fixtureWorkbook, {

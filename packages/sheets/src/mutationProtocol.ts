@@ -26,6 +26,8 @@ const MAX_FONT_NAME_LENGTH = 255
 const MAX_FONT_SIZE_POINTS = 409
 const MAX_ROW_HEIGHT_POINTS = 409.5
 const MAX_COLUMN_WIDTH = 255
+const MAX_FILTER_VALUES = 256
+const MAX_A1_RANGE_LENGTH = 33
 
 export interface CellRef {
   /** Zero-based row index. */
@@ -138,6 +140,35 @@ export interface AxisMutation extends MutationBase {
   count: number
 }
 
+/** Pane split: freeze `rows` above and `columns` left of the active cell. Zero/zero unfreezes. */
+export interface SheetFreezeMutation extends MutationBase {
+  kind: 'sheet.freeze'
+  rows: number
+  columns: number
+}
+
+/** Exact-text AutoFilter over an A1 range. `filter: null` clears it. */
+export interface SheetFilterSpec {
+  ref: string
+  column: number
+  values: string[]
+  blank: boolean
+}
+
+export interface SheetFilterMutation extends MutationBase {
+  kind: 'sheet.filter'
+  filter: SheetFilterSpec | null
+}
+
+/** Stable record sort of one rectangular range by a single key column. */
+export interface RangeSortMutation extends MutationBase {
+  kind: 'range.sort'
+  range: RangeRef
+  key_column: number
+  descending: boolean
+  header: boolean
+}
+
 export type SupportedWorkbookMutation =
   | AxisMutation
   | CellSetValueMutation
@@ -152,6 +183,9 @@ export type SupportedWorkbookMutation =
   | ChartInsertMutation
   | ChartUpdateMutation
   | ChartDeleteMutation
+  | SheetFreezeMutation
+  | SheetFilterMutation
+  | RangeSortMutation
 
 /** Recognized UI edits that v1 must refuse rather than omit from a save. */
 export const UNSUPPORTED_STRUCTURAL_MUTATION_KINDS = [
@@ -232,6 +266,9 @@ const supportedKinds = new Set<string>([
   'range.merge',
   'range.unmerge',
   ...CHART_MUTATION_KINDS,
+  'sheet.freeze',
+  'sheet.filter',
+  'range.sort',
 ])
 const unsupportedKinds = new Set<string>(UNSUPPORTED_STRUCTURAL_MUTATION_KINDS)
 
@@ -361,6 +398,89 @@ function parseRangeRef(value: unknown, path: string, issues: WorkbookMutationIss
     return null
   }
   return { row, column, end_row: endRow, end_column: endColumn }
+}
+
+function a1Address(row: number, column: number): string {
+  let n = column + 1
+  let letters = ''
+  while (n > 0) {
+    const rem = (n - 1) % 26
+    letters = String.fromCharCode(65 + rem) + letters
+    n = Math.floor((n - 1) / 26)
+  }
+  return `${letters}${row + 1}`
+}
+
+function parseA1RangeToken(
+  value: unknown,
+  path: string,
+  issues: WorkbookMutationIssue[],
+  operationIndex: number,
+  operationId?: string,
+): RangeRef | null {
+  const parsed = requiredString(value, path, MAX_A1_RANGE_LENGTH, issues, operationIndex, operationId)
+  if (parsed === null) return null
+  const match = /^([A-Z]{1,3})([1-9]\d{0,6})(?::([A-Z]{1,3})([1-9]\d{0,6}))?$/.exec(parsed)
+  if (!match) {
+    issue(issues, 'INVALID_VALUE', path, 'must be a canonical A1 range such as A1:C9', operationIndex, operationId)
+    return null
+  }
+  const columnIndex = (letters: string): number => [...letters].reduce((n, letter) => n * 26 + (letter.charCodeAt(0) - 64), 0) - 1
+  const row = Number(match[2]) - 1
+  const column = columnIndex(match[1]!)
+  const endRow = match[4] ? Number(match[4]) - 1 : row
+  const endColumn = match[3] ? columnIndex(match[3]) : column
+  if (row >= EXCEL_MAX_ROWS || column >= EXCEL_MAX_COLUMNS || endRow >= EXCEL_MAX_ROWS || endColumn >= EXCEL_MAX_COLUMNS || endRow < row || endColumn < column) {
+    issue(issues, 'INVALID_RANGE', path, 'range is outside Excel bounds or reversed', operationIndex, operationId)
+    return null
+  }
+  const canonical = a1Address(row, column) + (endRow === row && endColumn === column ? '' : `:${a1Address(endRow, endColumn)}`)
+  if (canonical !== parsed) {
+    issue(issues, 'INVALID_VALUE', path, 'must be a canonical A1 range such as A1:C9', operationIndex, operationId)
+    return null
+  }
+  return { row, column, end_row: endRow, end_column: endColumn }
+}
+
+function parseSheetFilterSpec(value: unknown, path: string, issues: WorkbookMutationIssue[], operationIndex: number, operationId?: string): SheetFilterSpec | null {
+  if (!isObject(value)) {
+    issue(issues, value === undefined ? 'REQUIRED' : 'INVALID_TYPE', path, value === undefined ? 'field is required' : 'must be an object or null', operationIndex, operationId)
+    return null
+  }
+  rejectUnknownFields(value, ['ref', 'column', 'values', 'blank'], path, issues, operationIndex, operationId)
+  const range = parseA1RangeToken(value.ref, `${path}/ref`, issues, operationIndex, operationId)
+  const column = boundedNumber(value.column, `${path}/column`, 0, EXCEL_MAX_COLUMNS - 1, true, issues, operationIndex, operationId)
+  const blank = value.blank
+  if (blank === undefined) issue(issues, 'REQUIRED', `${path}/blank`, 'field is required', operationIndex, operationId)
+  else if (typeof blank !== 'boolean') issue(issues, 'INVALID_TYPE', `${path}/blank`, 'must be a boolean', operationIndex, operationId)
+  if (!Array.isArray(value.values)) {
+    issue(issues, value.values === undefined ? 'REQUIRED' : 'INVALID_TYPE', `${path}/values`, value.values === undefined ? 'field is required' : 'must be an array', operationIndex, operationId)
+    return null
+  }
+  if (value.values.length > MAX_FILTER_VALUES) {
+    issue(issues, 'OUT_OF_RANGE', `${path}/values`, `must contain at most ${MAX_FILTER_VALUES} values`, operationIndex, operationId)
+    return null
+  }
+  const values: string[] = []
+  for (let index = 0; index < value.values.length; index++) {
+    const entry = requiredString(value.values[index], `${path}/values/${index}`, MAX_FORMAT_LENGTH, issues, operationIndex, operationId)
+    if (entry !== null) values.push(entry)
+  }
+  if (range && column !== null && (column < range.column || column > range.end_column)) {
+    issue(issues, 'INVALID_RANGE', `${path}/column`, 'filter column must lie inside the AutoFilter range', operationIndex, operationId)
+    return null
+  }
+  if (range && range.row === range.end_row) {
+    issue(issues, 'INVALID_RANGE', `${path}/ref`, 'AutoFilter range must include a header row and at least one data row', operationIndex, operationId)
+    return null
+  }
+  if (range && typeof blank === 'boolean' && values.length === 0 && !blank) {
+    issue(issues, 'INVALID_VALUE', `${path}/values`, 'must list at least one value or include blank cells', operationIndex, operationId)
+    return null
+  }
+  return range && column !== null && typeof blank === 'boolean' && values.length === value.values.length
+    ? { ref: `${a1Address(range.row, range.column)}:${a1Address(range.end_row, range.end_column)}`, column, values, blank }
+    : null
 }
 
 const styleKeys = [
@@ -583,6 +703,40 @@ function parseOperation(value: unknown, index: number, issues: WorkbookMutationI
     case 'chart.update':
     case 'chart.delete':
       return parseChartMutation(value, path, index, operationId, sheetId, issues)
+    case 'sheet.freeze': {
+      rejectUnknownFields(value, ['operation_id', 'kind', 'sheet_id', 'rows', 'columns'], path, issues, index, operationId)
+      const rows = boundedNumber(value.rows, `${path}/rows`, 0, EXCEL_MAX_ROWS, true, issues, index, operationId)
+      const columns = boundedNumber(value.columns, `${path}/columns`, 0, EXCEL_MAX_COLUMNS, true, issues, index, operationId)
+      return base && rows !== null && columns !== null ? { ...base, kind, rows, columns } : null
+    }
+    case 'sheet.filter': {
+      rejectUnknownFields(value, ['operation_id', 'kind', 'sheet_id', 'filter'], path, issues, index, operationId)
+      if (value.filter === null) return base ? { ...base, kind, filter: null } : null
+      const filter = parseSheetFilterSpec(value.filter, `${path}/filter`, issues, index, operationId)
+      return base && filter ? { ...base, kind, filter } : null
+    }
+    case 'range.sort': {
+      rejectUnknownFields(value, ['operation_id', 'kind', 'sheet_id', 'range', 'key_column', 'descending', 'header'], path, issues, index, operationId)
+      const range = parseRangeRef(value.range, `${path}/range`, issues, index, operationId)
+      const keyColumn = boundedNumber(value.key_column, `${path}/key_column`, 0, EXCEL_MAX_COLUMNS - 1, true, issues, index, operationId)
+      const descending = value.descending
+      const header = value.header
+      if (descending === undefined) issue(issues, 'REQUIRED', `${path}/descending`, 'field is required', index, operationId)
+      else if (typeof descending !== 'boolean') issue(issues, 'INVALID_TYPE', `${path}/descending`, 'must be a boolean', index, operationId)
+      if (header === undefined) issue(issues, 'REQUIRED', `${path}/header`, 'field is required', index, operationId)
+      else if (typeof header !== 'boolean') issue(issues, 'INVALID_TYPE', `${path}/header`, 'must be a boolean', index, operationId)
+      if (range && keyColumn !== null && (keyColumn < range.column || keyColumn > range.end_column)) {
+        issue(issues, 'INVALID_RANGE', `${path}/key_column`, 'sort key column must lie inside the range', index, operationId)
+        return null
+      }
+      if (range && range.row === range.end_row && header === true) {
+        issue(issues, 'INVALID_RANGE', `${path}/range`, 'header sort requires at least one data row', index, operationId)
+        return null
+      }
+      return base && range && keyColumn !== null && typeof descending === 'boolean' && typeof header === 'boolean'
+        ? { ...base, kind, range, key_column: keyColumn, descending, header }
+        : null
+    }
   }
   return null
 }

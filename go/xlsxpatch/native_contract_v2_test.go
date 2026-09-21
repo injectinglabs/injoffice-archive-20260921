@@ -149,6 +149,7 @@ func TestNativeXLSXV2SchemaBindingsMatchGoWireTypes(t *testing.T) {
 		"NativeWorkbookRowDimensionV2":    reflect.TypeOf(NativeWorkbookRowDimensionV2{}),
 		"NativeWorkbookSheetFormatV2":     reflect.TypeOf(NativeWorkbookSheetFormatV2{}),
 		"NativeWorkbookSheetViewV2":       reflect.TypeOf(NativeWorkbookSheetViewV2{}),
+		"NativeWorkbookAutoFilterV2":      reflect.TypeOf(NativeWorkbookAutoFilterV2{}),
 		"NativeWorkbookNormalStyleV2":     reflect.TypeOf(NativeWorkbookNormalStyleV2{}),
 		"NativeWorkbookColumnDimensionV2": reflect.TypeOf(NativeWorkbookColumnDimensionV2{}),
 		"NativeWorkbookStyleV2":           reflect.TypeOf(NativeWorkbookStyleV2{}),

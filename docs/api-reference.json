@@ -15685,6 +15685,11 @@
               "signature": "RangeRef"
             },
             {
+              "name": "RangeSortMutation",
+              "kind": "type",
+              "signature": "RangeSortMutation"
+            },
+            {
               "name": "RangeUnmergeMutation",
               "kind": "type",
               "signature": "RangeUnmergeMutation"
@@ -15743,6 +15748,21 @@
               "name": "selectNativeSheetPrintTitleViewportV1",
               "kind": "function",
               "signature": "export declare function selectNativeSheetPrintTitleViewportV1(model: NativeWorkbookRenderModelV2, sheetId: string, viewport: NativeSheetViewportV2, objects: NativeWorkbookObjectsV1): NativeSheetViewportV2"
+            },
+            {
+              "name": "SheetFilterMutation",
+              "kind": "type",
+              "signature": "SheetFilterMutation"
+            },
+            {
+              "name": "SheetFilterSpec",
+              "kind": "type",
+              "signature": "SheetFilterSpec"
+            },
+            {
+              "name": "SheetFreezeMutation",
+              "kind": "type",
+              "signature": "SheetFreezeMutation"
             },
             {
               "name": "StyleDelta",
@@ -15872,7 +15892,7 @@
             {
               "name": "XLSX_NATIVE_SCHEMA_SHA256",
               "kind": "const",
-              "signature": "export declare const XLSX_NATIVE_SCHEMA_SHA256: \"470fe4bd0fd533f6a6fcdcd1e9c232057fe5cb4cf111503a17e6a405edbf2736\""
+              "signature": "export declare const XLSX_NATIVE_SCHEMA_SHA256: \"0efddef4b5473f7f6cc0ee42382ac2f6891782182fe8a2cc0575ef0d3b614a08\""
             },
             {
               "name": "XLSX_NATIVE_V2_MEDIA_TYPE",
@@ -15907,7 +15927,7 @@
             {
               "name": "XLSX_NATIVE_V2_SCHEMA_SHA256",
               "kind": "const",
-              "signature": "export declare const XLSX_NATIVE_V2_SCHEMA_SHA256: \"sha256:75a781bf3f7da26dfab6500c9e122ce35cbe771af4f25c23193912a9ea0b3fc8\""
+              "signature": "export declare const XLSX_NATIVE_V2_SCHEMA_SHA256: \"sha256:9b19d45038ec12005fa1f0a2134700aad48ea745450261f876a76228b9cd408f\""
             },
             {
               "name": "XLSX_NATIVE_V2_VERSION",
@@ -18115,6 +18135,11 @@
               "signature": "export type XlsxNativeChartMutationV1 = Extract<SupportedWorkbookMutation,"
             },
             {
+              "name": "XlsxNativeFilterMutationV1",
+              "kind": "type",
+              "signature": "export type XlsxNativeFilterMutationV1 = Extract<SupportedWorkbookMutation,"
+            },
+            {
               "name": "XlsxNativeLayoutMutationV1",
               "kind": "type",
               "signature": "export type XlsxNativeLayoutMutationV1 = Extract<SupportedWorkbookMutation,"
@@ -18125,9 +18150,19 @@
               "signature": "export interface XlsxNativeMutationTransactionV1"
             },
             {
+              "name": "XlsxNativeSortMutationV1",
+              "kind": "type",
+              "signature": "export type XlsxNativeSortMutationV1 = Extract<SupportedWorkbookMutation,"
+            },
+            {
               "name": "XlsxNativeStyleMutationV1",
               "kind": "type",
               "signature": "export type XlsxNativeStyleMutationV1 = Extract<SupportedWorkbookMutation,"
+            },
+            {
+              "name": "XlsxNativeViewMutationV1",
+              "kind": "type",
+              "signature": "export type XlsxNativeViewMutationV1 = Extract<SupportedWorkbookMutation,"
             },
             {
               "name": "XlsxRichSourcePreviewClient",
