@@ -426,7 +426,37 @@ func validateStructureWorkbook(data []byte) error {
 					return fmt.Errorf("xlsxpatch: structure: foreign workbook references")
 				}
 				switch token.Name.Local {
-				case "workbookPr", "bookViews", "sheets", "calcPr":
+				case "bookViews":
+					qualified, err := consumeNativeChartDataMetadata(decoder, token, namespace)
+					if err != nil {
+						return err
+					}
+					if !qualified {
+						return fmt.Errorf("xlsxpatch: structure: unmodeled workbook view references")
+					}
+					depth--
+				case "sheets": // Already validated and routed by native extraction.
+				case "workbookPr", "calcPr":
+					names := "date1904 showObjects showBorderUnselectedTables filterPrivacy promptedSolutions showInk backupFile saveExternalLinkValues updateLinks codeName hidePivotFieldList showPivotChartFilter allowRefreshQuery autoCompressPictures refreshAllConnections defaultThemeVersion"
+					if token.Name.Local == "calcPr" {
+						names = "calcId calcMode fullCalcOnLoad refMode iterate iterateCount iterateDelta fullPrecision calcCompleted calcOnSave concurrentCalc concurrentManualCount forceFullCalc"
+					}
+					allowed := []xml.Name{}
+					for _, name := range strings.Fields(names) {
+						allowed = append(allowed, xml.Name{Local: name})
+					}
+					if err := requireOnlySemanticXMLAttributes(token, allowed...); err != nil {
+						return fmt.Errorf("xlsxpatch: structure: %w", err)
+					}
+					if mode, _, err := unqualifiedXMLAttribute(token, "refMode"); err != nil {
+						return err
+					} else if mode != "" && mode != "A1" {
+						return fmt.Errorf("xlsxpatch: structure: only A1 formula reference mode is supported")
+					}
+					if err := requireNativeEmptyElement(decoder, token); err != nil {
+						return err
+					}
+					depth--
 				default:
 					return fmt.Errorf("xlsxpatch: structure: workbook contains unmodeled references in %s", token.Name.Local)
 				}

@@ -142,3 +142,12 @@ func TestStructureDeletionRemovesValuesAndRepairsReferences(t *testing.T) {
 		}
 	}
 }
+
+func TestStructureWorkbookMetadataRefusals(t *testing.T) {
+	for _, feature := range []string{`<calcPr ref="A1"/>`, `<calcPr refMode="R1C1"/>`, `<calcPr><extLst/></calcPr>`, `<bookViews><workbookView><extLst/></workbookView></bookViews>`, `<workbookPr><foreign xmlns="urn:test" ref="A1"/></workbookPr>`} {
+		data := []byte(`<workbook xmlns="` + spreadsheetMLTransitional + `"><sheets/>` + feature + `</workbook>`)
+		if err := validateStructureWorkbook(data); err == nil {
+			t.Fatalf("unsafe metadata accepted: %s", feature)
+		}
+	}
+}
