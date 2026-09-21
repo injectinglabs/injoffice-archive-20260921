@@ -146,7 +146,9 @@ function dropBridge(importDocument) {
     importDocument:input=>importDocument(input,hostBusy),
   }};
 }
-function droppedFile(name, read=async()=>new Uint8Array([1]).buffer) {return {name,size:1,arrayBuffer:read};}
+// Dropped files carry a real container header: the workspace refuses anything else before import.
+const packageBytes=(tail=1)=>new Uint8Array([0x50,0x4b,0x03,0x04,tail]).buffer;
+function droppedFile(name, read=async()=>packageBytes()) {return {name,size:5,arrayBuffer:read};}
 function drop(renderer,files) {renderer.root.findAllByType('div').find(node=>node.props.onDrop).props.onDrop({defaultPrevented:false,preventDefault(){},dataTransfer:{files}});}
 
 test('multi-file drop stages host imports before any editor can block the remaining files',async()=>{
@@ -155,7 +157,7 @@ test('multi-file drop stages host imports before any editor can block the remain
   let renderer,releaseSecond;const second=new Promise(resolve=>{releaseSecond=resolve});
   try {
     await act(async()=>{renderer=create(React.createElement(App));});
-    await act(async()=>drop(renderer,[droppedFile('One.docx'),droppedFile('Two.docx',async()=>{await second;return new Uint8Array([2]).buffer;})]));
+    await act(async()=>drop(renderer,[droppedFile('One.docx'),droppedFile('Two.docx',async()=>{await second;return packageBytes(2);})]));
     assert.deepEqual(imported,['One.docx']);
     assert.equal(renderer.root.findAllByType('test-editor').length,0,'staged copies do not start editor loading before the batch finishes');
     await act(async()=>{releaseSecond();await new Promise(resolve=>setImmediate(resolve));});
@@ -235,9 +237,41 @@ test('unsupported open replaces the start page with OpenError instead of an empt
     await act(async () => { renderer = create(React.createElement(App)); });
     await act(async () => renderer.root.findByType('test-start').props.onOpen());
     assert.equal(renderer.root.findAllByType('test-start').length, 0);
-    assert.match(renderer.root.findByProps({ id: 'open-error-title' }).children.join(''), /not supported/i);
-    await act(async () => renderer.root.findAllByType('button').find(button => button.props.children === 'Back to start').props.onClick());
+    assert.match(renderer.root.findByProps({ id: 'open-error-title' }).children.join(''), /can.t open this file/i);
+    await act(async () => renderer.root.findAllByType('button').find(button => button.props.children === 'Go to start page').props.onClick());
     assert.equal(renderer.root.findAllByType('test-start').length, 1);
+  } finally { if (renderer) await act(async () => renderer.unmount()); delete global.window; }
+});
+
+// A corrupt file used to open a tab whose editor only had the engine's raw complaint to show,
+// under a ribbon and a "Saved on this device" status for a document that never opened.
+test('a corrupt document is refused before a tab exists and explains itself on the open-error page', async () => {
+  const App = await loadApp();
+  const closed = [];
+  const externals = [{ id: 'broken', name: 'Broken report.docx', bytes: new Uint8Array([0x54, 0x68, 0x69, 0x73]) }];
+  global.window = { localStorage: { getItem: () => null, setItem() {} }, document: { title: '' }, addEventListener() {}, removeEventListener() {}, injDesktop: {
+    recent: async () => [], recovery: async () => [], setDirty() {}, setBusy() {}, onMenuAction() { return () => {}; }, checkpoint: async () => {},
+    nextExternal: async () => externals.shift() ?? null,
+    close: async id => { closed.push(id); },
+    open: async () => ({ id: 'empty', name: 'Empty.pptx', bytes: new Uint8Array() }),
+  } };
+  let renderer;
+  try {
+    await act(async () => { renderer = create(React.createElement(App)); });
+    assert.equal(renderer.root.findAllByType('test-editor').length, 0, 'no editor mounts for a file that is not a package');
+    assert.equal(renderer.root.findAllByProps({ className: 'document-tab' }).length, 0, 'no tab, so no ribbon and no save status');
+    assert.deepEqual(closed, ['broken'], 'the host session for the refused file is closed again');
+    assert.match(renderer.root.findByProps({ id: 'open-error-title' }).children.join(''), /can.t open this file/i);
+    assert.equal(renderer.root.findByProps({ className: 'open-error-name' }).children.join(''), 'Broken report.docx');
+    // The engine-level string stays behind Details instead of greeting the reader.
+    const details = renderer.root.findByProps({ className: 'open-error-details' });
+    assert.match(details.findAllByType('p')[0].children.join(''), /does not start with a ZIP package \(PK\)/);
+    assert.equal(renderer.root.findByProps({ className: 'app-status' }).props.hidden, true, 'the status bar stays hidden on the start page');
+    // An empty file is refused the same way, through the Open dialog.
+    await act(async () => renderer.root.findAllByType('button').find(button => button.props.children === 'Open another file').props.onClick());
+    assert.equal(renderer.root.findByProps({ className: 'open-error-name' }).children.join(''), 'Empty.pptx');
+    assert.match(renderer.root.findByProps({ className: 'open-error-details' }).findAllByType('p')[0].children.join(''), /is empty \(0 bytes\)/);
+    assert.deepEqual(closed, ['broken', 'empty']);
   } finally { if (renderer) await act(async () => renderer.unmount()); delete global.window; }
 });
 
