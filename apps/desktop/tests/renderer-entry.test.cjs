@@ -80,7 +80,8 @@ test('macOS insets the traffic lights into the app title bar and keeps that row 
   const [x, y] = [Number(chrome[1]), Number(chrome[2])];
   // A traffic-light cluster is about 62px wide and 16px tall; centre it in the 40px title bar.
   assert.ok(y >= 10 && y + 16 <= 30, `traffic lights sit inside the 40px title bar (y=${y})`);
-  assert.match(host, /backgroundColor: canvasColor\(\),\n\s*\.\.\.macTitleBar,/, 'the window spreads the macOS title-bar options');
+  // \s already spans the newline; an explicit \n fails on Windows checkouts, which use CRLF.
+  assert.match(host, /backgroundColor: canvasColor\(\),\s*\.\.\.macTitleBar,/, 'the window spreads the macOS title-bar options');
 
   const styles = fs.readFileSync(path.join(root, 'src/styles.css'), 'utf8');
   assert.match(styles, /\.app-titlebar \{[^}]*-webkit-app-region: drag;/, 'the app title bar drags the window');
