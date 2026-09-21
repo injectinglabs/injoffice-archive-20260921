@@ -14,7 +14,7 @@ async function loadEditor(client) {
   const bundle = await rolldown({
     input: path.resolve(__dirname, '../src/OfficeEditor.tsx'),
     platform: 'node',
-    external: id => /^react(?:\/|$)/.test(id) || id === '@injoffice/docx-wasm' || id.includes('playground/src/') || id.includes('packages/docs/src/') || id === '@injoffice/sheets/browser' || id === '@injoffice/pptx-native' || id === '@injoffice/pptx-wasm',
+    external: id => /^react(?:\/|$)/.test(id) || id === '@injoffice/docx-wasm' || id.includes('playground/src/') || (id.includes('packages/docs/src/') && !id.includes('nativeNoteNumberingV1')) || id === '@injoffice/sheets/browser' || id === '@injoffice/pptx-native' || id === '@injoffice/pptx-wasm',
     transform: { jsx: { runtime: 'automatic' } },
     plugins: [{
       name: 'css',

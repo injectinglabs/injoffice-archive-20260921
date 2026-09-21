@@ -10,7 +10,7 @@ async function loadPreview(exportName = 'default') {
   const bundle = await rolldown({
     input: path.resolve(__dirname, '../src/DocumentPreview.tsx'),
     platform: 'node',
-    external: id => /^react(?:\/|$)/.test(id) || id.includes('packages/docs/src/') || id.includes('playground/src/'),
+    external: id => /^react(?:\/|$)/.test(id) || (id.includes('packages/docs/src/') && !id.includes('nativeNoteNumberingV1')) || id.includes('playground/src/'),
     transform: { jsx: { runtime: 'automatic' } },
   });
   try {
@@ -243,4 +243,61 @@ test('flowing page metrics count trailing, repeated and overflow-adjacent hard b
   assert.deepEqual(metrics(2200, 1000, 2100, [2000]), { page: 3, pages: 3 });
   assert.deepEqual(metrics(2000, 1000, 0, [1000]), { page: 1, pages: 2 }, 'a break at a natural boundary is not double counted');
   assert.deepEqual(metrics(1000, 1000, 1000, [1000]), { page: 2, pages: 2 }, 'a final break creates an empty final page');
+});
+
+
+function noteStory(kind, id, role = 'content') {
+  const part = `word/${kind}s.xml`;
+  return { id: `${kind}-${id}`, native_story_id: String(id), kind, note_role: role, part_name: part,
+    blocks: [{ paragraph: { id: `${kind}-p-${id}`, anchor: { part_name: part }, properties: {}, runs: [
+      { id: `${kind}-r-${id}`, kind: 'text', text: `${kind} text ${id}`, anchor: { part_name: part }, properties: {} },
+    ] } }] };
+}
+function noteReference(story, role = 'anchor') {
+  return { id: `ref-${story.id}-${role}`, kind: 'reference', anchor: { part_name: 'word/document.xml' },
+    reference: { kind: story.kind, target_id: story.id, role }, properties: {} };
+}
+async function renderNotes(value) {
+  const DocumentPreview = await loadPreview();
+  let view;
+  await act(async () => { view = create(React.createElement(DocumentPreview, {
+    images: {}, imageNotice: '', document: value, selected: '', draft: '',
+    onTextRangeChange() {}, joinPrevious() {}, insertLines() {}, busy: false, hasDraft: false,
+    zoom: 1, navigation: false, choose() {}, updateDraft() {}, commit() {}, notice: '', onCompositionChange() {}, deleteImage() {},
+  })); });
+  return view;
+}
+
+test('note sentinels and unreferenced content never appear as document notes', async () => {
+  const value = document();
+  value.notes = ['footnote', 'endnote'].flatMap(kind => [noteStory(kind, 0, 'separator'), noteStory(kind, 1, 'continuation-separator')]);
+  for (const note of value.notes) note.blocks[0].paragraph.runs = [];
+  let view = await renderNotes(value);
+  assert.equal(view.root.findAllByProps({ className: 'office-story' }).length, 0);
+  await act(async () => view.unmount());
+  // Even malformed references to sentinels and label leaves are not content anchors.
+  value.body.blocks[0].paragraph.runs.push(...value.notes.map(note => noteReference(note)));
+  const orphan = noteStory('footnote', 99);
+  value.notes.push(orphan);
+  value.body.blocks[0].paragraph.runs.push(noteReference(orphan, 'label'));
+  view = await renderNotes(value);
+  assert.equal(view.root.findAllByProps({ className: 'office-story' }).length, 0);
+  await act(async () => view.unmount());
+});
+
+test('two footnotes and an endnote follow body/table reference order with separate authored numbering', async () => {
+  for (const authored of [false, true]) {
+    const value = document();
+    const first = noteStory('footnote', 42), second = noteStory('footnote', 7), end = noteStory('endnote', 42);
+    value.notes = [second, noteStory('footnote', 0, 'separator'), end, noteStory('endnote', 1, 'continuation-separator'), first, noteStory('endnote', 99)];
+    value.body.blocks[0].paragraph.runs.push(noteReference(first), noteReference(end));
+    value.body.blocks.push({ table: { rows: [{ cells: [{ paragraphs: [{ id: 'table-p', anchor: { part_name: 'word/document.xml' }, properties: {}, runs: [noteReference(second)] }] }] }] } });
+    for (const note of [first, second, end]) note.blocks[0].paragraph.runs.unshift(noteReference(note, 'label'));
+    if (authored) value.note_numbering = [{ kind: 'footnote', format: 'upperLetter', labels: ['A', 'B'] }, { kind: 'endnote', format: 'lowerRoman', labels: ['i'] }];
+    const view = await renderNotes(value);
+    const markers = authored ? ['A', 'i', 'B'] : ['1', '1', '2'];
+    assert.deepEqual(view.root.findAllByProps({ className: 'office-story' }).map(node => node.props['aria-label']), [`Footnote ${markers[0]}`, `Endnote ${markers[1]}`, `Footnote ${markers[2]}`]);
+    assert.deepEqual(view.root.findAllByType('sup').map(node => node.children[0]), [...markers, ...markers]);
+    await act(async () => view.unmount());
+  }
 });

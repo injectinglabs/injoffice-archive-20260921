@@ -6,6 +6,7 @@ import { caretTargetAt } from './document-caret'
 import { canFormatParagraphRange, paragraphAppearance, paragraphListLabels, runAppearance } from './document-style'
 import { editableDocxRuns } from '../../playground/src/docxRoundTrip'
 import { nativeDocxParagraphText, nativeDocxRunText } from '../../playground/src/docsNativePreview'
+import { nativeDocxNoteLabelsV1, nativeDocxNoteLabelV1 } from '../../../packages/docs/src/nativeNoteNumberingV1'
 
 /** Each hard break starts a fresh logical page, even at the end of the document.
  * Natural overflow is measured separately within each flowing segment. */
@@ -79,6 +80,27 @@ function bodyParagraphs(story: NativeDocxStoryV1) {
   return story.blocks.flatMap(block => block.paragraph ? [block.paragraph] : block.table?.rows.flatMap(row => row.cells.flatMap(cell => cell.paragraphs)) ?? [])
 }
 
+/** Note part order and numeric XML identities do not determine reading order. */
+function referencedNotes(document: NativeDocxDocumentV1) {
+  const content = new Map(document.notes.filter(note => note.note_role === 'content').map(note => [note.id, note]))
+  const labels = nativeDocxNoteLabelsV1(document)
+  const counters = { footnote: 0, endnote: 0 }
+  const seen = new Set<string>()
+  const notes: { value: NativeDocxStoryV1; label: string; marker?: string }[] = []
+  for (const paragraph of bodyParagraphs(document.body)) for (const run of paragraph.runs) {
+    const reference = run.reference
+    if (!reference || reference.role === 'label' || (reference.kind !== 'footnote' && reference.kind !== 'endnote')) continue
+    const value = content.get(reference.target_id)
+    if (!value || value.kind !== reference.kind || seen.has(value.id)) continue
+    seen.add(value.id)
+    const marker = nativeDocxNoteLabelV1(labels, reference.kind, ++counters[reference.kind])
+    const kind = reference.kind === 'footnote' ? 'Footnote' : 'Endnote'
+    // An incomplete authored alphabet must not invent a decimal label.
+    notes.push({ value, marker, label: marker === undefined ? kind : `${kind} ${marker}` })
+  }
+  return notes
+}
+
 export default function DocumentPreview(props: DocumentPreviewProps) {
   const { document, selected, choose, busy, hasDraft, zoom, navigation } = props
   const previewId=useId(),root=useRef<HTMLDivElement>(null)
@@ -86,6 +108,8 @@ export default function DocumentPreview(props: DocumentPreviewProps) {
   const paragraphId=(value:NativeDocxParagraphV1)=>`${previewId}-${baseParagraphId(value)}`
   const findParagraph=(id:string)=>Array.from(root.current?.querySelectorAll<HTMLElement>('[data-docx-paragraph]')??[]).find(node=>node.id===id)
   const editable = editableDocxRuns(document)
+  const notes = referencedNotes(document)
+  const noteMarkers = new Map(notes.map(note => [note.value.id, note.marker]))
   const targets = new Map(editable.map(target => [runIdentity(target.partName, target.runId), target]))
   // The point of the click that activated a run, shared because only one run is ever active.
   const caretPoint = useRef<{ x: number; y: number } | undefined>(undefined)
@@ -148,6 +172,9 @@ export default function DocumentPreview(props: DocumentPreviewProps) {
       {label && <span className="office-list-marker" contentEditable={false} style={{fontFamily:label.properties?.font_family,fontSize:label.properties?.font_size_half_points ? `${label.properties.font_size_half_points / 2}pt` : undefined}}>{label.text}{label.suffix === 'nothing' ? '' : '\u00a0'}</span>}
       {value.runs.map(run => {
         const key = runIdentity(run.anchor.part_name, run.id)
+        if (run.kind === 'reference' && run.reference && noteMarkers.has(run.reference.target_id)) {
+          return <sup key={key} aria-label={run.reference.kind}>{noteMarkers.get(run.reference.target_id)}</sup>
+        }
         const target = targets.get(key)
         return <DocumentRun fill={emptyLine} caretPoint={caretPoint} replaceImage={props.replaceImage} deleteImage={props.deleteImage} image={run.drawing?props.images[run.drawing.id]:undefined} key={key} run={{...run, ...(target && props.drafts?.[target.key] !== undefined ? { text: props.drafts[target.key] } : {}), properties:runAppearance(document, value, run)}} background={background} active={!!target && selected === target.key} editable={!!target} disabled={busy} draft={props.draft} textRange={props.textRange} onTextRangeChange={props.onTextRangeChange} caretOffset={props.caretOffset} joinPrevious={props.joinPrevious} insertLines={props.insertLines} activate={() => target && choose(target.key)} updateDraft={props.updateDraft} commit={props.commit} notice={props.notice} onCompositionChange={props.onCompositionChange} />
       })}
@@ -165,7 +192,7 @@ export default function DocumentPreview(props: DocumentPreviewProps) {
   const secondaryStories = [
     ...document.headers.map((value, index) => ({ value, label: `Header ${index + 1}` })),
     ...document.footers.map((value, index) => ({ value, label: `Footer ${index + 1}` })),
-    ...document.notes.map((value, index) => ({ value, label: `Note ${index + 1}` })),
+    ...notes,
     ...document.comment_stories.map((value, index) => ({ value, label: `Comment ${index + 1}` })),
   ]
   // The preview flows; the file keeps its own page layout. Pages are measured off the paper so the
@@ -204,7 +231,7 @@ export default function DocumentPreview(props: DocumentPreviewProps) {
       {props.imageNotice&&<p className="office-document-note">{props.imageNotice}</p>}
       <div className="office-document-zoom" style={{ zoom }}>
         <article ref={paper} style={paperStyle} className="office-paper" aria-label="Document content" onMouseDown={placeCaret}>{story(document.body)}</article>
-        {secondaryStories.map(({ value, label }) => <section className="office-story" key={label} aria-label={label}><h2>{label}</h2><div className="office-story-content" onMouseDown={placeCaret}>{story(value)}</div></section>)}
+        {secondaryStories.map(({ value, label }) => <section className="office-story" key={value.id} aria-label={label}><h2>{label}</h2><div className="office-story-content" onMouseDown={placeCaret}>{story(value)}</div></section>)}
       </div>
     </div>
   </div>
