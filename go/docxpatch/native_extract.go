@@ -2015,6 +2015,12 @@ func (extractor *nativeExtractor) extractParagraph(partName string, node *native
 			}
 		}
 	}
+	if paragraph.EditPolicy.Mode == "read-write" && partName == extractor.mainPart && node.parent == extractor.bodyNode {
+		paragraph.EditPolicy.AllowedOperations = append(paragraph.EditPolicy.AllowedOperations, "block.insert_after")
+		if nativeSplittableParagraph(node, extractor.wordNS) {
+			paragraph.EditPolicy.AllowedOperations = append(paragraph.EditPolicy.AllowedOperations, "paragraph.split")
+		}
+	}
 	return paragraph, nil
 }
 

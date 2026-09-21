@@ -167,7 +167,7 @@ class DocxWasmClientImpl implements DocxWasmClient {
   }
 }
 
-function validateEnvelope(document: NativeDocxDocumentV1, value: NativeDocxOfficeMutationEnvelopeV1): NativeDocxTextMutationPayloadV1 | NativeDocxRunFormatPayloadV1 {
+function validateEnvelope(document: NativeDocxDocumentV1, value: NativeDocxOfficeMutationEnvelopeV1): NativeDocxOfficeMutationEnvelopeV1['payload'] {
   const envelope = plainObject(value, 'DOCX mutation envelope')
   exactKeys(envelope, ['protocol', 'version', 'format', 'mutation_id', 'expected_revision', 'payload'], 'DOCX mutation envelope')
   if (envelope.protocol !== OFFICE_MUTATION_PROTOCOL || envelope.version !== OFFICE_MUTATION_VERSION || envelope.format !== 'docx') {
@@ -183,6 +183,24 @@ function validateEnvelope(document: NativeDocxDocumentV1, value: NativeDocxOffic
   exactKeys(payload, ['mutations'], 'DOCX mutation payload')
   if (!Array.isArray(payload.mutations) || payload.mutations.length < 1 || payload.mutations.length > DOCX_WASM_NATIVE_MAX_MUTATIONS) {
     throw new RangeError(`DOCX mutation count must be 1..${DOCX_WASM_NATIVE_MAX_MUTATIONS}.`)
+  }
+  if (payload.mutations.some(value => plainObject(value, 'DOCX mutation').operation !== undefined)) {
+    if (payload.mutations.length !== 1) throw new TypeError('Structural edits require one mutation.')
+    const mutation = plainObject(payload.mutations[0], 'DOCX structural mutation')
+    const split = mutation.operation === 'paragraph.split'
+    exactKeys(mutation, ['target_kind', 'target_id', 'expected_xml_sha256', 'operation', split ? 'split' : 'text'], 'DOCX structural mutation')
+    if (mutation.target_kind !== 'paragraph' || (!split && (mutation.operation !== 'block.insert_after' || mutation.text !== ''))) throw new TypeError('Unsupported DOCX structural operation.')
+    const paragraph = document.body.blocks.find(block => block.paragraph?.id === mutation.target_id)?.paragraph
+    if (!paragraph || paragraph.anchor.xml_sha256 !== mutation.expected_xml_sha256) throw new NativeWasmError('STALE_TARGET', 'The body paragraph anchor changed.')
+    if (!paragraph.edit_policy.allowed_operations.includes(mutation.operation as 'paragraph.split' | 'block.insert_after')) throw new TypeError('This paragraph does not allow the structural operation.')
+    const anchor = {target_kind: 'paragraph' as const, target_id: paragraph.id, expected_xml_sha256: paragraph.anchor.xml_sha256}
+    if (!split) return {mutations: [{...anchor, operation: 'block.insert_after', text: ''}]}
+    const selector = plainObject(mutation.split, 'DOCX split')
+    exactKeys(selector, ['run_id', 'offset_utf16'], 'DOCX split')
+    const run = paragraph.runs.find(run => run.id === selector.run_id)
+    const offset = selector.offset_utf16
+    if (!run || typeof run.text !== 'string' || !Number.isSafeInteger(offset) || (offset as number) < 0 || (offset as number) > run.text.length || !xmlTextValid(run.text.slice(0, offset as number)) || !xmlTextValid(run.text.slice(offset as number))) throw new TypeError('Split must be a UTF-16 character boundary in a text run.')
+    return {mutations: [{...anchor, operation: 'paragraph.split', split: {run_id: run.id, offset_utf16: offset as number}}]}
   }
   const targets = documentTargets(document)
   const seenTargets = new Set<string>()

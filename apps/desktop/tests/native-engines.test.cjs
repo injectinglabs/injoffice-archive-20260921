@@ -113,3 +113,31 @@ test('docx: the built worker patches run properties over a selection and re-extr
   assert.equal(formatted[0].properties.color, 'FF0000');
   assert.equal(formatted[1].properties?.bold, undefined, 'the unselected remainder is untouched');
 });
+
+test('docx: packaged worker inserts an editable paragraph and splits text at Enter', async () => {
+  const files = engineFiles('docx'), worker = startWorker(files);
+  const envelope = { protocol: PROTOCOL, version: 1, format: 'docx' };
+  const init = await worker.send({ ...envelope, id: 'init', op: 'init', assets: { wasmUrl: files.wasm, goRuntimeUrl: files.goRuntime } });
+  assert.equal(init.ok, true);
+  let bytes = await createBlankDocument('docx');
+  const extract = async () => {
+    const reply = await worker.send({ ...envelope, id: 'extract', op: 'extract', bytes });
+    assert.equal(reply.ok, true, JSON.stringify(reply.error));
+    return JSON.parse(reply.result.contractJson);
+  };
+  const apply = async mutation => {
+    const document = await extract();
+    const reply = await worker.send({ ...envelope, id: 'apply', op: 'apply', original: bytes, expectedRevision: document.source.package_sha256, payload: JSON.stringify({ mutations: [mutation] }) });
+    assert.equal(reply.ok, true, JSON.stringify(reply.error)); bytes = reply.result.bytes;
+  };
+  let document = await extract(), p = document.body.blocks[0].paragraph;
+  assert.ok(p.edit_policy.allowed_operations.includes('block.insert_after'));
+  await apply({ target_kind: 'paragraph', target_id: p.id, expected_xml_sha256: p.anchor.xml_sha256, operation: 'block.insert_after', text: '' });
+  document = await extract(); assert.equal(document.body.blocks.length, 2);
+  let run = document.body.blocks[1].paragraph.runs[0];
+  await apply({ target_kind: 'run', target_id: run.id, expected_xml_sha256: run.anchor.xml_sha256, text: 'hello world' });
+  document = await extract(); p = document.body.blocks[1].paragraph; run = p.runs[0];
+  await apply({ target_kind: 'paragraph', target_id: p.id, expected_xml_sha256: p.anchor.xml_sha256, operation: 'paragraph.split', split: { run_id: run.id, offset_utf16: 5 } });
+  document = await extract();
+  assert.deepEqual(document.body.blocks.map(block => block.paragraph.runs.map(run => run.text ?? '').join('')), ['', 'hello', ' world']);
+});

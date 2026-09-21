@@ -540,8 +540,8 @@ export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDr
       </> },
     ] },
     { id: 'Insert', label: 'Insert', groups: [
-      { id: 'tables', label: 'Tables', children: <InsertTableControl disabled={blocked || !canInsertBlock} onInsert={(rows, columns) => void insertTable(rows, columns)} /> },
-      { id: 'illustrations', label: 'Illustrations', children: canPickAsset && <RibbonButton icon="image" label="Insert image…" disabled={blocked || !canInsertBlock} onClick={() => void insertImage()} /> },
+      { id: 'tables', label: 'Tables', children: <InsertTableControl disabled={true} onInsert={(rows, columns) => void insertTable(rows, columns)} /> },
+      { id: 'illustrations', label: 'Illustrations', children: canPickAsset && <RibbonButton icon="image" label="Insert image…" title="Image insertion is not supported by the native DOCX engine yet" disabled={true} onClick={() => void insertImage()} /> },
       { id: 'links', label: 'Links', children: <HyperlinkControl key={selected} url={selection?.run.hyperlink?.url} disabled={blocked || !selection?.run.can_edit_hyperlink || !!textRange?.unsupported || !!(textRange && textRange.start_utf16 !== textRange.end_utf16)} onChange={url => void changeLink(url)} /> },
       { id: 'text', label: 'Text', children: <>
         <RibbonButton icon="paragraphInsert" label="Insert paragraph below" disabled={blocked || hasDraft || !canInsertBlock} onClick={() => void changeParagraph('block.insert_after')} />
@@ -575,7 +575,7 @@ export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDr
         </div>
       </div>
       <SelectionToolbar values={toolbarValues} disabled={busy||composing} onChange={patch=>void changeFormatting(patch)} />
-      {menu.anchor&&<ContextMenu anchor={menu.anchor} label="Document" onClose={menu.close} items={documentContextMenu({anchor:menu.anchor,target:!!target,values:toolbarValues,disabled:busy||composing,link:!!docxSelection(snapshot.preview.document,selected)?.run.can_edit_hyperlink&&!textRange?.unsupported&&!(textRange&&textRange.start_utf16!==textRange.end_utf16),table:paragraphOperations(snapshot.preview.document,selected).includes('block.insert_after'),onFormat:patch=>void changeFormatting(patch),onFind:()=>{setSearchOpen(true);requestAnimationFrame(()=>searchInput.current?.focus())},onRibbonTab:setRibbonTab})} />}
+      {menu.anchor&&<ContextMenu anchor={menu.anchor} label="Document" onClose={menu.close} items={documentContextMenu({anchor:menu.anchor,target:!!target,values:toolbarValues,disabled:busy||composing,link:!!docxSelection(snapshot.preview.document,selected)?.run.can_edit_hyperlink&&!textRange?.unsupported&&!(textRange&&textRange.start_utf16!==textRange.end_utf16),table:false,onFormat:patch=>void changeFormatting(patch),onFind:()=>{setSearchOpen(true);requestAnimationFrame(()=>searchInput.current?.focus())},onRibbonTab:setRibbonTab})} />}
     </>}
     {statistics&&snapshot&&<EditorStatus label="Document status">
       <span>Page {pageMetrics.page.toLocaleString()} of {pageMetrics.pages.toLocaleString()} · {statistics.words.toLocaleString()} {statistics.words===1?'word':'words'}</span>

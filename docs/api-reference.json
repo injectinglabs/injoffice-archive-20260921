@@ -4506,7 +4506,7 @@
             {
               "name": "NativeDocxEditOperation",
               "kind": "type",
-              "signature": "export type NativeDocxEditOperation = 'text.replace' | 'properties.patch' | 'block.insert_after' | 'block.delete' | 'drawing.replace'"
+              "signature": "export type NativeDocxEditOperation = 'text.replace' | 'properties.patch' | 'paragraph.split' | 'block.insert_after' | 'block.delete' | 'drawing.replace'"
             },
             {
               "name": "NativeDocxEditPolicyV1",
@@ -5384,6 +5384,11 @@
               "signature": "export interface NativeDocxStrokeTextUnderlineCommandV1"
             },
             {
+              "name": "NativeDocxStructurePayloadV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxStructurePayloadV1"
+            },
+            {
               "name": "NativeDocxTableBordersV1",
               "kind": "interface",
               "signature": "export interface NativeDocxTableBordersV1"
@@ -6137,7 +6142,7 @@
             {
               "name": "NativeDocxEditOperation",
               "kind": "type",
-              "signature": "export type NativeDocxEditOperation = 'text.replace' | 'properties.patch' | 'block.insert_after' | 'block.delete' | 'drawing.replace'"
+              "signature": "export type NativeDocxEditOperation = 'text.replace' | 'properties.patch' | 'paragraph.split' | 'block.insert_after' | 'block.delete' | 'drawing.replace'"
             },
             {
               "name": "NativeDocxEditPolicyV1",
@@ -6393,6 +6398,11 @@
               "name": "NativeDocxStoryV1",
               "kind": "interface",
               "signature": "export interface NativeDocxStoryV1"
+            },
+            {
+              "name": "NativeDocxStructurePayloadV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxStructurePayloadV1"
             },
             {
               "name": "NativeDocxTableBordersV1",
