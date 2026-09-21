@@ -17,6 +17,7 @@ import {
   decodeNativeDocxDocument,
   type NativeDocxDocumentV1,
   type NativeDocxOfficeMutationEnvelopeV1,
+  type NativeDocxTextMutationPayloadV1,
 } from '@injoffice/docs'
 import {
   DOCX_WASM_NATIVE_MAX_PACKAGE_BYTES,
@@ -42,7 +43,7 @@ if (!multiRunDecoded.ok) throw new Error('DOCX WASM multi-run fixture must be va
 const multiRunDocument = multiRunDecoded.value
 const multiRunParagraph = multiRunDocument.body.blocks.map((block) => block.paragraph).find((paragraph) => paragraph && paragraph.runs.length > 1)!
 
-const envelope = (document = fixtureDocument): NativeDocxOfficeMutationEnvelopeV1 => ({
+const envelope = (document = fixtureDocument): NativeDocxOfficeMutationEnvelopeV1 & { payload: NativeDocxTextMutationPayloadV1 } => ({
   protocol: OFFICE_MUTATION_PROTOCOL,
   version: OFFICE_MUTATION_VERSION,
   format: 'docx',
@@ -313,6 +314,67 @@ describe('DOCX WASM package client', () => {
 
     await expect(client.apply(new Uint8Array([1]), fixtureDocument, paragraphEnvelope)).resolves.toEqual(new Uint8Array([4, 5, 6]))
     expect(worker.requests[1]).toMatchObject({ payload: JSON.stringify(paragraphEnvelope.payload) })
+  })
+
+  it('carries a run-property patch, with its range, to the engine', async () => {
+    const worker = new FakeWorker()
+    const client = createDocxWasmClient({ workerFactory: () => worker })
+    const formatting = { ...envelope(), payload: { mutations: [{
+      target_kind: 'run' as const,
+      target_id: fixtureRun.id,
+      expected_xml_sha256: fixtureRun.anchor.xml_sha256,
+      properties: { bold: true, color: 'ff0000', font_size_half_points: 24 },
+      range: { start_utf16: 0, end_utf16: 3 },
+    }] } }
+    await expect(client.apply(new Uint8Array([1]), fixtureDocument, formatting)).resolves.toEqual(new Uint8Array([4, 5, 6]))
+    // The colour is normalised to the upper-case form the contract reads back.
+    expect(JSON.parse(worker.requests[1].payload as string)).toEqual({ mutations: [{
+      target_kind: 'run',
+      target_id: fixtureRun.id,
+      expected_xml_sha256: fixtureRun.anchor.xml_sha256,
+      properties: { bold: true, color: 'FF0000', font_size_half_points: 24 },
+      range: { start_utf16: 0, end_utf16: 3 },
+    }] })
+  })
+
+  it('formats a paragraph target by its own anchor, multiple runs included', async () => {
+    const worker = new FakeWorker()
+    const client = createDocxWasmClient({ workerFactory: () => worker })
+    const formatting = { ...envelope(multiRunDocument), payload: { mutations: [{
+      target_kind: 'paragraph' as const,
+      target_id: multiRunParagraph.id,
+      expected_xml_sha256: multiRunParagraph.anchor.xml_sha256,
+      properties: { italic: true },
+    }] } }
+    await expect(client.apply(new Uint8Array([1]), multiRunDocument, formatting)).resolves.toEqual(new Uint8Array([4, 5, 6]))
+  })
+
+  it('refuses formatting that the engine would refuse or that mixes shapes', () => {
+    const client = createDocxWasmClient({ workerFactory: () => new FakeWorker() })
+    const format = (properties: unknown, range?: unknown) => ({ ...envelope(), payload: { mutations: [{
+      target_kind: 'run' as const,
+      target_id: fixtureRun.id,
+      expected_xml_sha256: fixtureRun.anchor.xml_sha256,
+      properties,
+      ...(range === undefined ? {} : { range }),
+    }] } } as unknown as NativeDocxOfficeMutationEnvelopeV1)
+    expect(() => client.apply(new Uint8Array([1]), fixtureDocument, format({}))).toThrow(/sets no run property/)
+    expect(() => client.apply(new Uint8Array([1]), fixtureDocument, format({ bold: 'yes' }))).toThrow(/bold must be a boolean/)
+    expect(() => client.apply(new Uint8Array([1]), fixtureDocument, format({ underline: 'squiggly' }))).toThrow(/underline is outside/)
+    expect(() => client.apply(new Uint8Array([1]), fixtureDocument, format({ highlight: 'chartreuse' }))).toThrow(/highlight is outside/)
+    expect(() => client.apply(new Uint8Array([1]), fixtureDocument, format({ color: '#ff0000' }))).toThrow(/six hex digits/)
+    expect(() => client.apply(new Uint8Array([1]), fixtureDocument, format({ font_size_half_points: 1 }))).toThrow(/2\.\.3276/)
+    expect(() => client.apply(new Uint8Array([1]), fixtureDocument, format({ font_family: 'Bad<Font>' }))).toThrow(/bounded font name/)
+    expect(() => client.apply(new Uint8Array([1]), fixtureDocument, format({ bold: true }, { start_utf16: 2, end_utf16: 2 }))).toThrow(/non-empty UTF-16 span/)
+    expect(() => client.apply(new Uint8Array([1]), fixtureDocument, format({ bold: true, weight: 700 }))).toThrow(/unknown key/)
+    const stale = format({ bold: true }) as unknown as { payload: { mutations: Array<{ expected_xml_sha256: string }> } }
+    stale.payload.mutations[0].expected_xml_sha256 = 'sha256:' + '0'.repeat(64)
+    expect(() => client.apply(new Uint8Array([1]), fixtureDocument, stale as unknown as NativeDocxOfficeMutationEnvelopeV1)).toThrow(/does not match an extracted run anchor/)
+    const mixed = { ...envelope(), payload: { mutations: [
+      { target_kind: 'run' as const, target_id: fixtureRun.id, expected_xml_sha256: fixtureRun.anchor.xml_sha256, text: 'Replaced' },
+      { target_kind: 'run' as const, target_id: fixtureRun.id, expected_xml_sha256: fixtureRun.anchor.xml_sha256, properties: { bold: true } },
+    ] } } as unknown as NativeDocxOfficeMutationEnvelopeV1
+    expect(() => client.apply(new Uint8Array([1]), fixtureDocument, mixed)).toThrow(/may not mix text replacements/)
   })
 
   it('refuses paragraph targets with multiple runs and paragraph/run overlap', () => {

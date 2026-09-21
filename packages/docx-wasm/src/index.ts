@@ -30,6 +30,8 @@ import {
   type NativeDocxResolvedLayoutInputV1,
   type NativeDocxDocumentV1,
   type NativeDocxOfficeMutationEnvelopeV1,
+  type NativeDocxRunFormatPayloadV1,
+  type NativeDocxRunPropertyPatchV1,
   type NativeDocxTextMutationPayloadV1,
 } from '@injoffice/docs/native-docx'
 
@@ -164,7 +166,7 @@ class DocxWasmClientImpl implements DocxWasmClient {
   }
 }
 
-function validateEnvelope(document: NativeDocxDocumentV1, value: NativeDocxOfficeMutationEnvelopeV1): NativeDocxTextMutationPayloadV1 {
+function validateEnvelope(document: NativeDocxDocumentV1, value: NativeDocxOfficeMutationEnvelopeV1): NativeDocxTextMutationPayloadV1 | NativeDocxRunFormatPayloadV1 {
   const envelope = plainObject(value, 'DOCX mutation envelope')
   exactKeys(envelope, ['protocol', 'version', 'format', 'mutation_id', 'expected_revision', 'payload'], 'DOCX mutation envelope')
   if (envelope.protocol !== OFFICE_MUTATION_PROTOCOL || envelope.version !== OFFICE_MUTATION_VERSION || envelope.format !== 'docx') {
@@ -184,6 +186,11 @@ function validateEnvelope(document: NativeDocxDocumentV1, value: NativeDocxOffic
   const targets = documentTargets(document)
   const seenTargets = new Set<string>()
   const seenTextNodes = new Set<string>()
+  const formatting = payload.mutations.filter((value) => plainObject(value, 'DOCX mutation').properties !== undefined)
+  if (formatting.length !== 0 && formatting.length !== payload.mutations.length) {
+    throw new TypeError('A DOCX transaction may not mix text replacements with run-property patches.')
+  }
+  if (formatting.length !== 0) return { mutations: payload.mutations.map((value, index) => validateFormatMutation(document, targets, seenTargets, value, index)) }
   const mutations: NativeDocxTextMutationPayloadV1['mutations'] = payload.mutations.map((value, index) => {
     const mutation = plainObject(value, `DOCX mutation ${index}`)
     exactKeys(mutation, ['target_kind', 'target_id', 'expected_xml_sha256', 'text'], `DOCX mutation ${index}`)
@@ -211,6 +218,82 @@ function validateEnvelope(document: NativeDocxDocumentV1, value: NativeDocxOffic
     }
   })
   return { mutations }
+}
+
+const DOCX_UNDERLINE_VALUES = ['none', 'single', 'double', 'words']
+const DOCX_HIGHLIGHT_VALUES = ['none', 'black', 'blue', 'cyan', 'darkBlue', 'darkCyan', 'darkGray', 'darkGreen', 'darkMagenta', 'darkRed', 'darkYellow', 'green', 'lightGray', 'magenta', 'red', 'white', 'yellow']
+
+/**
+ * Run formatting is validated against the extracted contract before it leaves
+ * the browser: the target must be one the extraction issued, its anchor must
+ * be the one it issued, and every property must be inside the subset native
+ * extraction reads back. The engine re-proves all of this and owns the
+ * refusal; this boundary only keeps an obviously invalid request local.
+ */
+function validateFormatMutation(document: NativeDocxDocumentV1, targets: Map<string, DocxTextTarget>, seenTargets: Set<string>, value: unknown, index: number): NativeDocxRunFormatPayloadV1['mutations'][number] {
+  const mutation = plainObject(value, `DOCX mutation ${index}`)
+  allowedKeys(mutation, ['target_kind', 'target_id', 'expected_xml_sha256', 'properties', 'range'], `DOCX mutation ${index}`)
+  const targetKind = mutation.target_kind
+  if ((targetKind !== 'paragraph' && targetKind !== 'run') || typeof mutation.target_id !== 'string' || typeof mutation.expected_xml_sha256 !== 'string') {
+    throw new TypeError(`DOCX mutation ${index} has invalid field types.`)
+  }
+  const targetKey = `${targetKind}\0${mutation.target_id}`
+  const anchorSha256 = targetKind === 'paragraph' ? paragraphAnchors(document).get(mutation.target_id) : targets.get(targetKey)?.anchorSha256
+  if (!anchorSha256 || anchorSha256 !== mutation.expected_xml_sha256) {
+    throw new NativeWasmError('STALE_TARGET', `DOCX mutation ${index} does not match an extracted ${targetKind} anchor.`)
+  }
+  if (seenTargets.has(targetKey)) throw new NativeWasmError('DUPLICATE_TARGET', `DOCX mutation ${index} repeats the same native target.`)
+  seenTargets.add(targetKey)
+  const properties = plainObject(mutation.properties, `DOCX mutation ${index} properties`)
+  allowedKeys(properties, ['bold', 'italic', 'underline', 'font_family', 'font_size_half_points', 'color', 'highlight'], `DOCX mutation ${index} properties`)
+  const patch: NativeDocxRunPropertyPatchV1 = {}
+  for (const name of ['bold', 'italic'] as const) {
+    if (properties[name] === undefined) continue
+    if (typeof properties[name] !== 'boolean') throw new TypeError(`DOCX mutation ${index} ${name} must be a boolean.`)
+    patch[name] = properties[name]
+  }
+  if (properties.underline !== undefined) {
+    if (!DOCX_UNDERLINE_VALUES.includes(properties.underline as string)) throw new TypeError(`DOCX mutation ${index} underline is outside the written subset.`)
+    patch.underline = properties.underline as NativeDocxRunPropertyPatchV1['underline']
+  }
+  if (properties.highlight !== undefined) {
+    if (!DOCX_HIGHLIGHT_VALUES.includes(properties.highlight as string)) throw new TypeError(`DOCX mutation ${index} highlight is outside the written subset.`)
+    patch.highlight = properties.highlight as string
+  }
+  if (properties.font_family !== undefined) {
+    const family = properties.font_family
+    if (typeof family !== 'string' || family.length === 0 || family.length > 64 || /[<>&"'\u0000-\u001f\u007f]/.test(family)) throw new TypeError(`DOCX mutation ${index} font_family is not a bounded font name.`)
+    patch.font_family = family
+  }
+  if (properties.font_size_half_points !== undefined) {
+    const size = properties.font_size_half_points
+    if (!Number.isSafeInteger(size) || (size as number) < 2 || (size as number) > 3276) throw new TypeError(`DOCX mutation ${index} font_size_half_points must be a whole 2..3276 value.`)
+    patch.font_size_half_points = size as number
+  }
+  if (properties.color !== undefined) {
+    if (typeof properties.color !== 'string' || !/^[0-9A-Fa-f]{6}$/.test(properties.color)) throw new TypeError(`DOCX mutation ${index} color must be six hex digits.`)
+    patch.color = properties.color.toUpperCase()
+  }
+  if (Object.keys(patch).length === 0) throw new TypeError(`DOCX mutation ${index} sets no run property.`)
+  if (mutation.range === undefined) return { target_kind: targetKind, target_id: mutation.target_id, expected_xml_sha256: mutation.expected_xml_sha256, properties: patch }
+  const range = plainObject(mutation.range, `DOCX mutation ${index} range`)
+  exactKeys(range, ['start_utf16', 'end_utf16'], `DOCX mutation ${index} range`)
+  const { start_utf16: start, end_utf16: end } = range as { start_utf16: unknown; end_utf16: unknown }
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || (start as number) < 0 || (end as number) <= (start as number) || (end as number) > DOCX_WASM_NATIVE_MAX_TEXT_CODE_UNITS) {
+    throw new TypeError(`DOCX mutation ${index} range must be a non-empty UTF-16 span.`)
+  }
+  return { target_kind: targetKind, target_id: mutation.target_id, expected_xml_sha256: mutation.expected_xml_sha256, properties: patch, range: { start_utf16: start as number, end_utf16: end as number } }
+}
+
+function paragraphAnchors(document: NativeDocxDocumentV1): Map<string, string> {
+  const anchors = new Map<string, string>()
+  for (const story of [document.body, ...document.headers, ...document.footers, ...document.notes, ...document.comment_stories]) {
+    for (const block of story.blocks) {
+      const paragraphs = block.paragraph ? [block.paragraph] : block.table?.rows.flatMap((row) => row.cells.flatMap((cell) => cell.paragraphs)) ?? []
+      for (const paragraph of paragraphs) anchors.set(paragraph.id, paragraph.anchor.xml_sha256)
+    }
+  }
+  return anchors
 }
 
 type DocxTextTarget = { anchorSha256: string; textNodeKey: string }
@@ -274,6 +357,11 @@ function plainObject(value: unknown, name: string): Record<string, unknown> {
     if (!('value' in descriptor)) throw new TypeError(`${name} must not contain accessor properties.`)
   }
   return value as Record<string, unknown>
+}
+
+/** Every key must be one of `wanted`; unlike exactKeys none of them is required. */
+function allowedKeys(value: Record<string, unknown>, wanted: readonly string[], name: string): void {
+  for (const key of Object.getOwnPropertyNames(value)) if (!wanted.includes(key)) throw new TypeError(`${name} carries unknown key ${JSON.stringify(key)}.`)
 }
 
 function exactKeys(value: Record<string, unknown>, wanted: readonly string[], name: string): void {

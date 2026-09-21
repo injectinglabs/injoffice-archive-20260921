@@ -71,3 +71,45 @@ for (const format of FORMATS) {
     assert.ok(Array.isArray(units) && units.length === 1, `a blank ${format} extracts one section/sheet/slide`);
   });
 }
+
+// Run formatting has to work in the tree electron-builder packs, not only in
+// the Go tests: this drives the built DOCX worker end to end, bolding part of
+// one run in a real package and re-extracting the result.
+test('docx: the built worker patches run properties over a selection and re-extracts them', async () => {
+  const files = engineFiles('docx');
+  const worker = startWorker(files);
+  const envelope = { protocol: PROTOCOL, version: 1, format: 'docx' };
+  const init = await worker.send({ ...envelope, id: 'init', op: 'init', assets: { wasmUrl: files.wasm, goRuntimeUrl: files.goRuntime } });
+  assert.equal(init.ok, true, `init: ${JSON.stringify(init.error)}`);
+
+  const source = fs.readFileSync(path.join(__dirname, '../../../go/officecompat/corpus/generated/packages/docx-inline-png-page-paint.docx'));
+  const buffer = source.buffer.slice(source.byteOffset, source.byteOffset + source.byteLength);
+  const extract = await worker.send({ ...envelope, id: 'extract', op: 'extract', bytes: buffer });
+  assert.equal(extract.ok, true, `extract: ${JSON.stringify(extract.error)}`);
+  const contract = JSON.parse(extract.result.contractJson);
+  const paragraph = contract.body.blocks.find(block => block.paragraph?.runs.some(run => run.kind === 'text'))?.paragraph;
+  const run = paragraph.runs.find(candidate => candidate.kind === 'text');
+  const sourceText = paragraph.runs.filter(candidate => candidate.kind === 'text').map(candidate => candidate.text).join('');
+  assert.ok(paragraph.edit_policy.allowed_operations.includes('properties.patch'), `paragraph policy: ${JSON.stringify(paragraph.edit_policy)}`);
+  assert.ok(run.text.length > 4, `fixture run text: ${JSON.stringify(run.text)}`);
+
+  const payload = JSON.stringify({ mutations: [{
+    target_kind: 'run',
+    target_id: run.id,
+    expected_xml_sha256: run.anchor.xml_sha256,
+    properties: { bold: true, color: 'FF0000' },
+    range: { start_utf16: 0, end_utf16: 4 },
+  }] });
+  const applied = await worker.send({ ...envelope, id: 'apply', op: 'apply', original: buffer, payload, expectedRevision: contract.source.package_sha256 });
+  assert.equal(applied.ok, true, `apply: ${JSON.stringify(applied.error)}`);
+
+  const after = await worker.send({ ...envelope, id: 'reextract', op: 'extract', bytes: applied.result.bytes });
+  assert.equal(after.ok, true, `re-extract: ${JSON.stringify(after.error)}`);
+  const reread = JSON.parse(after.result.contractJson).body.blocks.find(block => block.paragraph?.anchor.path === paragraph.anchor.path).paragraph;
+  const formatted = reread.runs.filter(candidate => candidate.kind === 'text');
+  assert.equal(formatted.map(candidate => candidate.text).join(''), sourceText, 'the paragraph text is unchanged');
+  assert.equal(formatted[0].text, run.text.slice(0, 4), 'the run split at the selection boundary');
+  assert.equal(formatted[0].properties.bold, true);
+  assert.equal(formatted[0].properties.color, 'FF0000');
+  assert.equal(formatted[1].properties?.bold, undefined, 'the unselected remainder is untouched');
+});
