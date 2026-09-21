@@ -336,3 +336,31 @@ test('the workspace marks the macOS window chrome only on macOS', async t => {
     } finally { if (renderer) await act(async () => renderer.unmount()); delete global.window; }
   }
 });
+
+// Office states the save state once. The title bar owns it; the status bar keeps messages and zoom.
+test('the save state is spelled once, in the title bar, in Office wording', async () => {
+  const App = await loadApp();
+  global.window = { localStorage: { getItem: () => null, setItem() {} }, document: { title: '' }, addEventListener() {}, removeEventListener() {}, injDesktop: {
+    recent: async () => [], recovery: async () => [], nextExternal: async () => null, setDirty() {}, setBusy() {}, onMenuAction() { return () => {}; }, checkpoint: async () => {},
+    create: async format => ({ id: `id-${format}`, name: `Untitled.${format}`, bytes: new Uint8Array([0x50, 0x4b, 3, 4]), untitled: true }),
+    save: async input => ({ id: input.id, name: 'Report.docx', untitled: false }),
+  } };
+  let renderer;
+  const title = () => renderer.root.findByProps({ className: 'title-save-status' }).children.filter(child => typeof child === 'string').join('');
+  const status = () => renderer.root.findByProps({ className: 'status-message' }).children.filter(child => typeof child === 'string').join('');
+  try {
+    await act(async () => { renderer = create(React.createElement(App)); });
+    await act(async () => renderer.root.findByType('test-start').props.onCreate('docx'));
+    assert.equal(title(), 'Not saved yet');
+    assert.equal(status(), '', 'the status bar does not repeat the save state');
+    const editor = renderer.root.findByType('test-editor');
+    await act(async () => editor.props.onChange(new Uint8Array([0x50, 0x4b, 3, 4, 9])));
+    assert.equal(title(), 'Not saved yet', 'a file that has never been written keeps Office\'s wording');
+    assert.ok(renderer.root.findAllByProps({ className: 'document-tab active' })[0].findAllByType('button')[0].children.join('').includes('•'), 'the tab keeps its dirty dot');
+    await act(async () => renderer.root.findAllByType('button').find(button => button.props['aria-label'] === 'Save').props.onClick());
+    assert.equal(title(), 'Saved', 'Office says "Saved", not "Saved on this device"');
+    assert.match(status(), /^Saved Report\.docx$/, 'the status bar carries the transient message only');
+    await act(async () => editor.props.onChange(new Uint8Array([0x50, 0x4b, 3, 4, 10])));
+    assert.equal(title(), 'Unsaved changes');
+  } finally { if (renderer) await act(async () => renderer.unmount()); delete global.window; }
+});
