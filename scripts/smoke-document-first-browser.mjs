@@ -8,7 +8,7 @@ import { startShowcaseServer } from './showcase-smoke-server.mjs'
 const output = process.env.SHOWCASE_OUTPUT || mkdtempSync(resolve(tmpdir(), 'injoffice-document-first-'))
 mkdirSync(output, { recursive: true })
 let server, chrome, socket, sequence = 0
-const pending = new Map(), errors = []
+const pending = new Map(), errors = [], requestedUrls = []
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms))
 function send(method, params = {}) {
   return new Promise((resolve, reject) => {
@@ -45,11 +45,21 @@ try {
       const task = pending.get(message.id); if (!task) return
       pending.delete(message.id); clearTimeout(task.timer)
       if (message.error) task.reject(new Error(message.error.message)); else task.resolve(message.result)
-    } else if (message.method === 'Runtime.exceptionThrown') errors.push(message.params.exceptionDetails.text)
+    } else if (message.method === 'Network.requestWillBeSent') requestedUrls.push(message.params.request.url)
+    else if (message.method === 'Runtime.exceptionThrown') errors.push(message.params.exceptionDetails.text)
   })
-  await send('Runtime.enable'); await send('Page.enable')
+  await send('Runtime.enable'); await send('Page.enable'); await send('Network.enable')
   await send('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-color-scheme', value: 'light' }] })
   await send('Page.navigate', { url: server.url })
+  await until('document.fonts.size >= 5')
+  const loadedFonts = await evaluate(`Promise.all([
+    '400 16px "Sora"', '400 16px "Instrument Sans"', 'italic 400 16px "Instrument Sans"',
+    '400 16px "IBM Plex Mono"', '500 16px "IBM Plex Mono"',
+  ].map(font => document.fonts.load(font).then(faces => faces.length > 0 && faces.every(face => face.status === 'loaded'))))`)
+  assert.ok(loadedFonts.every(Boolean), 'all five local UI font faces load in the browser')
+  const fontRequests = requestedUrls.filter(url => /\.ttf(?:$|[?#])/.test(url))
+  assert.equal(new Set(fontRequests.filter(url => url.startsWith(server.url + 'fonts/'))).size, 5, 'font files load from the configured site subpath')
+  assert.ok(!requestedUrls.some(url => /^https?:\/\/(?:fonts\.googleapis\.com|fonts\.gstatic\.com)(?:\/|$)/.test(url)), 'the site makes no Google Fonts requests')
   for (const width of [1440, 768, 390, 320]) {
     await send('Emulation.setDeviceMetricsOverride', { width, height: 900, deviceScaleFactor: 1, mobile: width < 760 })
     for (const tool of ['sheets', 'docs', 'slides', 'pdf']) {
