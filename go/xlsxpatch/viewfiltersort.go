@@ -52,16 +52,9 @@ func applyNativeViewTransaction(original []byte, before *NativeWorkbookV1, mutat
 	if err := validateViewMutations(mutations); err != nil {
 		return nil, err
 	}
-	last := map[string]ViewMutation{}
-	for _, mutation := range mutations {
-		last[mutation.SheetID] = mutation
-	}
-	ids := make([]string, 0, len(last))
-	for id := range last {
-		ids = append(ids, id)
-	}
-	return patchExclusiveSheets(original, before, "freeze", ids, func(id string, sheet *NativeWorkbookSheetV1, data []byte) ([]byte, error) {
-		return rewriteWorksheetFreeze(data, sheet, last[id])
+	mutation := mutations[0]
+	return patchExclusiveSheets(original, before, "freeze", []string{mutation.SheetID}, func(_ string, sheet *NativeWorkbookSheetV1, data []byte) ([]byte, error) {
+		return rewriteWorksheetFreeze(data, sheet, mutation)
 	})
 }
 
@@ -70,16 +63,9 @@ func applyNativeFilterTransaction(original []byte, before *NativeWorkbookV1, mut
 	if err != nil {
 		return nil, err
 	}
-	last := map[string]FilterMutation{}
-	for _, mutation := range normalized {
-		last[mutation.SheetID] = mutation
-	}
-	ids := make([]string, 0, len(last))
-	for id := range last {
-		ids = append(ids, id)
-	}
-	return patchExclusiveSheets(original, before, "filter", ids, func(id string, sheet *NativeWorkbookSheetV1, data []byte) ([]byte, error) {
-		return rewriteWorksheetFilter(data, sheet, last[id])
+	mutation := normalized[0]
+	return patchExclusiveSheets(original, before, "filter", []string{mutation.SheetID}, func(_ string, sheet *NativeWorkbookSheetV1, data []byte) ([]byte, error) {
+		return rewriteWorksheetFilter(data, sheet, mutation)
 	})
 }
 
@@ -88,27 +74,13 @@ func applyNativeSortTransaction(original []byte, before *NativeWorkbookV1, mutat
 	if err != nil {
 		return nil, err
 	}
-	bySheet := map[string][]SortMutation{}
-	for _, mutation := range normalized {
-		bySheet[mutation.SheetID] = append(bySheet[mutation.SheetID], mutation)
-	}
-	ids := make([]string, 0, len(bySheet))
-	for id := range bySheet {
-		ids = append(ids, id)
-	}
-	return patchExclusiveSheets(original, before, "sort", ids, func(id string, sheet *NativeWorkbookSheetV1, data []byte) ([]byte, error) {
-		updated := data
-		for _, mutation := range bySheet[id] {
-			next, err := rewriteWorksheetSort(updated, sheet, mutation)
-			if err != nil {
-				return nil, err
-			}
-			updated = next
-		}
-		return updated, nil
+	mutation := normalized[0]
+	return patchExclusiveSheets(original, before, "sort", []string{mutation.SheetID}, func(_ string, sheet *NativeWorkbookSheetV1, data []byte) ([]byte, error) {
+		return rewriteWorksheetSort(data, sheet, mutation)
 	})
 }
 
+//go:noinline
 func patchExclusiveSheets(original []byte, before *NativeWorkbookV1, label string, ids []string, rewrite func(string, *NativeWorkbookSheetV1, []byte) ([]byte, error)) (*NativeWorkbookMutationResultV1, error) {
 	pkg, err := openNativeWorkbookPackage(original)
 	if err != nil {
@@ -225,6 +197,7 @@ func validateSortMutations(mutations []SortMutation) ([]SortMutation, error) {
 	return mutations, nil
 }
 
+//go:noinline
 func rewriteWorksheetFreeze(data []byte, sheet *NativeWorkbookSheetV1, mutation ViewMutation) ([]byte, error) {
 	if sheet.SheetView != nil && sheet.SheetView.PaneState == "split" {
 		return nil, fmt.Errorf("existing sheet view is not a qualified freeze target")
@@ -239,9 +212,6 @@ func rewriteWorksheetFreeze(data []byte, sheet *NativeWorkbookSheetV1, mutation 
 	views, root, err := directChildElements(data, "worksheet", "sheetViews")
 	if err != nil {
 		return nil, err
-	}
-	if len(views) > 1 {
-		return nil, fmt.Errorf("duplicate sheetViews")
 	}
 	if mutation.Rows == 0 && mutation.Columns == 0 && len(views) == 0 {
 		return append([]byte(nil), data...), nil
@@ -268,17 +238,14 @@ func buildSheetViewsXML(rootQName string, rows, columns int) []byte {
 		pane += ` ySplit="` + strconv.Itoa(rows) + `"`
 	}
 	pane += ` topLeftCell="` + topLeft + `" activePane="` + active + `" state="frozen"/>`
-	sel := `<` + prefixedLocal(rootQName, "selection") + ` pane="` + active + `" activeCell="` + topLeft + `" sqref="` + topLeft + `"/>`
-	return []byte(`<` + views + `><` + view + ` workbookViewId="0">` + pane + sel + `</` + view + `></` + views + `>`)
+	return []byte(`<` + views + `><` + view + ` workbookViewId="0">` + pane + `</` + view + `></` + views + `>`)
 }
 
+//go:noinline
 func rewriteWorksheetFilter(data []byte, sheet *NativeWorkbookSheetV1, mutation FilterMutation) ([]byte, error) {
 	existing, root, err := directChildElements(data, "worksheet", "autoFilter")
 	if err != nil {
 		return nil, err
-	}
-	if len(existing) > 1 {
-		return nil, fmt.Errorf("duplicate autoFilter")
 	}
 	hide, unhide := map[int]bool{}, map[int]bool{}
 	var body []byte
@@ -370,6 +337,7 @@ func buildAutoFilterXML(rootQName string, mutation FilterMutation, rangeColumn i
 	return []byte(body.String()), nil
 }
 
+//go:noinline
 func applyRowHidden(data []byte, hide, unhide map[int]bool) ([]byte, error) {
 	if len(hide) == 0 && len(unhide) == 0 {
 		return data, nil
@@ -422,6 +390,7 @@ func rowStartIsHidden(tag []byte) bool {
 	return err == nil && hidden
 }
 
+//go:noinline
 func rewriteWorksheetSort(data []byte, sheet *NativeWorkbookSheetV1, mutation SortMutation) ([]byte, error) {
 	first := mutation.Range.Row
 	if mutation.Header {
@@ -451,11 +420,10 @@ func rewriteWorksheetSort(data []byte, sheet *NativeWorkbookSheetV1, mutation So
 		return nil, err
 	}
 	type sortKey struct {
-		empty   bool
-		rank    int
-		number  float64
-		text    string
-		boolean bool
+		empty  bool
+		rank   int
+		number float64
+		text   string
 	}
 	keys := make([]sortKey, len(targetRows))
 	for i, row := range targetRows {
@@ -465,17 +433,9 @@ func rewriteWorksheetSort(data []byte, sheet *NativeWorkbookSheetV1, mutation So
 				continue
 			}
 			switch cell.Value.Kind {
-			case "date", "error":
-				return nil, fmt.Errorf("sort refuses date or error sort keys")
-			case "boolean":
-				key = sortKey{rank: 2, boolean: cell.Value.Lexical != nil && (*cell.Value.Lexical == "1" || strings.EqualFold(*cell.Value.Lexical, "true"))}
 			case "string":
-				text := ""
-				if cell.Value.Text != nil {
-					text = *cell.Value.Text
-				}
-				if text != "" {
-					key = sortKey{rank: 1, text: strings.ToLower(text)}
+				if cell.Value.Text != nil && *cell.Value.Text != "" {
+					key = sortKey{rank: 1, text: strings.ToLower(*cell.Value.Text)}
 				}
 			case "number":
 				if cell.Value.Lexical == nil {
@@ -507,18 +467,14 @@ func rewriteWorksheetSort(data []byte, sheet *NativeWorkbookSheetV1, mutation So
 			}
 			return left.rank < right.rank
 		}
-		cmp := left.number < right.number || left.text < right.text || !left.boolean && right.boolean
-		if left.rank == 0 {
-			cmp = left.number < right.number
-		} else if left.rank == 1 {
-			cmp = left.text < right.text
-		} else {
-			cmp = !left.boolean && right.boolean
+		lt := left.number < right.number
+		if left.rank == 1 {
+			lt = left.text < right.text
 		}
 		if mutation.Descending {
-			return !cmp && (left.number != right.number || left.text != right.text || left.boolean != right.boolean)
+			return !lt && (left.number != right.number || left.text != right.text)
 		}
-		return cmp
+		return lt
 	})
 	edits := make([]byteEdit, 0, len(targetRows))
 	for destIndex, destRow := range targetRows {
@@ -531,16 +487,13 @@ func rewriteWorksheetSort(data []byte, sheet *NativeWorkbookSheetV1, mutation So
 		if !destOK {
 			return nil, fmt.Errorf("sort refuses sparse rows")
 		}
-		type piece struct {
-			column int
-			xml    []byte
-		}
-		combined := make([]piece, 0, len(dest.cells)+len(source.cells))
 		for _, cell := range dest.cells {
 			if cell.column < mutation.Range.Column || cell.column > mutation.Range.EndColumn {
-				combined = append(combined, piece{cell.column, append([]byte(nil), data[cell.start:cell.end]...)})
+				return nil, fmt.Errorf("sort refuses partial records")
 			}
 		}
+		var body bytes.Buffer
+		body.Write(data[dest.start:dest.startTagEnd])
 		if sourceOK {
 			for _, cell := range source.cells {
 				if cell.column < mutation.Range.Column || cell.column > mutation.Range.EndColumn {
@@ -556,14 +509,8 @@ func rewriteWorksheetSort(data []byte, sheet *NativeWorkbookSheetV1, mutation So
 				if err != nil {
 					return nil, err
 				}
-				combined = append(combined, piece{cell.column, append(rewritten, updated[closeAt+1:]...)})
+				body.Write(append(rewritten, updated[closeAt+1:]...))
 			}
-		}
-		sort.Slice(combined, func(i, j int) bool { return combined[i].column < combined[j].column })
-		var body bytes.Buffer
-		body.Write(data[dest.start:dest.startTagEnd])
-		for _, item := range combined {
-			body.Write(item.xml)
 		}
 		if dest.endStart > dest.startTagEnd {
 			body.Write(data[dest.endStart:dest.end])
@@ -595,12 +542,10 @@ func applyByteEdits(data []byte, edits []byteEdit) ([]byte, error) {
 	for _, item := range edits {
 		updated = append(updated[:item.start], append(item.data, updated[item.end:]...)...)
 	}
-	if err := validateWorksheetXML(updated); err != nil {
-		return nil, err
-	}
 	return updated, nil
 }
 
+//go:noinline
 func spliceWorksheetChild(data []byte, root xmlSpan, existing []directChildElement, body []byte, predecessors []string) ([]byte, error) {
 	start, end := 0, 0
 	if len(existing) == 1 {

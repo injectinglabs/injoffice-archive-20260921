@@ -4506,7 +4506,7 @@
             {
               "name": "NativeDocxEditOperation",
               "kind": "type",
-              "signature": "export type NativeDocxEditOperation = 'text.replace' | 'properties.patch' | 'block.insert_after' | 'block.delete' | 'drawing.replace'"
+              "signature": "export type NativeDocxEditOperation = 'text.replace' | 'properties.patch' | 'hyperlink.set' | 'page_break.insert' | 'paragraph.split' | 'section.page.patch' | 'block.insert_after' | 'block.delete' | 'drawing.replace'"
             },
             {
               "name": "NativeDocxEditPolicyV1",
@@ -4677,6 +4677,11 @@
               "name": "NativeDocxHostFontsV1",
               "kind": "interface",
               "signature": "export interface NativeDocxHostFontsV1"
+            },
+            {
+              "name": "NativeDocxHyperlinkPayloadV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxHyperlinkPayloadV1"
             },
             {
               "name": "NativeDocxImageTransformV1",
@@ -5294,6 +5299,16 @@
               "signature": "export interface NativeDocxScriptTransformV1"
             },
             {
+              "name": "NativeDocxSectionPagePatchV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxSectionPagePatchV1"
+            },
+            {
+              "name": "NativeDocxSectionPagePayloadV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxSectionPagePayloadV1"
+            },
+            {
               "name": "nativeDocxSectionsShareExactPageV1",
               "kind": "function",
               "signature": "export declare function nativeDocxSectionsShareExactPageV1(previous: NativeDocxSectionV1, next: NativeDocxSectionV1, options?: { allow_different_columns?: boolean; allow_different_body_sides?: boolean; allow_different_body_vertical?: boolean; }): boolean"
@@ -5382,6 +5397,11 @@
               "name": "NativeDocxStrokeTextUnderlineCommandV1",
               "kind": "type",
               "signature": "export interface NativeDocxStrokeTextUnderlineCommandV1"
+            },
+            {
+              "name": "NativeDocxStructurePayloadV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxStructurePayloadV1"
             },
             {
               "name": "NativeDocxTableBordersV1",
@@ -6137,7 +6157,7 @@
             {
               "name": "NativeDocxEditOperation",
               "kind": "type",
-              "signature": "export type NativeDocxEditOperation = 'text.replace' | 'properties.patch' | 'block.insert_after' | 'block.delete' | 'drawing.replace'"
+              "signature": "export type NativeDocxEditOperation = 'text.replace' | 'properties.patch' | 'hyperlink.set' | 'page_break.insert' | 'paragraph.split' | 'section.page.patch' | 'block.insert_after' | 'block.delete' | 'drawing.replace'"
             },
             {
               "name": "NativeDocxEditPolicyV1",
@@ -6158,6 +6178,11 @@
               "name": "NativeDocxHeaderFooterReferenceV1",
               "kind": "interface",
               "signature": "export interface NativeDocxHeaderFooterReferenceV1"
+            },
+            {
+              "name": "NativeDocxHyperlinkPayloadV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxHyperlinkPayloadV1"
             },
             {
               "name": "NativeDocxIssueCode",
@@ -6365,6 +6390,16 @@
               "signature": "export interface NativeDocxRunV1"
             },
             {
+              "name": "NativeDocxSectionPagePatchV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxSectionPagePatchV1"
+            },
+            {
+              "name": "NativeDocxSectionPagePayloadV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxSectionPagePayloadV1"
+            },
+            {
               "name": "NativeDocxSectionV1",
               "kind": "interface",
               "signature": "export interface NativeDocxSectionV1"
@@ -6393,6 +6428,11 @@
               "name": "NativeDocxStoryV1",
               "kind": "interface",
               "signature": "export interface NativeDocxStoryV1"
+            },
+            {
+              "name": "NativeDocxStructurePayloadV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxStructurePayloadV1"
             },
             {
               "name": "NativeDocxTableBordersV1",
@@ -12828,7 +12868,17 @@
             {
               "name": "PptxNativeMutationV1",
               "kind": "type",
-              "signature": "export type PptxNativeMutationV1 = PptxNativeTextReplaceMutationV1 | PptxNativeAutoShapeUpdateMutationV1"
+              "signature": "export type PptxNativeMutationV1 = PptxNativeTextReplaceMutationV1 | PptxNativeAutoShapeUpdateMutationV1 | PptxNativeSlideInsertMutationV1 | PptxNativeSlideBackgroundMutationV1"
+            },
+            {
+              "name": "PptxNativeSlideBackgroundMutationV1",
+              "kind": "interface",
+              "signature": "export interface PptxNativeSlideBackgroundMutationV1"
+            },
+            {
+              "name": "PptxNativeSlideInsertMutationV1",
+              "kind": "interface",
+              "signature": "export interface PptxNativeSlideInsertMutationV1"
             },
             {
               "name": "PptxNativeTextReplaceMutationV1",
@@ -18080,9 +18130,9 @@
               "signature": "export type XlsxNativeCellMutationV1 = Extract<SupportedWorkbookMutation,"
             },
             {
-              "name": "XlsxNativeChartMutationV1",
+              "name": "XlsxNativeFilterMutationV1",
               "kind": "type",
-              "signature": "export type XlsxNativeChartMutationV1 = Extract<SupportedWorkbookMutation,"
+              "signature": "export type XlsxNativeFilterMutationV1 = Extract<SupportedWorkbookMutation,"
             },
             {
               "name": "XlsxNativeLayoutMutationV1",
@@ -18095,9 +18145,19 @@
               "signature": "export interface XlsxNativeMutationTransactionV1"
             },
             {
+              "name": "XlsxNativeSortMutationV1",
+              "kind": "type",
+              "signature": "export type XlsxNativeSortMutationV1 = Extract<SupportedWorkbookMutation,"
+            },
+            {
               "name": "XlsxNativeStyleMutationV1",
               "kind": "type",
               "signature": "export type XlsxNativeStyleMutationV1 = Extract<SupportedWorkbookMutation,"
+            },
+            {
+              "name": "XlsxNativeViewMutationV1",
+              "kind": "type",
+              "signature": "export type XlsxNativeViewMutationV1 = Extract<SupportedWorkbookMutation,"
             },
             {
               "name": "XlsxRichSourcePreviewClient",

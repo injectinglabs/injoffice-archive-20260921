@@ -233,20 +233,20 @@ func validateNativeWorkbookMutationTransaction(transaction NativeWorkbookMutatio
 		return validateMergeMutations(transaction.Merges)
 	}
 	if len(transaction.View) > 0 {
-		if total != len(transaction.View) {
+		if total != 1 {
 			return fmt.Errorf("xlsxpatch: freeze batches cannot mix with other operations")
 		}
 		return validateViewMutations(transaction.View)
 	}
 	if len(transaction.Filters) > 0 {
-		if total != len(transaction.Filters) {
+		if total != 1 {
 			return fmt.Errorf("xlsxpatch: filter batches cannot mix with other operations")
 		}
 		_, err := validateFilterMutations(transaction.Filters)
 		return err
 	}
 	if len(transaction.Sorts) > 0 {
-		if total != len(transaction.Sorts) {
+		if total != 1 {
 			return fmt.Errorf("xlsxpatch: sort batches cannot mix with other operations")
 		}
 		_, err := validateSortMutations(transaction.Sorts)

@@ -48,13 +48,3 @@ func parseCanonicalA1Range(ref string) *struct{ row, column, endRow, endColumn i
 	}
 	return &struct{ row, column, endRow, endColumn int }{row, column, endRow, endColumn}
 }
-
-func nativeAutoFilterIssues(filter *NativeWorkbookAutoFilterV1, path string) []nativeSheetViewIssue {
-	if filter == nil {
-		return nil
-	}
-	if parseCanonicalA1Range(filter.Ref) == nil {
-		return []nativeSheetViewIssue{{code: "INVALID_VALUE", path: path + "/auto_filter/ref", message: "AutoFilter ref must be canonical A1"}}
-	}
-	return nil
-}

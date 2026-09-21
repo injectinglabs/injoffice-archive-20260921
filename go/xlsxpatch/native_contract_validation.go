@@ -117,9 +117,6 @@ func validateNativeWorkbookDeep(workbook *NativeWorkbookV1, issues *[]NativeWork
 		for _, issue := range nativeSheetViewIssues(sheet.SheetView, path) {
 			state.issue(issue.code, issue.path, issue.message)
 		}
-		for _, issue := range nativeAutoFilterIssues(sheet.AutoFilter, path) {
-			state.issue(issue.code, issue.path, issue.message)
-		}
 		totalRows += len(sheet.Rows)
 		totalColumns += len(sheet.Columns)
 		totalCells += len(sheet.Cells)
