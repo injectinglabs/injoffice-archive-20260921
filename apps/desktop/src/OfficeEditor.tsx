@@ -8,9 +8,10 @@ import { replaceParagraphLines, insertDocumentImage, deleteDocumentImage, replac
 import {canFormatParagraphRange, canFormatRun, paragraphStyleName, runAppearance} from './document-style'
 import {paragraphTextOffset, type DocumentTextRange} from './document-range'
 import {createHiddenApplyScheduler} from './hidden-apply'
+import {engineErrorMessage} from './engine-result'
 import HyperlinkControl from './HyperlinkControl'
-import {type PagePatch} from './PageLayoutControl'
 import {DocumentPageSetup, DocumentParagraphLayout} from './document-layout'
+import type {PagePatch} from './document-layout'
 import InsertTableControl from './InsertTableControl'
 import ParagraphToolbar, { type ParagraphPatch } from './ParagraphToolbar'
 import FormattingToolbar, { type FormattingPatch } from './FormattingToolbar'
@@ -75,7 +76,7 @@ export const IDLE_COMMIT_MS = 1500
 /** How long a caret-side notice (an edit the engine cannot make here) stays on screen. */
 const NOTICE_MS = 2000
 function operationId() { return `desktop-${crypto.randomUUID()}` }
-function errorMessage(error: unknown) { return error instanceof Error ? error.message : String(error) }
+function errorMessage(error: unknown) { return engineErrorMessage(error) }
 function captureDraftCaret(text: string) {
   const fallback = paragraphTextOffset([text.length], 0, text.length) ?? 0
   const selection = typeof window === 'undefined' ? undefined : window.getSelection?.()
@@ -517,7 +518,7 @@ export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDr
   const canExportPdf = !!snapshot && typeof window !== 'undefined' && !!window.injDesktop?.exportDocxPdf
   const canPickAsset = typeof window !== 'undefined' && !!window.injDesktop?.pickAsset
   const hiddenRun = !!selection && !!snapshot && selection.paragraph.runs.some(run => runAppearance(snapshot.preview.document, selection.paragraph, run).hidden)
-  const paragraphToolbar = (section: 'styles' | 'list' | 'layout') => snapshot && <ParagraphToolbar section={section} properties={selection?.paragraph.properties} styles={snapshot.preview.document.paragraph_styles ?? []} numbering={snapshot.preview.document.numbering_definitions} disabled={blocked || !selection?.paragraph.edit_policy.allowed_operations.includes('properties.patch')} onChange={patch => void changeParagraphFormatting(patch)} />
+  const paragraphToolbar = (section: 'styles' | 'list') => snapshot && <ParagraphToolbar section={section} properties={selection?.paragraph.properties} styles={snapshot.preview.document.paragraph_styles ?? []} numbering={snapshot.preview.document.numbering_definitions} disabled={blocked || !selection?.paragraph.edit_policy.allowed_operations.includes('properties.patch')} onChange={patch => void changeParagraphFormatting(patch)} />
   const tableOps = selectedTable ? (['block.insert_after', 'block.delete'] as const).filter(operation => selectedTable.edit_policy.allowed_operations.includes(operation)) : []
   const tableGridOps = selectedTable ? (['table.row.insert_after', 'table.row.delete', 'table.column.insert_after', 'table.column.delete'] as const).filter(operation => selectedTable.edit_policy.allowed_operations.includes(operation)) : []
   const gridIcons = { 'table.row.insert_after': 'rowInsert', 'table.row.delete': 'rowDelete', 'table.column.insert_after': 'columnInsert', 'table.column.delete': 'columnDelete' } as const
