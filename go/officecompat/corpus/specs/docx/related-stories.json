@@ -39,7 +39,8 @@
                   "text.replace",
                   "properties.patch",
                   "block.insert_after",
-                  "hyperlink.set"
+                  "hyperlink.set",
+                  "page_break.insert"
                 ],
                 "mode": "read-write"
               },

@@ -29,6 +29,7 @@ export type NativeDocxEditOperation =
   | 'text.replace'
   | 'properties.patch'
   | 'hyperlink.set'
+  | 'page_break.insert'
   | 'paragraph.split'
   | 'block.insert_after'
   | 'block.delete'
@@ -497,8 +498,8 @@ const NOTE_SENTINEL_ID = /^(?:0|-?[1-9][0-9]{0,18})$/
 const PART_SEGMENT = /^(?:[A-Za-z0-9._~!$&'()*+,;=@-]|%[0-9A-F]{2})+$/
 const SHA256 = /^sha256:[0-9a-f]{64}$/
 const COLOR = /^(?:auto|[0-9A-F]{6})$/
-const operations = ['text.replace', 'properties.patch', 'hyperlink.set', 'paragraph.split', 'block.insert_after', 'block.delete', 'drawing.replace'] as const
-const paragraphOperations: readonly NativeDocxEditOperation[] = ['text.replace', 'properties.patch', 'hyperlink.set', 'paragraph.split', 'block.insert_after', 'block.delete']
+const operations = ['page_break.insert', 'text.replace', 'properties.patch', 'hyperlink.set', 'paragraph.split', 'block.insert_after', 'block.delete', 'drawing.replace'] as const
+const paragraphOperations: readonly NativeDocxEditOperation[] = ['page_break.insert', 'text.replace', 'properties.patch', 'hyperlink.set', 'paragraph.split', 'block.insert_after', 'block.delete']
 const tableOperations: readonly NativeDocxEditOperation[] = ['properties.patch', 'block.insert_after', 'block.delete']
 const drawingOperations: readonly NativeDocxEditOperation[] = ['drawing.replace']
 

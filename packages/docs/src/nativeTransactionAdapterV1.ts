@@ -159,7 +159,7 @@ export interface NativeDocxOfficeMutationEnvelopeV1 {
   mutation_id: string
   expected_revision: string
   /** One transaction carries exact text replacements or run-property patches, never both. */
-  payload: NativeDocxTextMutationPayloadV1 | NativeDocxRunFormatPayloadV1 | NativeDocxStructurePayloadV1 | NativeDocxHyperlinkPayloadV1
+  payload: { mutations: Array<{ target_kind: 'paragraph'; target_id: string; expected_xml_sha256: string; operation: 'block.insert_after' | 'page_break.insert'; text?: string; image?: {data_base64: string; content_type: string; width_emu: number; height_emu: number; alt_text: string}; split?: {run_id: string; offset_utf16: number} }> } | NativeDocxTextMutationPayloadV1 | NativeDocxRunFormatPayloadV1 | NativeDocxStructurePayloadV1 | NativeDocxHyperlinkPayloadV1
 }
 
 export type NativeDocxTransactionAdapterIssueCode =

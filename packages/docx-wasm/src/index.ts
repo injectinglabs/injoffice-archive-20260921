@@ -1,3 +1,4 @@
+import { validateInsert, type DocxInsertPayload } from './insert.js'
 import {decodeNativeDocxTextboxGeometryV1,type NativeDocxTextboxGeometryEvidenceV1} from '@injoffice/docs/native-docx'
 import {
   NativeWasmError,
@@ -184,6 +185,7 @@ function validateEnvelope(document: NativeDocxDocumentV1, value: NativeDocxOffic
   if (!Array.isArray(payload.mutations) || payload.mutations.length < 1 || payload.mutations.length > DOCX_WASM_NATIVE_MAX_MUTATIONS) {
     throw new RangeError(`DOCX mutation count must be 1..${DOCX_WASM_NATIVE_MAX_MUTATIONS}.`)
   }
+  if (payload.mutations.some(value => { const m=plainObject(value, 'DOCX mutation'); return m.operation==='page_break.insert'||m.image!==undefined })) return validateInsert(document, payload.mutations)
   if (payload.mutations.some(value => plainObject(value, 'DOCX mutation').operation !== undefined)) {
     if (payload.mutations.length !== 1) throw new TypeError('Structural edits require one mutation.')
     const mutation = plainObject(payload.mutations[0], 'DOCX structural mutation')
