@@ -40,6 +40,8 @@ test('arrange panel toggles objects and disables align until two are selected', 
       onArrange: action => arranged.push(action),
     }));
   });
+  assert.equal(view.root.findAllByType('section')[0].props['aria-label'], 'Arrange objects', 'a labelled pane group, not a disclosure');
+  assert.equal(view.root.findAllByType('details').length, 0);
   assert.equal(view.root.findAllByType('button').find(button => button.props.children === 'Align left').props.disabled, true);
   await act(async () => view.root.findAllByType('input')[0].props.onChange());
   assert.equal(toggled.length, 1);
