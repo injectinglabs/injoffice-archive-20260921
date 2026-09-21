@@ -1,4 +1,4 @@
-import { Children, createContext, useContext, useId, useState, type ButtonHTMLAttributes, type KeyboardEvent, type ReactNode, type Ref } from 'react'
+import { Children, createContext, useContext, useId, useLayoutEffect, useRef, useState, type ButtonHTMLAttributes, type KeyboardEvent, type ReactNode, type Ref } from 'react'
 import RibbonIcon, { type RibbonIconName } from './RibbonIcons'
 import { shortcutKeys, shortcutTooltip, type ShortcutId } from './shortcuts'
 // ribbon.css is imported by each editor next to its own stylesheet so that
@@ -32,6 +32,28 @@ export function withWorkspaceFileGroups(tabs: RibbonTabSpec[], workspace: Worksp
   return tabs.includes(file) ? tabs.map(tab => tab === file ? merged : tab) : [merged, ...tabs]
 }
 
+/** How the active panel is laid out at the current width. `visible` is -1 while every group fits. */
+export interface RibbonPanelLayout { compact: boolean; visible: number }
+/** Width reserved at the right edge for the overflow chevron. */
+export const RIBBON_OVERFLOW_WIDTH = 44
+
+/**
+ * How many leading groups fit in `available` px once the overflow chevron has its
+ * own room. At least one group stays on the ribbon, so the panel is never only a
+ * chevron; the rest move into the overflow popover.
+ */
+export function ribbonGroupsThatFit(widths: number[], available: number, overflow = RIBBON_OVERFLOW_WIDTH): number {
+  const total = widths.reduce((sum, width) => sum + width, 0)
+  if (total <= available) return widths.length
+  let used = 0, fit = 0
+  for (const width of widths) {
+    if (used + width > available - overflow) break
+    used += width
+    fit++
+  }
+  return Math.max(1, fit)
+}
+
 export interface RibbonProps {
   /** Accessible name of the ribbon, e.g. "Document tools". */
   label: string
@@ -43,14 +65,17 @@ export interface RibbonProps {
   quickAccess?: ReactNode
   /** Content shown at the end of the tab strip. */
   trailing?: ReactNode
+  /** Test hook: use this panel layout instead of measuring the panel. */
+  panelLayout?: RibbonPanelLayout
 }
 
 /**
  * Microsoft-Office-style ribbon: a tab strip with roving-tabindex keyboard
  * navigation, one panel per tab, and labelled `role="group"` command groups.
- * Panels scroll horizontally at narrow widths so groups keep their labels.
+ * At narrow widths a panel collapses to icons and then moves its trailing groups
+ * behind an overflow chevron, so it never overflows the window unannounced.
  */
-export default function Ribbon({ label, tabs, active, onChange, quickAccess, trailing }: RibbonProps) {
+export default function Ribbon({ label, tabs, active, onChange, quickAccess, trailing, panelLayout }: RibbonProps) {
   const id = useId()
   const visible = visibleRibbonTabs(withWorkspaceFileGroups(tabs, useContext(WorkspaceFileGroupsContext)))
   const current = visible.find(tab => tab.id === active) ?? visible[0]
@@ -63,6 +88,53 @@ export default function Ribbon({ label, tabs, active, onChange, quickAccess, tra
     onChange(visible[index].id)
     ;(event.currentTarget.parentElement?.children[index] as HTMLButtonElement | undefined)?.focus()
   }
+  // Narrow windows collapse the panel the way Office does: group labels and button
+  // text go first, then whole groups move behind an overflow chevron. Widths are
+  // measured once per mode and reused, so a resize never thrashes the layout.
+  const panel = useRef<HTMLDivElement>(null)
+  const fullWidths = useRef<number[]>([])
+  const compactWidths = useRef<number[]>([])
+  const [measured, setMeasured] = useState<RibbonPanelLayout>({ compact: false, visible: -1 })
+  const [overflowOpen, setOverflowOpen] = useState(false)
+  const layout = panelLayout ?? measured
+  const signature = current ? `${current.id}:${current.groups.map(group => group.id).join(',')}` : ''
+  useLayoutEffect(() => {
+    fullWidths.current = []
+    compactWidths.current = []
+    setMeasured({ compact: false, visible: -1 })
+    setOverflowOpen(false)
+  }, [signature])
+  useLayoutEffect(() => {
+    const node = panel.current
+    if (panelLayout || !node || typeof ResizeObserver !== 'function') return
+    const apply = () => {
+      const groups = Array.from(node.children).filter(child => child.classList.contains('ribbon-group')) as HTMLElement[]
+      if (measured.visible === -1 && groups.length) {
+        const widths = groups.map(group => Math.ceil(group.getBoundingClientRect().width) + 4)
+        if (measured.compact) compactWidths.current = widths; else fullWidths.current = widths
+      }
+      // A panel in a hidden editor has no layout; keep the last good decision instead of measuring zeroes.
+      if (!node.clientWidth) return
+      const style = node.ownerDocument.defaultView?.getComputedStyle(node)
+      const available = node.clientWidth - (parseFloat(style?.paddingLeft ?? '0') + parseFloat(style?.paddingRight ?? '0'))
+      const total = (widths: number[]) => widths.reduce((sum, width) => sum + width, 0)
+      let next: RibbonPanelLayout
+      if (!fullWidths.current.length) next = { compact: false, visible: -1 }
+      else if (total(fullWidths.current) <= available) next = { compact: false, visible: -1 }
+      else if (!compactWidths.current.length) next = { compact: true, visible: -1 }
+      else if (total(compactWidths.current) <= available) next = { compact: true, visible: -1 }
+      else next = { compact: true, visible: ribbonGroupsThatFit(compactWidths.current, available) }
+      setMeasured(previous => previous.compact === next.compact && previous.visible === next.visible ? previous : next)
+    }
+    apply()
+    const observer = new ResizeObserver(apply)
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [measured, signature, panelLayout])
+  const renderGroup = (group: RibbonGroupSpec) => <div key={group.id} className="ribbon-group" role="group" aria-label={group.label}>
+    <div className="ribbon-group-body">{group.children}</div>
+    <span className="ribbon-group-label" aria-hidden="true">{group.label}</span>
+  </div>
   return <div className="ribbon" aria-label={label}>
     <div className="ribbon-strip">
       {quickAccess && <div className="ribbon-quick-access" role="toolbar" aria-label="Quick access">{quickAccess}</div>}
@@ -71,12 +143,20 @@ export default function Ribbon({ label, tabs, active, onChange, quickAccess, tra
       </div>
       {trailing && <div className="ribbon-trailing">{trailing}</div>}
     </div>
-    {visible.map(tab => <div key={tab.id} className="ribbon-panel" role="tabpanel" id={panelId(tab)} aria-labelledby={tabId(tab)} hidden={current !== tab}>
-      {tab.groups.map(group => <div key={group.id} className="ribbon-group" role="group" aria-label={group.label}>
-        <div className="ribbon-group-body">{group.children}</div>
-        <span className="ribbon-group-label" aria-hidden="true">{group.label}</span>
-      </div>)}
-    </div>)}
+    {visible.map(tab => {
+      const active = current === tab
+      const shown = active && layout.visible >= 0 ? tab.groups.slice(0, layout.visible) : tab.groups
+      const hidden = active && layout.visible >= 0 ? tab.groups.slice(layout.visible) : []
+      return <div key={tab.id} ref={active ? panel : undefined} className={['ribbon-panel', active && layout.compact ? 'ribbon-panel-compact' : ''].join(' ').trim()} role="tabpanel" id={panelId(tab)} aria-labelledby={tabId(tab)} hidden={!active}>
+        {shown.map(renderGroup)}
+        {hidden.length > 0 && <div className="ribbon-overflow">
+          <button type="button" className="ribbon-button ribbon-overflow-button" aria-label={`More commands (${hidden.length} groups)`} title="More commands" aria-haspopup="true" aria-expanded={overflowOpen} onClick={() => setOverflowOpen(open => !open)}>
+            <RibbonIcon name="chevronDown" />
+          </button>
+          {overflowOpen && <div className="ribbon-overflow-popover">{hidden.map(renderGroup)}</div>}
+        </div>}
+      </div>
+    })}
   </div>
 }
 
