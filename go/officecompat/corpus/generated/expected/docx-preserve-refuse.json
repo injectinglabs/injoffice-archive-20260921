@@ -307,21 +307,6 @@
       },
       {
         "anchor": {
-          "end_byte": 694,
-          "part_name": "word/document.xml",
-          "path": "/w:document[1]/w:body[1]/w:p[1]/w:r[2]/w:rPr[1]",
-          "start_byte": 668,
-          "xml_sha256": "sha256:f549f41aecb633afede16590e7959b3a80e53c2a327da302b5164dbb6f385280"
-        },
-        "capability": "run-properties",
-        "code": "PARTIAL_RUN_PROPERTIES",
-        "id": "unsupported:a0e34f286533f106810c42ad",
-        "message": "Only the conservative v1 run-property subset is exposed",
-        "preservation": "refuse-mutation",
-        "scope_id": "paragraph:a3f01c186401b8c209d2452f"
-      },
-      {
-        "anchor": {
           "end_byte": 999,
           "part_name": "word/document.xml",
           "path": "/w:document[1]/w:body[1]/w:p[1]/w:r[3]/w:drawing[1]/ns4a8a39ac:inline[1]/ns09d2785d:graphic[1]/ns09d2785d:graphicData[1]/ns5aa5e7d2:pic[1]",
