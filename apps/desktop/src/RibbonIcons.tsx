@@ -9,6 +9,8 @@ const paths = {
   italic: 'M14 4h5M5 20h5M14 4l-4 16',
   underline: 'M6 4v7a6 6 0 0 0 12 0V4M5 21h14',
   fontColor: 'M6 17 12 4l6 13M8.5 12.5h7M4 21h16',
+  growFont: 'M2 18 7 6l5 12M4 14h6M18 15V6M15 9l3-3 3 3',
+  shrinkFont: 'M2 18 7 6l5 12M4 14h6M18 6v9M15 12l3 3 3-3',
   font: 'M3 18 8 6l5 12M5 14h6M16 18v-6a2.5 2.5 0 0 1 5 0v6M16 15h5',
   align: 'M4 6h16M6 10h12M4 14h16M6 18h12',
   alignLeft: 'M4 6h16M4 10h10M4 14h16M4 18h10',
