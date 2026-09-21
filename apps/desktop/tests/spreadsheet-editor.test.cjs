@@ -11,8 +11,10 @@ function isExternal(id) {
 }
 
 function adaptWorkbookMutationBatchV1(workbook, batch) {
-  const cells = (batch.operations ?? []).filter(operation => String(operation.kind).startsWith('cell.'));
-  return { expected_revision: workbook.revision, ...(cells.length ? { cells } : {}) };
+  const operations = batch.operations ?? [];
+  const cells = operations.filter(operation => String(operation.kind).startsWith('cell.'));
+  const styles = operations.filter(operation => operation.kind === 'style.patch');
+  return { expected_revision: workbook.revision, ...(cells.length ? { cells } : {}), ...(styles.length ? { styles } : {}) };
 }
 
 function stubRequire(id) {
@@ -290,6 +292,73 @@ test('typing edits the selected cell, Enter commits and moves down, and the stat
     assert.equal(view.root.findByProps({ 'aria-label': 'Cell or range address' }).props.value, 'A3');
     const headers = view.root.findAllByType('th').filter(node => node.props.className === 'is-active').map(text);
     assert.deepEqual(headers, ['A', '3'], 'the active row and column headers are marked');
+  } finally {
+    if (view) await act(async () => view.unmount());
+    delete globalThis.__xlsxClient;
+  }
+});
+
+test('the sheet follows the dark theme and renders cell text in a sans stack', () => {
+  const css = fs.readFileSync(path.resolve(__dirname, '../src/spreadsheet.css'), 'utf8');
+  const editor = css.match(/\.sheet-editor\{([^}]*)\}/)[1];
+  for (const token of ['--sheet-cell-surface', '--sheet-cell-text', '--sheet-gridline', '--sheet-cell-font']) {
+    assert.ok(editor.includes(`${token}:`), `${token} has a light value on .sheet-editor`);
+  }
+  assert.match(editor, /--sheet-cell-font:[^;]*sans-serif/, 'cell text falls back to a sans face, never the serif default');
+  const systemDark = css.match(/@media\(prefers-color-scheme:dark\)\{:root:not\(\[data-theme="light"\]\) \.sheet-editor\{([^}]*)\}/);
+  const forcedDark = css.match(/:root\[data-theme="dark"\] \.sheet-editor\{([^}]*)\}/);
+  assert.ok(systemDark && forcedDark, 'both dark blocks re-point the sheet tokens');
+  assert.equal(systemDark[1], forcedDark[1], 'the dark blocks agree');
+  for (const token of ['--sheet-cell-surface', '--sheet-cell-text', '--sheet-gridline']) {
+    assert.ok(systemDark[1].includes(`${token}:`), `${token} is darkened`);
+  }
+  assert.match(css, /\.sheet-grid\{[^}]*background:var\(--sheet-cell-surface\)/);
+  assert.match(css, /\.sheet-grid\{[^}]*color:var\(--sheet-cell-text\)/);
+  assert.match(css, /\.sheet-grid th,\.sheet-grid td\{[^}]*border-right:1px solid var\(--sheet-gridline\)/);
+
+  const source = fs.readFileSync(path.resolve(__dirname, '../src/SpreadsheetEditor.tsx'), 'utf8');
+  assert.equal(/'#fff'/.test(source), false, 'pinned cells paint on the sheet surface token');
+  assert.match(source, /var\(--sheet-cell-font\)/, 'authored cell fonts keep a sans fallback');
+});
+
+test('XLSX Home uses Excel icon controls: six alignment toggles, colour buttons, Borders and Cells menus', async () => {
+  const client = mockClient();
+  globalThis.__xlsxClient = client;
+  const SpreadsheetEditor = await loadEditor();
+  const busy = [];
+  let view;
+  try {
+    await act(async () => {
+      view = create(React.createElement(SpreadsheetEditor, { name: 'Book.xlsx', bytes: new Uint8Array([1]), onChange: () => {}, onBusyChange: value => busy.push(value) }));
+    });
+    await until(() => busy.at(-1) === false && view.root.findAllByProps({ className: 'sheet-grid' }).length > 0);
+    const home = view.root.findAllByProps({ role: 'tabpanel' })[1];
+    const group = label => home.findByProps({ role: 'group', 'aria-label': label });
+
+    const alignment = group('Alignment');
+    const toggles = alignment.findAllByType('button').map(node => node.props['aria-label']);
+    assert.deepEqual(toggles, ['Top align', 'Middle align', 'Bottom align', 'Wrap text', 'Align left', 'Center', 'Align right', 'Merge cells']);
+    assert.equal(alignment.findAllByType('select').length, 0, 'no alignment dropdowns');
+    const byLabel = Object.fromEntries(alignment.findAllByType('button').map(node => [node.props['aria-label'], node]));
+    assert.equal(byLabel['Bottom align'].props['aria-pressed'], true, 'the stored vertical alignment reads back');
+    assert.equal(byLabel['Align left'].props['aria-pressed'], false);
+    await act(async () => byLabel.Center.props.onClick());
+    await until(() => client.applied.length >= 1);
+    assert.equal(client.applied[0].styles[0].style.horizontal_alignment, 'center');
+
+    const font = group('Font');
+    const colors = font.findAllByType('input').filter(node => node.props.type === 'color');
+    assert.deepEqual(colors.map(node => node.props['aria-label']), ['Text color', 'Fill color']);
+    assert.equal(font.findAllByProps({ className: 'sheet-color-underline' }).length, 2, 'each colour button shows its colour underline');
+    const borders = font.findByProps({ 'aria-label': 'Borders' });
+    assert.equal(borders.findAllByType('svg').length, 1, 'Borders is an icon control');
+    assert.match(borders.props.title, /not supported by the native XLSX transaction/);
+
+    const cells = group('Cells');
+    const cellCommands = [...cells.findAllByType('button'), ...cells.findAllByType('summary')].map(node => node.props['aria-label']).filter(Boolean);
+    assert.deepEqual(cellCommands.slice(0, 3), ['Insert cells', 'Delete cells', 'Format cells']);
+    for (const node of [...cells.findAllByType('button'), ...cells.findAllByType('summary')]) assert.equal(node.findAllByType('svg').length >= 1, true, 'Cells commands are icons');
+    assert.equal(cells.findAllByType('select').length, 0, 'no Rows & columns / Cell size dropdowns');
   } finally {
     if (view) await act(async () => view.unmount());
     delete globalThis.__xlsxClient;
