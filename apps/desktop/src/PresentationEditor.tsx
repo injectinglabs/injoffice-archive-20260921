@@ -4,7 +4,6 @@ import { arrangeCommand, arrangeTargets, toggleArrangeSelection, type ArrangeAct
 import ShapeArt from './ShapeArt';
 import PresentationTextToolbar from './PresentationTextToolbar';
 import Ribbon, { RibbonButton, type RibbonTabSpec } from './Ribbon';
-import RibbonIcon from './RibbonIcons';
 import './ribbon.css';
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { createPptxWasmClient, type PptxNativeExactAutoShapeV1, type PptxNativeExactParagraphV1, type PptxNativeMutationRequestV1 } from '@injoffice/pptx-wasm';
@@ -20,6 +19,8 @@ type Snapshot = { bytes: Uint8Array; deck: NativePptxDeck };
 type Draft = import('./presentationCommands').PresentationDraft;
 type PresentationEditorProps = OfficeEditorProps & { initialRecoveryDraft?: unknown; onRecoveryDraftChange?(draft: unknown | null): void; registerCommit?(commit: () => Promise<boolean>): void; registerHistory?(commands: { undo(): void; redo(): void }): void };
 const newId = () => `slides-${crypto.randomUUID()}`;
+/** PowerPoint's Design gallery, cut down to the backgrounds the native transaction can set. */
+const backgroundPresets: [string, string][] = [['FFFFFF', 'White'], ['F5F7FA', 'Light grey'], ['202B3C', 'Dark'], ['2459AD', 'Accent']];
 const describeError = (error: unknown) => error instanceof Error ? error.message : String(error);
 
 export default function PresentationEditor({ name, bytes, onChange, onBusyChange, onDraftChange, viewOptions, initialRecoveryDraft, onRecoveryDraftChange, registerCommit, registerHistory }: PresentationEditorProps) {
@@ -260,6 +261,10 @@ export default function PresentationEditor({ name, bytes, onChange, onBusyChange
     } catch (reason) { if (mounted.current) setError(describeError(reason)); }
     finally { if (mounted.current) markBusy(false); }
   }
+  function present(from: number) {
+    if (!current.current || busyRef.current || confirmDelete || dragging.current || composing.current) return;
+    presenting.current = true; setPresentation(startPresentationMode(current.current.deck, from, !!draftRef.current));
+  }
   function changeBackground(fill: string) {
     const value = current.current; if (!value || blocked || busyRef.current || draftRef.current) return;
     try { void applyCommand(slideBackgroundCommand(value.deck, index, fill, newId())); } catch (reason) { setError(describeError(reason)); }
@@ -327,12 +332,17 @@ export default function PresentationEditor({ name, bytes, onChange, onBusyChange
       { id: 'illustrations', label: 'Illustrations', children: <RibbonButton icon="shape" label="Shape" disabled={blocked || !slide} onClick={() => insert('shape')} /> },
       { id: 'text', label: 'Text', children: <RibbonButton icon="textbox" label="Text box" disabled={blocked || !slide} onClick={() => insert('text')} /> },
     ] },
-    { id: 'Design', label: 'Design', groups: [{ id: 'customize', label: 'Customize', children: <label className="presentation-background-control" title="Slide background"><RibbonIcon name="background" />Background<select aria-label="Slide background" value={slide?.background ?? ''} disabled={blocked || !slide || slide.compatibility.diagnostics.some(d => d.code === 'pptx.unsupported-background')} onChange={event => changeBackground(event.target.value)}>
-        <option value="" disabled>Inherited</option>
-        {slide?.background && !['FFFFFF','F5F7FA','202B3C','2459AD','DCE8F7','E4F1E9','FFF2D2','F6E3E6'].includes(slide.background) && <option value={slide.background}>Custom #{slide.background}</option>}
-        {Object.entries({FFFFFF:'White',F5F7FA:'Fog', '202B3C':'Ink','2459AD':'Blue',DCE8F7:'Pale blue',E4F1E9:'Sage',FFF2D2:'Cream',F6E3E6:'Rose'}).map(([color,label]) => <option key={color} value={color}>{label}</option>)}
-      </select></label> }] },
-    { id: 'SlideShow', label: 'Slide Show', groups: [{ id: 'start', label: 'Start Slide Show', children: <RibbonButton icon="present" label="Present" disabled={busy || !snapshot || confirmDelete} onClick={() => { if (!current.current || busyRef.current || dragging.current || composing.current) return; presenting.current = true; setPresentation(startPresentationMode(current.current.deck, index, !!draftRef.current)); }} /> }] },
+    { id: 'Design', label: 'Design', groups: [{ id: 'customize', label: 'Customize', children: <div className="presentation-background-gallery" role="toolbar" aria-label="Slide background">
+      {backgroundPresets.map(([color, label]) => <button key={color} type="button" className="ribbon-button presentation-background-swatch" title={`${label} background`} aria-label={`${label} background`} aria-pressed={(slide?.background ?? '') === color}
+        disabled={blocked || !slide || slide.compatibility.diagnostics.some(d => d.code === 'pptx.unsupported-background')} onClick={() => changeBackground(color)}>
+        <svg viewBox="0 0 32 20" aria-hidden="true"><rect x=".5" y=".5" width="31" height="19" rx="1.5" fill={`#${color}`} stroke="currentColor" strokeOpacity=".35" /></svg>
+        <span className="ribbon-button-label">{label}</span>
+      </button>)}
+    </div> }] },
+    { id: 'SlideShow', label: 'Slide Show', groups: [{ id: 'start', label: 'Start Slide Show', children: <>
+      <RibbonButton icon="present" label="From Beginning" title="Start the slide show from the first slide" disabled={busy || !snapshot || confirmDelete} onClick={() => present(0)} />
+      <RibbonButton icon="present" label="From Current Slide" title="Start the slide show from the slide on screen" disabled={busy || !snapshot || confirmDelete} onClick={() => present(index)} />
+    </> }] },
   ];
   return <div className="presentation-editor" aria-label="Presentation editor" aria-busy={busy} onKeyDown={event => {
       if (!(event.ctrlKey || event.metaKey) || event.altKey || blocked || composing.current || dragging.current) return;
