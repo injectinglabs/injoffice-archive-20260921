@@ -5,7 +5,7 @@ const PdfEditor = lazy(() => import('./PdfEditor'));
 const PresentationEditor = lazy(() => import('./PresentationEditor'));
 const SpreadsheetEditor = lazy(() => import('./SpreadsheetEditor').then(module => ({ default: module.SpreadsheetEditor })));
 import StartPage from './StartPage';
-import OpenError, { classifyOpenError, type OpenErrorKind } from './OpenError';
+import OpenError, { classifyOpenError, containerFailure, type OpenErrorKind } from './OpenError';
 import UpdatesDialog, { UpdateNotice } from './UpdatesDialog';
 import PreferencesDialog from './PreferencesDialog';
 import { readPreferences, writePreferences, initialView, type ViewOptions } from './preferences';
@@ -203,6 +203,19 @@ export default function App() {
       if (action === 'externalOpen' && !opened) externalPending.current = false;
       if (opened) {
         const bytes = new Uint8Array(opened.bytes);
+        // A file from disk that is not even the right kind of container never gets a tab, a ribbon
+        // and a "Saved" status around an editor that can only show the engine's raw complaint.
+        // Documents this app just generated (New, CSV import) are trusted as they are.
+        const failure = action === 'create' || action === 'importText' ? undefined : containerFailure(opened.name, bytes);
+        if (failure) {
+          await bridge.close(opened.id).catch(() => { /* The host drops unopened sessions on its own. */ });
+          // Stop draining the queue: another open would clear the page before it is read.
+          externalPending.current = false;
+          setOpenFailure({ kind: 'extract', detail: failure, name: opened.name });
+          setShowHome(true);
+          await refreshRecent();
+          return;
+        }
         const next = { ...opened, key: ++sequence.current, initialName: opened.name, initialBytes: bytes, bytes, dirty: action === 'create' || action === 'recover' || action === 'importText' };
         updateDocument(next);
         if (next.dirty) checkpoint(next);
@@ -217,7 +230,7 @@ export default function App() {
       else {
         const message = cause instanceof Error ? cause.message : String(cause);
         const kind = action === 'importText' ? undefined : classifyOpenError(message);
-        if (kind) { setOpenFailure({ kind, detail: message, name: typeof target === 'string' && target.includes('.') ? target : undefined }); setShowHome(true); }
+        if (kind) { externalPending.current = false; setOpenFailure({ kind, detail: message, name: typeof target === 'string' && target.includes('.') ? target : undefined }); setShowHome(true); }
         else setError(message);
       }
     } finally {
@@ -302,6 +315,8 @@ export default function App() {
           const opened = await bridge.importDocument({ name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) });
           if (!opened) throw new Error('The workspace was busy. Try dropping this file again.');
           const bytes = new Uint8Array(opened.bytes);
+          const failure = containerFailure(opened.name, bytes);
+          if (failure) { await bridge.close(opened.id).catch(() => { /* The host drops unopened sessions on its own. */ }); throw new Error(failure); }
           staged.push({ ...opened, key: ++sequence.current, initialName: opened.name, initialBytes: bytes, bytes, dirty: true });
         } catch (cause) { failures.push(`${file.name}: ${cause instanceof Error ? cause.message : String(cause)}`); }
       }
