@@ -90,6 +90,9 @@ test('workspace tabs retain independent bytes and editor instances; save and clo
   assert.equal(renderer.root.findAllByType('test-editor').length, 1);
   assert.equal(renderer.root.findByType('test-editor').props.name, 'Untitled.xlsx');
   await act(async () => renderer.root.findByProps({ title: shortcutTooltip('Search commands', 'commands') }).props.onClick());
+  const { shortcutLabel } = await loadShortcuts();
+  assert.equal(renderer.root.findByProps({ id: 'command-open' }).findByType('small').children.join(''), shortcutLabel('open'));
+  assert.equal(renderer.root.findByProps({ id: 'command-save' }).findByType('small').children.join(''), shortcutLabel('save'));
   let search = renderer.root.findByProps({ 'aria-label': 'Search workspace commands' });
   await act(async () => search.props.onChange({target:{value:'preferences'}}));
   await act(async () => search.props.onKeyDown({key:'Enter',preventDefault(){}}));
@@ -490,5 +493,27 @@ test('external queue draining cannot erase a deep parser failure', async () => {
     await act(async () => renderer.root.findByType('test-editor').props.onInitialLoadError('invalid document XML'));
     if (finishDrain) await act(async () => finishDrain(null));
     assert.match(renderer.root.findByProps({ className: 'open-error-details' }).findByType('p').children.join(''), /invalid document XML/);
+  } finally { if (renderer) await act(async () => renderer.unmount()); delete global.window; }
+});
+
+
+test('external queue drain retries a busy host and opens all four paths', async () => {
+  const App = await loadApp();
+  let calls = 0, renderer;
+  const names = ['First.docx', 'Second.xlsx', 'Third.pptx', 'Fourth.docx'];
+  global.window = { localStorage: { getItem: () => null, setItem() {} }, document: { title: '' }, addEventListener() {}, removeEventListener() {}, injDesktop: {
+    recent: async () => [], recovery: async () => [], setDirty() {}, setBusy() {}, onMenuAction() { return () => {}; }, checkpoint: async () => {},
+    nextExternal: async () => {
+      calls++;
+      if (calls === 4) return { pending: true };
+      const name = names.shift();
+      return name ? { id: name, name, bytes: new Uint8Array([80, 75, 3, 4]) } : null;
+    },
+  } };
+  try {
+    await act(async () => { renderer = create(React.createElement(App)); });
+    for (let i = 0; i < 20 && calls < 6; i++) await act(async () => { await new Promise(resolve => setTimeout(resolve, 20)); });
+    assert.equal(renderer.root.findAllByType('test-editor').length, 4);
+    assert.equal(calls, 6, 'four files, one retry, then the empty queue');
   } finally { if (renderer) await act(async () => renderer.unmount()); delete global.window; }
 });

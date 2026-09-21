@@ -38,7 +38,7 @@ function SessionEditor({ session, onSessionChange, viewOptions, registerSessionC
   const onRecoveryDraftChange = useCallback((recoveryDraft: unknown | null) => onSessionChange(key, { recoveryDraft }), [key, onSessionChange]);
   const format = session.initialName.split('.').pop()?.toLowerCase();
   const Editor = format === 'pdf' ? PdfEditor : format === 'pptx' ? PresentationEditor : format === 'xlsx' ? SpreadsheetEditor : OfficeEditor;
-  return <Suspense fallback={<div className="office-empty" role="status">Opening editor…</div>}><Editor onInitialLoadError={onLoadError} registerHistory={registerHistory} registerCommit={registerCommit} initialRecoveryDraft={session.recoveryDraft} onRecoveryDraftChange={onRecoveryDraftChange} name={session.initialName} bytes={session.initialBytes} onChange={onChange} onBusyChange={onBusyChange} onDraftChange={onDraftChange} viewOptions={viewOptions} /></Suspense>;
+  return <Suspense fallback={<div className="office-empty" role="status">Opening editor…</div>}><Editor documentKey={key} onInitialLoadError={onLoadError} registerHistory={registerHistory} registerCommit={registerCommit} initialRecoveryDraft={session.recoveryDraft} onRecoveryDraftChange={onRecoveryDraftChange} name={session.initialName} bytes={session.initialBytes} onChange={onChange} onBusyChange={onBusyChange} onDraftChange={onDraftChange} viewOptions={viewOptions} /></Suspense>;
 }
 
 export default function App() {
@@ -214,7 +214,17 @@ export default function App() {
         controller.signal.throwIfAborted();
         opened=await bridge.importDocument({name:picked.name.replace(/\.(csv|tsv)$/i,'')+'.xlsx',bytes});
       }else{
-        opened = action === 'externalOpen' ? await bridge.nextExternal() : action === 'recover' ? await bridge.recover(target!) : action === 'create'
+        // A host lock is temporary, not the end of the external-file queue. Keep
+        // this drain alive while mounted editors finish loading in the background.
+        if (action === 'externalOpen') {
+          let result = await bridge.nextExternal();
+          while (result && 'pending' in result) {
+            await new Promise(resolve => setTimeout(resolve, 50));
+            if (closingRef.current) return;
+            result = await bridge.nextExternal();
+          }
+          opened = result;
+        } else opened = action === 'recover' ? await bridge.recover(target!) : action === 'create'
         ? await bridge.create(target as 'docx' | 'xlsx' | 'pptx' | 'pdf')
         : target ? await bridge.openRecent(target) : await bridge.open();
       }
@@ -386,8 +396,8 @@ export default function App() {
     { id: 'home', label: 'Go to start page', disabled: busy, run: () => setShowHome(true) },
     ...(['docx', 'xlsx', 'pptx', 'pdf'] as const).map((format, index) => ({ id: `new-${format}`, label: ['New document', 'New spreadsheet', 'New presentation', 'New blank PDF'][index], detail: format.toUpperCase(), disabled: busy || !bridge, run: () => { void runAction('create', format); } })),
     {id:'importText',label:'Import CSV or TSV',detail:'Import CSV or TSV as text',disabled:busy||!bridge,run:()=>{void runAction('importText')}},
-    { id: 'open', label: 'Open file', detail: 'Ctrl / ⌘ O', disabled: busy || !bridge, run: () => { void runAction('open'); } },
-    { id: 'save', label: 'Save document', detail: 'Ctrl / ⌘ S', disabled: busy || !document, run: () => { void runAction('save'); } },
+    { id: 'open', label: 'Open file', detail: shortcutLabel('open'), disabled: busy || !bridge, run: () => { void runAction('open'); } },
+    { id: 'save', label: 'Save document', detail: shortcutLabel('save'), disabled: busy || !document, run: () => { void runAction('save'); } },
     { id: 'save-as', label: 'Save document as…', disabled: busy || !document, run: () => { void runAction('saveAs'); } },
     { id: 'close', label: 'Close document', detail: document?.name, disabled: busy || !document, run: () => { if (document) void closeDocument(document.key); } },
     { id: 'focus', label: viewOptions.focus ? 'Exit focus mode' : 'Enter focus mode', disabled: !document, run: () => { setShowHome(false); toggleFocus(); } },

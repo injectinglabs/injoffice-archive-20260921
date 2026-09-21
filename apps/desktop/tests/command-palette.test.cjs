@@ -44,3 +44,22 @@ test('command palette filters and runs the matching command', async () => {
   assert.deepEqual(ran, ['save']);
   assert.equal(closed, 1);
 });
+
+
+test('command palette opens modally, closes on Escape/cancel and backdrop, and keeps interior clicks open', async () => {
+  const CommandPalette = await loadPalette();
+  let modal = 0, closed = 0, prevented = 0, view;
+  const dialog = { showModal() { modal++; }, querySelector() {}, getBoundingClientRect: () => ({ left: 100, right: 500, top: 100, bottom: 400 }) };
+  await act(async () => { view = create(React.createElement(CommandPalette, { commands: [], onClose: () => closed++ }), { createNodeMock: node => node.type === 'dialog' ? dialog : null }); });
+  assert.equal(modal, 1, 'showModal enables native Escape cancellation');
+  const element = view.root.findByType('dialog');
+  assert.equal(element.props.open, undefined, 'an open attribute would prevent showModal from making it modal');
+  element.props.onCancel({ preventDefault() { prevented++; } });
+  assert.equal(closed, 1); assert.equal(prevented, 1);
+  element.props.onClick({ target: dialog, clientX: 150, clientY: 150 });
+  element.props.onClick({ target: {}, clientX: 0, clientY: 0 });
+  assert.equal(closed, 1);
+  element.props.onClick({ target: dialog, clientX: 50, clientY: 50 });
+  assert.equal(closed, 2);
+  await act(async () => view.unmount());
+});

@@ -21,7 +21,7 @@ declare global {
       onUpdateState(callback: (state: DesktopUpdateState) => void): () => void;
       setTheme?(theme: 'system' | 'light' | 'dark'): Promise<boolean>;
       textHistory(direction: 'undo' | 'redo'): Promise<void>;
-      nextExternal(): Promise<{ id: string; name: string; bytes: Uint8Array } | null>;
+      nextExternal(): Promise<{ id: string; name: string; bytes: Uint8Array } | { pending: true } | null>;
       open(): Promise<{ id: string; name: string; bytes: Uint8Array } | null>;
       create(format: 'docx' | 'xlsx' | 'pptx' | 'pdf'): Promise<{ id: string; name: string; bytes: Uint8Array; untitled: true } | null>;
       pickDelimitedImport():Promise<{name:string;format:'csv'|'tsv';bytes:Uint8Array;seed:Uint8Array}|null>;
