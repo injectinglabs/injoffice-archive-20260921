@@ -19,6 +19,7 @@ export type PdfEditorProps = {
   onRecoveryDraftChange?: (draft: unknown | null) => void
   name: string
   bytes: Uint8Array
+  onInitialLoadError?: (reason: string) => void
   onChange: (bytes: Uint8Array) => void
   /** Actual loading/native operation state. Pending text is reported independently via onDraftChange. */
   onBusyChange?: (busy: boolean) => void
@@ -32,9 +33,10 @@ function localPdfFont() {
   return fontPromise
 }
 const message = (error: unknown) => error instanceof Error ? error.message : String(error)
-export default function PdfEditor({ name, bytes, onChange, onBusyChange, onDraftChange, viewOptions, initialRecoveryDraft, onRecoveryDraftChange, registerCommit, registerHistory }: PdfEditorProps) {
+export default function PdfEditor({ name, bytes, onInitialLoadError, onChange, onBusyChange, onDraftChange, viewOptions, initialRecoveryDraft, onRecoveryDraftChange, registerCommit, registerHistory }: PdfEditorProps) {
   const arrowMarkerId = useId()
-  const callbacks = useRef({ onChange, onBusyChange, onDraftChange, onRecoveryDraftChange }); callbacks.current = { onChange, onBusyChange, onDraftChange, onRecoveryDraftChange }
+  const initiallyLoaded = useRef(false)
+  const callbacks = useRef({ onInitialLoadError, onChange, onBusyChange, onDraftChange, onRecoveryDraftChange }); callbacks.current = { onInitialLoadError, onChange, onBusyChange, onDraftChange, onRecoveryDraftChange }
   const recovered = useRef(parsePdfRecoveryDraft(initialRecoveryDraft))
   const recoveryWarning = useRef(initialRecoveryDraft != null && !recovered.current)
   const history = useRef<PdfHistory | null>(null); history.current ??= new PdfHistory(bytes)
@@ -110,8 +112,8 @@ export default function PdfEditor({ name, bytes, onChange, onBusyChange, onDraft
       const task=pdfjs.getDocument({data:current.slice(),cMapUrl:`${assets}cmaps/`,cMapPacked:true,standardFontDataUrl:`${assets}standard_fonts/`,wasmUrl:`${assets}wasm/`})
       destroy=()=>{void task.destroy()}
       const pdf=await task.promise
-      if (!cancelled) {setSummary(info);setLoaded({bytes:current,pdf,pdfjs})}
-    })().catch(error=>{if(!cancelled){setError(message(error));setRendering(false);locked.current=false}})
+      if (!cancelled) {initiallyLoaded.current=true;setSummary(info);setLoaded({bytes:current,pdf,pdfjs})}
+    })().catch(error=>{if(!cancelled){setError(message(error));if(!initiallyLoaded.current)callbacks.current.onInitialLoadError?.(message(error));setRendering(false);locked.current=false}})
     return ()=>{cancelled=true;searchAbort.current?.abort();destroy?.()}
   },[current])
   useEffect(() => {

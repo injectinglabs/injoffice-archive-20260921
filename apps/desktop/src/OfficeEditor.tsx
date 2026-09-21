@@ -32,6 +32,7 @@ export interface OfficeEditorProps {
   onRecoveryDraftChange?: (draft: unknown | null) => void
   name: string
   bytes: Uint8Array
+  onInitialLoadError?: (reason: string) => void
   onChange: (bytes: Uint8Array) => void
   /** Actual loading/native operation state. Pending text is reported independently via onDraftChange. */
   onBusyChange?: (busy: boolean) => void
@@ -192,7 +193,7 @@ function createEngine(extension: string): LocalEngine {
     } }
 }
 
-export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDraftChange, viewOptions, initialRecoveryDraft, onRecoveryDraftChange, registerCommit, registerHistory }: OfficeEditorProps) {
+export default function OfficeEditor({ name, bytes, onInitialLoadError, onChange, onBusyChange, onDraftChange, viewOptions, initialRecoveryDraft, onRecoveryDraftChange, registerCommit, registerHistory }: OfficeEditorProps) {
   const menu=useContextMenu()
   const [ribbonTab,setRibbonTab]=useState('Home')
   const [snapshot, setSnapshot] = useState<Snapshot>()
@@ -250,8 +251,8 @@ export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDr
   const draftPending = useRef(false)
   const engine = useRef<LocalEngine | undefined>(undefined)
   const mounted = useRef(false)
-  const callbacks = useRef({ onChange, onBusyChange, onDraftChange, onRecoveryDraftChange })
-  callbacks.current = { onChange, onBusyChange, onDraftChange, onRecoveryDraftChange }
+  const callbacks = useRef({ onInitialLoadError, onChange, onBusyChange, onDraftChange, onRecoveryDraftChange })
+  callbacks.current = { onInitialLoadError, onChange, onBusyChange, onDraftChange, onRecoveryDraftChange }
   const target = snapshot?.targets.find(candidate => candidate.key === selected)
   const hasDraft = Object.keys(drafts).length > 0 || (!!target && draft !== target.value)
   useEffect(() => { callbacks.current.onBusyChange?.(busy||composing) }, [busy,composing])
@@ -280,9 +281,9 @@ export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDr
           setSelected(value.targets[0].key); setDraft('')
         }
       })
-        .catch(reason => { if (!cancelled) setError(errorMessage(reason)) })
+        .catch(reason => { if (!cancelled) { setError(errorMessage(reason)); callbacks.current.onInitialLoadError?.(errorMessage(reason)) } })
         .finally(() => { if (!cancelled) setBusy(false) })
-    } catch (reason) { setError(errorMessage(reason)); setBusy(false) }
+    } catch (reason) { setError(errorMessage(reason)); callbacks.current.onInitialLoadError?.(errorMessage(reason)); setBusy(false) }
     return () => { cancelled = true; mounted.current = false; hiddenApplyRef.current?.cancel(); local?.terminate(); callbacks.current.onBusyChange?.(false) }
     // A new open session must mount a fresh editor; save paths do not reinitialize it.
   }, [])

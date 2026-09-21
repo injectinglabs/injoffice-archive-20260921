@@ -28,7 +28,7 @@ function cellInk(color?: string, fill?: string): string | undefined {
   return fill ? 'var(--document-text)' : undefined;
 }
 
-export interface OfficeEditorProps { registerHistory?: (commands: { undo(): void; redo(): void; canUndo?: boolean; canRedo?: boolean }) => void; registerCommit?: (commit: () => Promise<boolean>) => void; initialRecoveryDraft?: unknown; onRecoveryDraftChange?: (draft: unknown | null) => void; name: string; bytes: Uint8Array; onChange: (bytes: Uint8Array) => void; onBusyChange?: (busy: boolean) => void; onDraftChange?: (dirty: boolean) => void; viewOptions?: { zoom: number; navigation: boolean; focus: boolean } }
+export interface OfficeEditorProps { onInitialLoadError?: (reason: string) => void; registerHistory?: (commands: { undo(): void; redo(): void; canUndo?: boolean; canRedo?: boolean }) => void; registerCommit?: (commit: () => Promise<boolean>) => void; initialRecoveryDraft?: unknown; onRecoveryDraftChange?: (draft: unknown | null) => void; name: string; bytes: Uint8Array; onChange: (bytes: Uint8Array) => void; onBusyChange?: (busy: boolean) => void; onDraftChange?: (dirty: boolean) => void; viewOptions?: { zoom: number; navigation: boolean; focus: boolean } }
 
 type Snapshot = { bytes: Uint8Array; workbook: NativeWorkbookV2; calculation?: LocalCalculationResult; calculationRevision?: string; charts: XlsxNativeChart[]; chartError?: string };
 const initialSelection: Selection = { anchor: { row: 0, column: 0 }, end: { row: 0, column: 0 } };
@@ -100,7 +100,7 @@ export function SpreadsheetEditor(props: OfficeEditorProps & { initialRecoveryDr
           callbacks.current.onDraftChange?.(true); callbacks.current.onRecoveryDraftChange?.(recovered); setNotice('Recovered pending cell input. Apply or cancel to continue.');
         } catch (reason) { setError(engineErrorMessage(reason)); callbacks.current.onRecoveryDraftChange?.(null); }
       }
-    }).catch(reason => { if (!cancelled) setError(engineErrorMessage(reason)); }).finally(() => { if (!cancelled) setWorking(false); });
+    }).catch(reason => { if (!cancelled) { setError(engineErrorMessage(reason)); callbacks.current.onInitialLoadError?.(engineErrorMessage(reason)); } }).finally(() => { if (!cancelled) setWorking(false); });
     return () => { cancelled = true; };
   }, [props.bytes]);
   useEffect(() => { if (inline && draft !== null) inlineInput.current?.focus(); }, [inline, draft !== null]);
