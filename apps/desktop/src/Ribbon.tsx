@@ -245,6 +245,46 @@ export function ColorButton({ label, icon, value, colors, onChange, disabled, ti
   </span>
 }
 
+/** Office's horizontal alignment commands per host, in ribbon order. Word adds justify and distribute. */
+export const RIBBON_ALIGNMENTS: Record<'docx' | 'xlsx' | 'pptx', Array<{ value: string; label: string; icon: RibbonIconName }>> = {
+  xlsx: [{ value: 'left', label: 'Align left', icon: 'alignLeft' }, { value: 'center', label: 'Center', icon: 'alignCenter' }, { value: 'right', label: 'Align right', icon: 'alignRight' }],
+  pptx: [{ value: 'left', label: 'Align left', icon: 'alignLeft' }, { value: 'center', label: 'Center', icon: 'alignCenter' }, { value: 'right', label: 'Align right', icon: 'alignRight' }],
+  docx: [{ value: 'left', label: 'Align left', icon: 'alignLeft' }, { value: 'center', label: 'Center', icon: 'alignCenter' }, { value: 'right', label: 'Align right', icon: 'alignRight' }, { value: 'both', label: 'Justify', icon: 'alignJustify' }, { value: 'distribute', label: 'Distribute', icon: 'alignDistribute' }],
+}
+/** Excel's vertical alignment commands, in ribbon order. */
+export const RIBBON_VERTICAL_ALIGNMENTS: Array<{ value: string; label: string; icon: RibbonIconName }> = [
+  { value: 'top', label: 'Top align', icon: 'alignTop' },
+  { value: 'middle', label: 'Middle align', icon: 'alignMiddle' },
+  { value: 'bottom', label: 'Bottom align', icon: 'alignBottom' },
+]
+
+export interface AlignmentTogglesProps {
+  /** The horizontal alignment in effect; 'general' or undefined presses nothing, as Excel does. */
+  horizontal?: string
+  /** The vertical alignment in effect. Omit `onVertical` for a host that has no vertical alignment. */
+  vertical?: string
+  onHorizontal(value: string): void
+  onVertical?(value: string): void
+  disabled?: boolean
+  /** Which host's horizontal set to offer. Defaults to the three Excel and PowerPoint share. */
+  kind?: 'docx' | 'xlsx' | 'pptx'
+  /** Extra class on the wrapper, for a host that positions the block itself. */
+  className?: string
+}
+
+/**
+ * Excel's alignment block: top/middle/bottom over left/centre/right, as toggle
+ * icons that show the alignment in effect — never a pair of dropdowns.
+ */
+export function AlignmentToggles({ horizontal, vertical, onHorizontal, onVertical, disabled, kind = 'xlsx', className }: AlignmentTogglesProps) {
+  const toggle = (option: { value: string; label: string; icon: RibbonIconName }, current: string | undefined, apply: (value: string) => void) =>
+    <RibbonButton key={option.value} icon={option.icon} label={option.label} labelHidden aria-pressed={current === option.value} disabled={disabled} onClick={() => apply(option.value)} />
+  return <div className={['ribbon-alignment-toggles', className ?? ''].join(' ').trim()}>
+    {onVertical && <div className="ribbon-alignment-row">{RIBBON_VERTICAL_ALIGNMENTS.map(option => toggle(option, vertical, onVertical))}</div>}
+    <div className="ribbon-alignment-row">{RIBBON_ALIGNMENTS[kind].map(option => toggle(option, horizontal, onHorizontal))}</div>
+  </div>
+}
+
 /** Vertical stack of control rows inside one group (Office stacks Font as two rows). */
 export function RibbonRows({ children }: { children: ReactNode }) {
   return <div className="ribbon-rows">{children}</div>
