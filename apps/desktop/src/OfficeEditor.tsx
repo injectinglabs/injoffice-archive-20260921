@@ -201,6 +201,24 @@ export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDr
   const [selected, setSelected] = useState('')
   const [textRange,setTextRange] = useState<TextRange>()
   const [draft, setDraft] = useState('')
+  const [drafts, setDrafts] = useState<Record<string, string>>({})
+  const draftsRef = useRef<Record<string, string>>({})
+  const rejectedDrafts = useRef(new Map<string, string>())
+  const textInFlight = useRef(false)
+  const [textSettled, setTextSettled] = useState(0)
+  const queuedChoice = useRef<{ key: string; range?: TextRange } | undefined>(undefined)
+  function rememberDraft(key: string, text: string | undefined) {
+    const next = { ...draftsRef.current }
+    if (text === undefined) delete next[key]
+    else next[key] = text
+    draftsRef.current = next
+    setDrafts(next)
+    publishRecoveryDrafts()
+  }
+  function publishRecoveryDrafts() {
+    const first = Object.entries(draftsRef.current)[0]
+    callbacks.current.onRecoveryDraftChange?.(first ? { version: 1, format: 'docx', target: first[0], text: first[1], drafts: draftsRef.current } : null)
+  }
   const [search, setSearch] = useState('')
   const [replacement, setReplacement] = useState('')
   const searchInput = useRef<HTMLInputElement>(null)
@@ -231,7 +249,7 @@ export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDr
   const callbacks = useRef({ onChange, onBusyChange, onDraftChange, onRecoveryDraftChange })
   callbacks.current = { onChange, onBusyChange, onDraftChange, onRecoveryDraftChange }
   const target = snapshot?.targets.find(candidate => candidate.key === selected)
-  const hasDraft = !!target && draft !== target.value
+  const hasDraft = Object.keys(drafts).length > 0 || (!!target && draft !== target.value)
   useEffect(() => { callbacks.current.onBusyChange?.(busy||composing) }, [busy,composing])
   useEffect(() => { callbacks.current.onDraftChange?.(hasDraft) }, [hasDraft])
   useEffect(() => {
@@ -246,8 +264,11 @@ export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDr
         if (cancelled) return
         setSnapshot(value)
         setBusy(false)
-        const recovery = initialRecoveryDraft as { version?: number; format?: string; target?: string; text?: string } | null;
+        const recovery = initialRecoveryDraft as { version?: number; format?: string; target?: string; text?: string; drafts?: Record<string, string> } | null;
         if (recovery?.version === 1 && recovery.format === 'docx' && typeof recovery.target === 'string' && typeof recovery.text === 'string' && recovery.text.length <= 256 * 1024 && value.targets.some(target => target.key === recovery.target && target.value !== recovery.text)) {
+          for (const [key, text] of Object.entries(recovery.drafts ?? { [recovery.target]: recovery.text })) {
+            if (typeof text === 'string' && text.length <= 256 * 1024 && value.targets.some(target => target.key === key && target.value !== text)) rememberDraft(key, text)
+          }
           setSelected(recovery.target); setDraft(recovery.text); draftPending.current = true;
           return;
         }
@@ -262,29 +283,37 @@ export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDr
     // A new open session must mount a fresh editor; save paths do not reinitialize it.
   }, [])
 
-  async function choose(key: string,range?:TextRange) {
+  async function choose(key: string, range?: TextRange) {
     hiddenApplyRef.current?.cancel()
-    if (busy || composing || !snapshot) return
-    let source = snapshot
-    if (draftPending.current) {
-      if (!engine.current) return
-      setBusy(true); callbacks.current.onBusyChange?.(true); setError('')
-      try { source = await engine.current.edit(snapshot, selected, draft); if (!mounted.current) return; accept(source) }
-      catch (reason) { if (mounted.current) setError(errorMessage(reason)); return }
-      finally { if (mounted.current) setBusy(false) }
+    if (!snapshot) return
+    if (busy || textInFlight.current || composingRef.current) { queuedChoice.current = { key, range }; return }
+    if (key === selected) { if (range) setTextRange(range); return }
+    if (draftPending.current && rejectedDrafts.current.get(selected) !== draft) {
+      queuedChoice.current = { key, range }
+      await apply(true)
+      return
     }
-    const next = source.targets.find(candidate => candidate.key === key)
-    setCaretOffset(undefined);setTextRange(range)
+    const next = snapshot.targets.find(candidate => candidate.key === key)
+    const text = next ? draftsRef.current[next.key] ?? next.value : ''
+    draftPending.current = !!next && text !== next.value
+    setCaretOffset(undefined); setTextRange(range)
     setSelected(next?.key ?? '')
-    setDraft(next?.value ?? '')
+    setDraft(text)
   }
+  useEffect(() => {
+    if (busy || composing || !snapshot) return
+    const choice = queuedChoice.current
+    if (choice) { queuedChoice.current = undefined; void choose(choice.key, choice.range) }
+    else if (draftPending.current && rejectedDrafts.current.get(selected) !== draft) hiddenApplyRef.current?.schedule()
+  }, [busy, composing, snapshot, selected, draft, textSettled])
   function updateDraft(value: string) {
-    if (!target || busy) return
+    if (!target) return
     draftPending.current = value !== target.value
-    setDraft(value);setTextRange(undefined)
-    callbacks.current.onRecoveryDraftChange?.(draftPending.current ? { version: 1, format: 'docx', target: selected, text: value } : null)
-    callbacks.current.onBusyChange?.(busy||composing)
-    callbacks.current.onDraftChange?.(draftPending.current)
+    rejectedDrafts.current.delete(selected)
+    rememberDraft(selected, draftPending.current || textInFlight.current ? value : undefined)
+    setDraft(value); setTextRange(undefined)
+    callbacks.current.onBusyChange?.(busy || composing)
+    callbacks.current.onDraftChange?.(Object.keys(draftsRef.current).length > 0)
     if (draftPending.current) hiddenApplyRef.current?.schedule()
     else hiddenApplyRef.current?.cancel()
   }
@@ -307,24 +336,41 @@ export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDr
     let history = [...undo, snapshot].slice(-20)
     while (history.length > 1 && history.reduce((sum, item) => sum + item.bytes.byteLength, 0) > 128 * 1024 * 1024) history = history.slice(1)
     setUndo(history); setRedo([]); setSnapshot(next);setTextRange(undefined)
-    draftPending.current = false
-    setDraft(next.targets.find(candidate => candidate.key === selected)?.value ?? '')
+    // Typing can continue while the worker runs. Only retire the submitted value.
+    const accepted = next.targets.find(candidate => candidate.key === selected)?.value ?? ''
+    if (draftsRef.current[selected] === draft || draftsRef.current[selected] === accepted) rememberDraft(selected, undefined)
+    rejectedDrafts.current.delete(selected)
+    const latest = draftsRef.current[selected] ?? accepted
+    draftPending.current = latest !== accepted
+    setDraft(latest)
     callbacks.current.onChange(next.bytes)
+    // The host clears recovery on a successful byte update; republish drafts still pending.
+    publishRecoveryDrafts()
   }
   async function apply(restoreCaret = false) {
     hiddenApplyRef.current?.cancel()
-    if (!snapshot || !engine.current || !target || !hasDraft || busy || composingRef.current) return
+    if (!snapshot || !engine.current || !target || !draftPending.current || busy || textInFlight.current || composingRef.current) return
+    if (rejectedDrafts.current.get(selected) === draft) return
     const caret = captureDraftCaret(draft)
+    textInFlight.current = true
     setBusy(true); callbacks.current.onBusyChange?.(true); setError('')
     try {
       const next = await engine.current.edit(snapshot, selected, draft)
       if (mounted.current) {
         accept(next)
-        if (restoreCaret) setCaretOffset(caret)
-        else if (snapshot.preview.kind === 'docx') setSelected('')
+        if (restoreCaret && !draftPending.current && !queuedChoice.current) setCaretOffset(caret)
+        else if (!restoreCaret && !draftPending.current && !queuedChoice.current) setSelected('')
       }
-    } catch (reason) { if (mounted.current) setError(errorMessage(reason)) }
-    finally { if (mounted.current) setBusy(false) }
+    } catch (reason) {
+      rejectedDrafts.current.set(selected, draft)
+      if (mounted.current) {
+        if (draftsRef.current[selected] === target.value) rememberDraft(selected, undefined)
+        setError(errorMessage(reason))
+      }
+    } finally {
+      textInFlight.current = false
+      if (mounted.current) { setBusy(false); setTextSettled(value => value + 1) }
+    }
   }
   applyHiddenRef.current = () => apply(true)
   async function changeFormatting(patch: FormattingPatch) {
@@ -479,15 +525,15 @@ export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDr
   const commitLatest = useRef<() => Promise<boolean>>(async () => false)
   commitLatest.current = async () => {
     if (busy || composingRef.current) return false
-    if (!draftPending.current) return true
+    if (!draftPending.current) return Object.keys(draftsRef.current).length === 0
     await apply()
-    if (draftPending.current) return false
+    if (draftPending.current || Object.keys(draftsRef.current).length > 0) return false
     callbacks.current.onDraftChange?.(false); callbacks.current.onBusyChange?.(false)
     return true
   }
   useEffect(() => { registerCommit?.(() => commitLatest.current()) }, [registerCommit])
   function travel(direction: 'undo' | 'redo') {
-    if (!snapshot || busy || draftPending.current) return
+    if (!snapshot || busy || hasDraft) return
     const stack = direction === 'undo' ? undo : redo
     const next = stack.at(-1)
     if (!next) return
@@ -575,7 +621,7 @@ export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDr
     {snapshot && <>
       <div className={`office-preview ${isDocument ? 'office-document-preview' : ''}`} onContextMenu={event=>{activateRunAt(event);menu.open(event)}}>
         <div className="office-preview-scale" style={isDocument ? undefined : { zoom }}>
-        {snapshot.preview.kind === 'docx' && <DocumentPreview replaceImage={typeof window!=='undefined'&&window.injDesktop?.pickAsset?id=>void replaceImage(id):undefined} deleteImage={id=>void deleteImage(id)} images={(engine.current?.media(snapshot) ?? EMPTY_MEDIA).images} imageNotice={(engine.current?.media(snapshot) ?? EMPTY_MEDIA).notice} document={snapshot.preview.document} choose={choose} selected={selected} draft={draft} textRange={textRange} onTextRangeChange={setTextRange} caretOffset={caretOffset} joinPrevious={() => void joinPrevious()} insertLines={(text, caret) => void insertLines(text, caret)} updateDraft={updateDraft} commit={releaseDraft} notice={notice} busy={busy} hasDraft={hasDraft} onPageMetrics={setPageMetrics} onCompositionChange={value=>{composingRef.current=value;setComposing(value);callbacks.current.onBusyChange?.(busy||value);if(!value&&draftPending.current)hiddenApplyRef.current?.schedule()}} zoom={zoom} navigation={(viewOptions?.navigation ?? true) && !viewOptions?.focus} />}
+        {snapshot.preview.kind === 'docx' && <DocumentPreview replaceImage={typeof window!=='undefined'&&window.injDesktop?.pickAsset?id=>void replaceImage(id):undefined} deleteImage={id=>void deleteImage(id)} images={(engine.current?.media(snapshot) ?? EMPTY_MEDIA).images} imageNotice={(engine.current?.media(snapshot) ?? EMPTY_MEDIA).notice} document={snapshot.preview.document} choose={choose} selected={selected} draft={draft} drafts={drafts} textRange={textRange} onTextRangeChange={setTextRange} caretOffset={caretOffset} joinPrevious={() => void joinPrevious()} insertLines={(text, caret) => void insertLines(text, caret)} updateDraft={updateDraft} commit={releaseDraft} notice={notice} busy={busy} hasDraft={hasDraft} onPageMetrics={setPageMetrics} onCompositionChange={value=>{composingRef.current=value;setComposing(value);callbacks.current.onBusyChange?.(busy||value);if(!value&&draftPending.current)hiddenApplyRef.current?.schedule()}} zoom={zoom} navigation={(viewOptions?.navigation ?? true) && !viewOptions?.focus} />}
         </div>
       </div>
       <SelectionToolbar values={toolbarValues} disabled={busy||composing} onChange={patch=>void changeFormatting(patch)} />

@@ -179,15 +179,15 @@ test('DocumentPreview places the caret from a click that missed the text', async
   await act(async () => paperProps(view).onMouseDown(onRun));
   assert.deepEqual(chosen, ['run-1']);
   assert.equal(onRun.prevented, 0);
-  // While the engine is working, clicks do not move the caret.
+  // While the engine is working, forward the click so the editor can queue it.
   await act(async () => { view.update(React.createElement(DocumentPreview, { ...props, busy: true })); });
   await act(async () => paperProps(view).onMouseDown(clickEvent()));
-  assert.deepEqual(chosen, ['run-1']);
+  assert.deepEqual(chosen, ['run-1', 'run-1']);
   // The run is already the selected one: the caret moves in place, without re-choosing it.
   await act(async () => { view.update(React.createElement(DocumentPreview, { ...props, selected: 'run-1' })); });
   const again = clickEvent();
   await act(async () => paperProps(view).onMouseDown(again));
-  assert.deepEqual(chosen, ['run-1']);
+  assert.deepEqual(chosen, ['run-1', 'run-1']);
   assert.equal(again.prevented, 1);
   assert.equal(added.length, 1, 'the caret is placed in the active run');
   assert.equal(again.node.focused, true);
