@@ -216,6 +216,34 @@ describe('XLSX WASM package client', () => {
     } as WorkbookMutationBatchV1
     expect(adaptWorkbookMutationBatchV1(fixtureWorkbook, merge)).toEqual({expected_revision:fixtureWorkbook.revision,merges:merge.operations})
 
+    const chart = adaptWorkbookMutationBatchV1(fixtureWorkbook, {
+      protocol: WORKBOOK_MUTATION_PROTOCOL,
+      version: WORKBOOK_MUTATION_VERSION,
+      batch_id: 'chart-1',
+      expected_revision: fixtureWorkbook.source.package_sha256,
+      operations: [{
+        operation_id: 'chart-1',
+        sheet_id: fixtureWorkbook.sheets[0].id,
+        kind: 'chart.insert',
+        chart_type: 'bar',
+        title: 'Revenue',
+        range: { row: 0, column: 0, end_row: 4, end_column: 2 },
+        anchor: { from_row: 0, from_column: 4, to_row: 18, to_column: 12 },
+      }],
+    })
+    expect(chart).toEqual({
+      expected_revision: fixtureWorkbook.revision,
+      charts: [{
+        operation_id: 'chart-1',
+        sheet_id: fixtureWorkbook.sheets[0].id,
+        kind: 'chart.insert',
+        chart_type: 'bar',
+        title: 'Revenue',
+        range: { row: 0, column: 0, end_row: 4, end_column: 2 },
+        anchor: { from_row: 0, from_column: 4, to_row: 18, to_column: 12 },
+      }],
+    })
+
     const client = createXlsxWasmClient({ workerFactory: () => new FakeWorker() })
     expect(() => client.apply(new Uint8Array([1]), fixtureWorkbook, {
       ...transaction,

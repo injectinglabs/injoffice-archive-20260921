@@ -21,6 +21,7 @@ type NativeWorkbookMutationTransactionV1 struct {
 	Layout           []LayoutMutation     `json:"layout,omitempty"`
 	Merges           []MergeMutation      `json:"merges,omitempty"`
 	Structure        []StructureMutation  `json:"structure,omitempty"`
+	Charts           []ChartMutation      `json:"charts,omitempty"`
 }
 
 // NativeWorkbookMutationResultV1 returns both the exact saved package and its
@@ -148,6 +149,19 @@ func ApplyNativeWorkbookMutationTransactionV1(original []byte, transaction Nativ
 			return nil, fmt.Errorf("xlsxpatch: native mutation: layout: %w", err)
 		}
 	}
+	if len(transaction.Charts) != 0 {
+		source := before
+		if len(transaction.Cells) != 0 || len(transaction.Styles) != 0 || len(transaction.Layout) != 0 {
+			source, err = ExtractNativeWorkbookV1WithOptions(produced, NativeWorkbookExtractionOptions{Previous: before})
+			if err != nil {
+				return nil, fmt.Errorf("xlsxpatch: native mutation: charts: extract cell/layout result: %w", err)
+			}
+		}
+		produced, err = ApplyNativeChartMutations(produced, source, transaction.Charts)
+		if err != nil {
+			return nil, fmt.Errorf("xlsxpatch: native mutation: charts: %w", err)
+		}
+	}
 	if bytes.Equal(original, produced) {
 		return nil, fmt.Errorf("xlsxpatch: native mutation: semantic no-op produced no authoritative package change")
 	}
@@ -166,6 +180,7 @@ func ApplyNativeWorkbookMutationTransactionV1(original []byte, transaction Nativ
 	if err != nil {
 		return nil, err
 	}
+	expectedUnsupported = nativeExpectedUnsupportedAfterCharts(before, after, transaction, expectedUnsupported)
 	if err := verifyNativeWorkbookMutationResultWithInventory(before, after, transaction, expectedStyles, expectedUnsupported); err != nil {
 		return nil, err
 	}
@@ -186,7 +201,7 @@ func validateNativeWorkbookMutationTransaction(transaction NativeWorkbookMutatio
 	if !nativeWorkbookRevision.MatchString(transaction.ExpectedRevision) {
 		return fmt.Errorf("xlsxpatch: native mutation: expected_revision must contain a full SHA-256")
 	}
-	total := len(transaction.Cells) + len(transaction.Styles) + len(transaction.Layout) + len(transaction.Merges) + len(transaction.Structure)
+	total := len(transaction.Cells) + len(transaction.Styles) + len(transaction.Layout) + len(transaction.Merges) + len(transaction.Structure) + len(transaction.Charts)
 	if total == 0 {
 		return fmt.Errorf("xlsxpatch: native mutation: empty transaction")
 	}
@@ -206,7 +221,7 @@ func validateNativeWorkbookMutationTransaction(transaction NativeWorkbookMutatio
 		return validateMergeMutations(transaction.Merges)
 	}
 	seen := make(map[string]bool, total)
-	for _, group := range [][]string{cellOperationIDs(transaction.Cells), styleOperationIDs(transaction.Styles), layoutOperationIDs(transaction.Layout)} {
+	for _, group := range [][]string{cellOperationIDs(transaction.Cells), styleOperationIDs(transaction.Styles), layoutOperationIDs(transaction.Layout), chartOperationIDs(transaction.Charts)} {
 		for _, id := range group {
 			if seen[id] {
 				return fmt.Errorf("xlsxpatch: native mutation: duplicate operation_id %q across transaction", id)
@@ -234,6 +249,11 @@ func validateNativeWorkbookMutationTransaction(transaction NativeWorkbookMutatio
 	}
 	if len(transaction.Layout) != 0 {
 		if _, err := validateLayoutMutations(transaction.Layout); err != nil {
+			return err
+		}
+	}
+	if len(transaction.Charts) != 0 {
+		if err := validateChartMutations(transaction.Charts); err != nil {
 			return err
 		}
 	}
@@ -343,6 +363,9 @@ func preflightNativeWorkbookMutationTargets(workbook *NativeWorkbookV1, transact
 		if _, err := requireSheet(mutation.OperationID, mutation.SheetID); err != nil {
 			return err
 		}
+	}
+	if err := preflightNativeChartMutationTargets(workbook, transaction.Charts); err != nil {
+		return err
 	}
 	mergedSheetIDs := make([]string, 0, len(mergedTargets))
 	for sheetID := range mergedTargets {
@@ -1014,6 +1037,15 @@ func verifyNativeWorkbookTransactionRawPreservation(original, produced []byte, w
 				return fmt.Errorf("xlsxpatch: native mutation: missing calc-chain part %q", calcTarget)
 			}
 			allowed[calcPart] = true
+		}
+	}
+	if len(transaction.Charts) != 0 {
+		extra, err := nativeChartMutationAllowedParts(original, produced, workbook, transaction)
+		if err != nil {
+			return err
+		}
+		for name := range extra {
+			allowed[name] = true
 		}
 	}
 	return compareUntouchedRawZipEntries(original, produced, allowed)
