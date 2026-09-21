@@ -582,6 +582,7 @@ export default function OfficeEditor({ name, bytes, onInitialLoadError, onChange
   const selection = snapshot ? docxSelection(snapshot.preview.document, selected) : undefined
   const paragraphOps = snapshot ? paragraphOperations(snapshot.preview.document, selected) : []
   const canInsertBlock = paragraphOps.includes('block.insert_after')
+  const isBulleted = snapshot?.preview.document.numbering_definitions?.find(list => list.num_id === selection?.paragraph.properties.numbering?.num_id)?.levels.some(level => level.level === (selection?.paragraph.properties.numbering?.level ?? 0) && level.format === 'bullet') ?? false
   const canExportPdf = !!snapshot && typeof window !== 'undefined' && !!window.injDesktop?.exportDocxPdf
   const canPickAsset = typeof window !== 'undefined' && !!window.injDesktop?.pickAsset
   const hiddenRun = !!selection && !!snapshot && selection.paragraph.runs.some(run => runAppearance(snapshot.preview.document, selection.paragraph, run).hidden)
@@ -602,17 +603,17 @@ export default function OfficeEditor({ name, bytes, onInitialLoadError, onChange
       { id: 'styles', label: 'Styles', children: paragraphToolbar('styles') },
       { id: 'editing', label: 'Editing', children: <>
         <RibbonButton icon="replace" label="Find / replace" shortcut="find" aria-expanded={searchOpen} onClick={() => setSearchOpen(value => !value)} />
-        <RibbonButton icon="select" label="Select paragraph text" disabled={blocked || hasDraft || !selection||!canFormatParagraphRange(selection.paragraph) || hiddenRun || !selection.paragraph.runs.some(run => run.text?.length)} onClick={() => { const paragraph = selection!.paragraph; setTextRange({ paragraph_id: paragraph.id, start_utf16: 0, end_utf16: paragraph.runs.reduce((length, run) => length + (run.text ?? '').length, 0) }) }} />
+        <RibbonButton icon="select" label="Select paragraph text" title="Select an editable paragraph and finish typing first." disabled={blocked || hasDraft || !selection||!canFormatParagraphRange(selection.paragraph) || hiddenRun || !selection.paragraph.runs.some(run => run.text?.length)} onClick={() => { const paragraph = selection!.paragraph; setTextRange({ paragraph_id: paragraph.id, start_utf16: 0, end_utf16: paragraph.runs.reduce((length, run) => length + (run.text ?? '').length, 0) }) }} />
       </> },
     ] },
     { id: 'Insert', label: 'Insert', groups: [
-      { id: 'pages', label: 'Pages', children: <RibbonButton icon="pageBreak" label="Page break" disabled={blocked || !canInsertDocumentPageBreak(snapshot.preview.document, selected) || !!textRange?.unsupported || !!(textRange && textRange.start_utf16 !== textRange.end_utf16)} onMouseDown={event => event.preventDefault()} onClick={() => void insertPageBreak()} /> },
+      { id: 'pages', label: 'Pages', children: <RibbonButton icon="pageBreak" label="Page break" title="Place the caret in supported body text without selecting a range." disabled={blocked || !canInsertDocumentPageBreak(snapshot.preview.document, selected) || !!textRange?.unsupported || !!(textRange && textRange.start_utf16 !== textRange.end_utf16)} onMouseDown={event => event.preventDefault()} onClick={() => void insertPageBreak()} /> },
       { id: 'tables', label: 'Tables', children: <InsertTableControl disabled={true} onInsert={(rows, columns) => void insertTable(rows, columns)} /> },
-      { id: 'illustrations', label: 'Illustrations', children: canPickAsset && <RibbonButton icon="image" label="Insert image…" title="Insert a PNG or JPEG below the selected paragraph" disabled={blocked || !canInsertBlock || snapshot.preview.document.source.main_part !== 'word/document.xml'} onClick={() => void insertImage()} /> },
+      { id: 'illustrations', label: 'Illustrations', children: canPickAsset && <RibbonButton icon="image" label="Insert image…" title={blocked ? "Wait for the current operation to finish." : !canInsertBlock ? "Select a body paragraph that allows content insertion." : "Insert a PNG or JPEG below the selected paragraph"} disabled={blocked || !canInsertBlock || snapshot.preview.document.source.main_part !== 'word/document.xml'} onClick={() => void insertImage()} /> },
       { id: 'links', label: 'Links', children: <HyperlinkControl key={selected} url={selection?.run.hyperlink?.url} disabled={blocked || !selection?.run.can_edit_hyperlink || !(draft.length || selection?.run.text?.length) || !!textRange?.unsupported} onChange={url => void changeLink(url)} /> },
       { id: 'text', label: 'Text', children: <>
-        <RibbonButton icon="paragraphInsert" label="Insert paragraph below" disabled={blocked || hasDraft || !canInsertBlock} onClick={() => void changeParagraph('block.insert_after')} />
-        <RibbonButton icon="paragraphDelete" label="Delete paragraph" disabled={blocked || hasDraft || !paragraphOps.includes('block.delete')} onClick={() => void changeParagraph('block.delete')} />
+        <RibbonButton icon="paragraphInsert" label="Insert paragraph below" title="Select a body paragraph and finish typing first." disabled={blocked || hasDraft || !canInsertBlock} onClick={() => void changeParagraph('block.insert_after')} />
+        <RibbonButton icon="paragraphDelete" label="Delete paragraph" title="Select a paragraph that can be deleted and finish typing first." disabled={blocked || hasDraft || !paragraphOps.includes('block.delete')} onClick={() => void changeParagraph('block.delete')} />
         {!target && <span className="ribbon-note">Select a body paragraph to insert content.</span>}
       </> },
     ] },
@@ -641,7 +642,7 @@ export default function OfficeEditor({ name, bytes, onInitialLoadError, onChange
         {snapshot.preview.kind === 'docx' && <DocumentPreview replaceImage={typeof window!=='undefined'&&window.injDesktop?.pickAsset?id=>void replaceImage(id):undefined} deleteImage={id=>void deleteImage(id)} images={(engine.current?.media(snapshot) ?? EMPTY_MEDIA).images} imageNotice={(engine.current?.media(snapshot) ?? EMPTY_MEDIA).notice} document={snapshot.preview.document} choose={choose} selected={selected} draft={draft} drafts={drafts} textRange={textRange} onTextRangeChange={setTextRange} caretOffset={caretOffset} joinPrevious={() => void joinPrevious()} insertLines={(text, caret) => void insertLines(text, caret)} updateDraft={updateDraft} commit={releaseDraft} notice={notice} busy={busy} hasDraft={hasDraft} onPageMetrics={setPageMetrics} onCompositionChange={value=>{composingRef.current=value;setComposing(value);callbacks.current.onBusyChange?.(busy||value);if(!value&&draftPending.current)hiddenApplyRef.current?.schedule()}} zoom={zoom} navigation={(viewOptions?.navigation ?? true) && !viewOptions?.focus} />}
         </div>
       </div>
-      <SelectionToolbar values={toolbarValues} disabled={busy||composing} onChange={patch=>void changeFormatting(patch)} />
+      <SelectionToolbar values={toolbarValues} disabled={busy||composing} onChange={patch=>void changeFormatting(patch)} bullets={isBulleted} onBullets={selection?.paragraph.edit_policy.allowed_operations.includes('properties.patch') ? () => void changeParagraphFormatting(isBulleted ? { numbering_num_id: '0', numbering_level: 0 } : { numbering_kind: 'bullet', numbering_level: 0 }) : undefined} />
       {menu.anchor&&<ContextMenu anchor={menu.anchor} label="Document" onClose={menu.close} items={documentContextMenu({anchor:menu.anchor,target:!!target,values:toolbarValues,disabled:busy||composing,link:!!docxSelection(snapshot.preview.document,selected)?.run.can_edit_hyperlink&&!!(draft.length||selection?.run.text?.length)&&!textRange?.unsupported,table:false,onFormat:patch=>void changeFormatting(patch),onFind:()=>{setSearchOpen(true);requestAnimationFrame(()=>searchInput.current?.focus())},onRibbonTab:setRibbonTab})} />}
     </>}
     {statistics&&snapshot&&<EditorStatus label="Document status">

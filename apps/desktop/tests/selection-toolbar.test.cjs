@@ -63,8 +63,10 @@ test('mini toolbar is Office\'s floating card of icon buttons, fixed widths, dri
   assert.equal(view.root.findByProps({ 'aria-label': 'Italic' }).props['aria-pressed'], true);
   assert.equal(view.root.findByProps({ 'aria-label': 'Align left' }).props['aria-pressed'], true);
   // Commands the document transaction does not take are disabled with their reason, never wired to a no-op.
-  assert.equal(view.root.findByProps({ 'aria-label': 'Highlight' }).props.disabled, true);
-  assert.equal(view.root.findByProps({ 'aria-label': 'Highlight' }).props.title, SELECTION_UNSUPPORTED.highlight);
+  assert.equal(view.root.findByProps({ 'aria-label': 'Highlight' }).props.disabled, false);
+  await act(async () => view.root.findByProps({ 'aria-label': 'Highlight' }).props.onClick());
+  assert.deepEqual(patches.at(-1), { highlight: 'yellow' });
+  assert.match(view.root.findByProps({ 'aria-label': 'Highlight' }).props.title, /highlighting/);
   assert.equal(view.root.findByProps({ 'aria-label': 'Bullets' }).props.disabled, true);
   // An editor that passes a bullets handler gets a live button.
   const bulleted = [];
@@ -111,5 +113,6 @@ test('selection geometry: only non-empty selections inside the canvas anchor the
 test('the document editor mounts the mini toolbar on the ribbon values and changeFormatting', () => {
   const office = fs.readFileSync(path.resolve(__dirname, '../src/OfficeEditor.tsx'), 'utf8');
   assert.match(office, /import SelectionToolbar from '\.\/SelectionToolbar'/);
-  assert.match(office, /<SelectionToolbar values=\{toolbarValues\} disabled=\{busy\|\|composing\} onChange=\{patch=>void changeFormatting\(patch\)\} \/>/);
+  assert.match(office, /<SelectionToolbar values=\{toolbarValues\} disabled=\{busy\|\|composing\} onChange=\{patch=>void changeFormatting\(patch\)\}/);
+  assert.match(office, /onBullets=\{selection/);
 });

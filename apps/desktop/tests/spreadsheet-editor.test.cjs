@@ -200,7 +200,7 @@ test('SpreadsheetEditor arranges its controls as an Excel ribbon with labelled g
     const byLabel = Object.fromEntries(commandButtons.map(node => [node.props['aria-label'] ?? text(node), node]));
     assert.equal(byLabel.Charts.props.disabled, false);
     assert.match(byLabel.Charts.props.title, /selected numeric range/);
-    assert.match(byLabel['Sort range'].props.title, /not supported by the native XLSX transaction/);
+    for (const label of ['Sort range','Filter text','Freeze top row','Freeze first column']) assert.equal(byLabel[label].props.disabled, false, label);
     assert.equal(byLabel.Recalculate.props.disabled, false);
     assert.equal(view.root.findByProps({ 'aria-label': 'Cell value or formula' }) != null, true, 'name box and fx bar are untouched');
   } finally {

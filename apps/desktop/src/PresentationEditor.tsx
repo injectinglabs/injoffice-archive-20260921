@@ -316,14 +316,14 @@ export default function PresentationEditor({ name, bytes, onInitialLoadError, on
       { id: 'slides', label: 'Slides', children: <>
         <RibbonButton icon="newSlide" label="New slide" disabled={blocked || !slide?.source} title={!slide?.source ? 'This slide has no source layout anchor.' : undefined} onClick={() => insert('slide')} />
         <RibbonButton icon="duplicate" label="Duplicate slide" disabled={blocked || !slide} onClick={() => structure('duplicate')} />
-        <RibbonButton icon="moveEarlier" label="Move earlier" disabled={blocked || !slide || index === 0} onClick={() => structure('previous')} />
-        <RibbonButton icon="moveLater" label="Move later" disabled={blocked || !snapshot || index >= snapshot.deck.slides.length - 1} onClick={() => structure('next')} />
-        <RibbonButton icon="deleteSlide" label="Delete slide" disabled={blocked || !snapshot || snapshot.deck.slides.length <= 1} ref={deleteTrigger} onClick={() => setConfirmDelete(true)} />
+        <RibbonButton icon="moveEarlier" label="Move earlier" title={index === 0 ? "This is the first slide." : undefined} disabled={blocked || !slide || index === 0} onClick={() => structure('previous')} />
+        <RibbonButton icon="moveLater" label="Move later" title={snapshot && index >= snapshot.deck.slides.length - 1 ? "This is the last slide." : undefined} disabled={blocked || !snapshot || index >= snapshot.deck.slides.length - 1} onClick={() => structure('next')} />
+        <RibbonButton icon="deleteSlide" label="Delete slide" title={snapshot && snapshot.deck.slides.length <= 1 ? "Keep at least one slide in the presentation." : undefined} disabled={blocked || !snapshot || snapshot.deck.slides.length <= 1} ref={deleteTrigger} onClick={() => setConfirmDelete(true)} />
       </> },
       { id: 'font', label: 'Font', children: <PresentationTextToolbar section="font" run={run} align={selectedParagraph?.align} disabled={busy || confirmDelete || !text || (!!draft && draft.kind !== 'text')} onRunChange={patch => textPatch(patch)} onAlignChange={align => textPatch({}, align)} /> },
       { id: 'paragraph', label: 'Paragraph', children: <PresentationTextToolbar section="paragraph" run={run} align={selectedParagraph?.align} disabled={busy || confirmDelete || !text || (!!draft && draft.kind !== 'text')} onRunChange={patch => textPatch(patch)} onAlignChange={align => textPatch({}, align)} /> },
       { id: 'drawing', label: 'Drawing', children: <>
-        <RibbonButton icon="align" label="Arrange" title="Align or space the objects selected on this slide" disabled={blocked || arrangeable.length < 2} aria-expanded={paneOpen} onClick={() => setPaneOpen(true)} />
+        <RibbonButton icon="align" label="Arrange" title={blocked ? "Apply or cancel the current edit first." : "Select at least two objects to align or space them."} disabled={blocked || arrangeable.length < 2} aria-expanded={paneOpen} onClick={() => setPaneOpen(true)} />
         <RibbonButton icon="sidebar" label="Format" title="Show or hide the Format pane for the selected object" disabled={!snapshot} aria-pressed={paneOpen} onClick={() => setPaneOpen(!paneOpen)} />
         <RibbonButton icon="deleteObject" label="Delete object" disabled={blocked || !selectedItem || selectedItem.grouped || (!text && !shape && !geometryTarget(snapshot!.deck, selected))} onClick={deleteObject} />
       </> },

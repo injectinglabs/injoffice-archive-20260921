@@ -63,3 +63,13 @@ test('linked DOCX text retains toolbar values while disabling unsupported charac
   assert.equal(values.bold, true);
   assert.equal(values.characterEditable, false);
 });
+
+test('DOCX highlight goes into the engine mutation and reads back into formatting values', async () => {
+  const { documentFormatting, formattingValues } = await loadFormatting();
+  const model = document(); model.source = { package_sha256: 'revision' };
+  const request = documentFormatting(model, 'run-1', { highlight: 'yellow' }, 'highlight');
+  assert.deepEqual(request.payload.mutations[0].properties, { highlight: 'yellow' });
+  model.body.blocks[0].paragraph.runs[0].properties.highlight = 'yellow';
+  assert.equal(formattingValues({ kind: 'docx', document: model }, 'run-1').highlight, 'yellow');
+  assert.deepEqual(documentFormatting(model, 'run-1', { highlight: 'none' }, 'clear').payload.mutations[0].properties, { highlight: 'none' });
+});

@@ -85,7 +85,7 @@ export function SheetBordersMenu({ disabled, reason, onApply, line = 'thin', col
 
 /** An icon command with a caret that opens a small menu, like Excel's Insert/Delete/Format. */
 export function SheetMenuButton({ icon, label, disabled, reason, children }: { icon: SheetIconName; label: string; disabled?: boolean; reason?: string; children: ReactNode }) {
-  if (disabled || reason) return <button type="button" className="ribbon-button ribbon-button-icon-only" title={reason ?? label} aria-label={label} disabled><SheetIcon name={icon} /></button>;
+  if (disabled || reason) return <button type="button" className="ribbon-button ribbon-button-icon-only" title={reason ?? "Apply or cancel the cell edit, or wait for the workbook operation to finish."} aria-label={label} disabled><SheetIcon name={icon} /></button>;
   return <details className="sheet-menu">
     <summary title={label} aria-label={label}><SheetIcon name={icon} /><span className="sheet-menu-caret" aria-hidden="true">▾</span></summary>
     <div>{children}</div>

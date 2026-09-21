@@ -109,7 +109,7 @@ test('ribbon buttons carry an icon, a label, and the shortcut in their tooltip',
   const buttons = view.root.findAllByType('button');
   assert.equal(buttons.length, 3);
   for (const button of buttons) assert.equal(button.findAllByType('svg').length, 1, 'every button has an icon');
-  assert.equal(buttons[0].props.title, `Undo (${shortcutLabel('undo')})`);
+  assert.equal(buttons[0].props.title, `This command needs an editable selection or a completed edit. (${shortcutLabel('undo')})`);
   assert.equal(buttons[0].props['aria-keyshortcuts'], shortcutKeys('undo'));
   assert.equal(buttons[0].props.disabled, true);
   assert.equal(text(buttons[0]), 'Undo');

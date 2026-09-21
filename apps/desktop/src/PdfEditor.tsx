@@ -384,18 +384,18 @@ export default function PdfEditor({ name, bytes, onInitialLoadError, onChange, o
           <RibbonButton icon="newDocument" label="Add page" title="Add a blank page after this one" disabled={pageDisabled} onClick={() => void command({ kind: 'add-page', page }, page + 1)} />
           {bridge?.pickAsset && <RibbonButton icon="import" label="Import pages…" disabled={pageDisabled} onClick={() => void importAsset('pdf')} />}
         </div>
-        <div><RibbonButton icon="pageDelete" label="Delete page" disabled={pageDisabled || count < 2} onClick={() => void command({ kind: 'delete-page', page }, Math.max(1, Math.min(page, count - 1)))} /></div>
+        <div><RibbonButton icon="pageDelete" label="Delete page" title={count < 2 ? "Keep at least one page in the PDF." : undefined} disabled={pageDisabled || count < 2} onClick={() => void command({ kind: 'delete-page', page }, Math.max(1, Math.min(page, count - 1)))} /></div>
       </RibbonRows> },
       { id: 'arrange', label: 'Arrange', children: <>
         <RibbonButton icon="rotate" label="Rotate 90°" disabled={pageDisabled} onClick={() => void command({ kind: 'rotate', page })} />
-        <RibbonButton icon="moveEarlier" label="Move page earlier" labelHidden disabled={pageDisabled || page === 1} onClick={() => void command({ kind: 'move-page', page, to: page - 1 }, page - 1)} />
-        <RibbonButton icon="moveLater" label="Move page later" labelHidden disabled={pageDisabled || page === count} onClick={() => void command({ kind: 'move-page', page, to: page + 1 }, page + 1)} />
+        <RibbonButton icon="moveEarlier" label="Move page earlier" title={page === 1 ? "This is the first page." : undefined} labelHidden disabled={pageDisabled || page === 1} onClick={() => void command({ kind: 'move-page', page, to: page - 1 }, page - 1)} />
+        <RibbonButton icon="moveLater" label="Move page later" title={page === count ? "This is the last page." : undefined} labelHidden disabled={pageDisabled || page === count} onClick={() => void command({ kind: 'move-page', page, to: page + 1 }, page + 1)} />
       </> },
     ] },
     { id: 'View', label: 'View', groups: [
       { id: 'navigation', label: 'Page Navigation', children: <>
-        <RibbonButton icon="pagePrevious" label="Previous page" labelHidden disabled={disabled || page <= 1} onClick={() => { setPage(page - 1); setNotice('') }} />
-        <RibbonButton icon="pageNext" label="Next page" labelHidden disabled={disabled || page >= count} onClick={() => { setPage(page + 1); setNotice('') }} />
+        <RibbonButton icon="pagePrevious" label="Previous page" title={page <= 1 ? "This is the first page." : undefined} labelHidden disabled={disabled || page <= 1} onClick={() => { setPage(page - 1); setNotice('') }} />
+        <RibbonButton icon="pageNext" label="Next page" title={page >= count ? "This is the last page." : undefined} labelHidden disabled={disabled || page >= count} onClick={() => { setPage(page + 1); setNotice('') }} />
         <label className="pdf-page-field"><RibbonIcon name="goToPage" />Page<input type="number" aria-label="Go to page" min={1} max={Math.max(count, 1)} value={page} disabled={disabled || !count} onChange={event => { const next = Number(event.target.value); if (Number.isInteger(next) && next >= 1 && next <= count) { setPage(next); setNotice('') } }} /></label>
         <span className="ribbon-note">of {count || '…'}</span>
       </> },

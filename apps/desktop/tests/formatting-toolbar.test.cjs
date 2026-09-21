@@ -101,3 +101,14 @@ test('ribbon controls show the value in effect and stay empty for a mixed select
   assert.equal(view.root.findByProps({ className: 'ribbon-color-bar' }).props.style, undefined);
   await act(async () => view.unmount());
 });
+
+test('paragraph toolbar can create lists when the document has no numbering definitions', async () => {
+  const ParagraphToolbar = await load('ParagraphToolbar.tsx'); const patches = []; let view;
+  await act(async () => { view = create(React.createElement(ParagraphToolbar, { properties: {}, styles: [], numbering: [], disabled: false, onChange: patch => patches.push(patch) })); });
+  try {
+    const list = view.root.findByProps({ 'aria-label': 'Paragraph list' });
+    assert.equal(list.props.disabled, false);
+    for (const value of ['@bullet', '@decimal', '0']) await act(async () => list.props.onChange({ target: { value } }));
+    assert.deepEqual(patches, [{ numbering_kind: 'bullet', numbering_level: 0 }, { numbering_kind: 'decimal', numbering_level: 0 }, { numbering_num_id: '0', numbering_level: 0 }]);
+  } finally { await act(async () => view.unmount()); }
+});
