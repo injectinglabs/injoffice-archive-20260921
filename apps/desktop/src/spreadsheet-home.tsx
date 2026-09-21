@@ -74,12 +74,12 @@ export const BORDER_PRESETS: { value: SheetBorderPreset; icon: SheetIconName; la
 ];
 
 /** Borders as an icon menu. `reason` disables it and explains why in the tooltip. */
-export function SheetBordersMenu({ disabled, reason, onApply }: { disabled?: boolean; reason?: string; onApply(preset: SheetBorderPreset): void }) {
+export function SheetBordersMenu({ disabled, reason, onApply, line = 'thin', color = '#000000', onLine, onColor }: { disabled?: boolean; reason?: string; onApply(preset: SheetBorderPreset): void; line?: NonNullable<StyleDelta['border_top']>['style']; color?: string; onLine?(line: NonNullable<StyleDelta['border_top']>['style']): void; onColor?(color: string): void }) {
   const title = reason ?? 'Borders';
   if (disabled || reason) return <button type="button" className="ribbon-button ribbon-button-icon-only" title={title} aria-label="Borders" disabled><SheetIcon name="borders" /></button>;
   return <details className="sheet-menu sheet-borders-menu">
     <summary title={title} aria-label="Borders"><SheetIcon name="borders" /><span className="sheet-menu-caret" aria-hidden="true">▾</span></summary>
-    <div>{BORDER_PRESETS.map(preset => <button key={preset.value} type="button" title={preset.label} onClick={() => onApply(preset.value)}><SheetIcon name={preset.icon} />{preset.label}</button>)}</div>
+    <div><label>Line style<select aria-label="Border line style" value={line} onChange={event => onLine?.(event.target.value as NonNullable<StyleDelta['border_top']>['style'])}>{(['thin','medium','thick','double','dotted','dashed'] as const).map(value => <option key={value}>{value}</option>)}</select></label><label>Line color<input aria-label="Border color" type="color" value={color} onChange={event => onColor?.(event.target.value)} /></label>{BORDER_PRESETS.map(preset => <button key={preset.value} type="button" title={preset.label} onClick={() => onApply(preset.value)}><SheetIcon name={preset.icon} />{preset.label}</button>)}</div>
   </details>;
 }
 

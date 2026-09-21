@@ -76,9 +76,17 @@ export type VerticalAlignment = 'top' | 'middle' | 'bottom'
 /**
  * Fixed v1 style vocabulary. Omitted means unchanged; null clears the direct
  * cell property so workbook defaults/inheritance apply. Arbitrary OOXML,
- * borders, rotations, indentation, and conditional formats are out of scope.
+ * rotations, indentation, and conditional formats are out of scope.
  */
+export const BORDER_STYLES = ['none', 'thin', 'medium', 'thick', 'double', 'dotted', 'dashed', 'hair', 'dashDot', 'dashDotDot', 'mediumDashed', 'mediumDashDot', 'mediumDashDotDot', 'slantDashDot'] as const
+export interface BorderEdge { style: (typeof BORDER_STYLES)[number]; color: string }
+
 export interface StyleDelta {
+  /** Omitted edges are unchanged; null restores the inherited edge. */
+  border_top?: BorderEdge | null
+  border_bottom?: BorderEdge | null
+  border_left?: BorderEdge | null
+  border_right?: BorderEdge | null
   number_format?: string | null
   font_name?: string | null
   font_size_points?: number | null
@@ -345,6 +353,7 @@ function parseRangeRef(value: unknown, path: string, issues: WorkbookMutationIss
 }
 
 const styleKeys = [
+  'border_top', 'border_bottom', 'border_left', 'border_right',
   'number_format',
   'font_name',
   'font_size_points',
@@ -438,6 +447,20 @@ function parseStyleDelta(value: unknown, path: string, issues: WorkbookMutationI
   const out: StyleDelta = {}
   const put = <K extends keyof StyleDelta>(key: K, parsed: StyleDelta[K] | undefined): void => {
     if (Object.prototype.hasOwnProperty.call(value, key) && parsed !== undefined) out[key] = parsed
+  }
+  for (const key of ['border_top', 'border_bottom', 'border_left', 'border_right'] as const) {
+    const edge = value[key], edgePath = `${path}/${key}`
+    if (edge === null) put(key, null)
+    else if (edge !== undefined) {
+      if (!isObject(edge)) issue(issues, 'INVALID_TYPE', edgePath, 'must be an edge object or null', operationIndex, operationId)
+      else {
+        rejectUnknownFields(edge, ['style', 'color'], edgePath, issues, operationIndex, operationId)
+        const style = nullableEnum(edge.style, BORDER_STYLES, `${edgePath}/style`, issues, operationIndex, operationId)
+        const color = nullableColor(edge.color, `${edgePath}/color`, issues, operationIndex, operationId)
+        if (!style || !color) issue(issues, 'INVALID_VALUE', edgePath, 'edge requires a line style and color', operationIndex, operationId)
+        else put(key, { style, color })
+      }
+    }
   }
   put('number_format', nullableString(value.number_format, `${path}/number_format`, MAX_FORMAT_LENGTH, issues, operationIndex, operationId))
   put('font_name', nullableString(value.font_name, `${path}/font_name`, MAX_FONT_NAME_LENGTH, issues, operationIndex, operationId))

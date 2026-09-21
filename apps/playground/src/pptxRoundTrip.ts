@@ -201,6 +201,7 @@ export function pptxTargetValue(target: EditablePptxTarget | undefined): string 
 export function buildPptxMutationEvidence(target: EditablePptxTarget, mutation: PptxNativeMutationRequestV1): PptxMutationEvidence {
   const operation = mutation.operations[0]
   if (!operation) throw new Error('PPTX mutation evidence requires one operation.')
+  if (operation.kind !== 'text.replace' && operation.kind !== 'autoshape.update') throw new Error('PPTX element evidence supports only text.replace and autoshape.update.')
   let requested: Record<string, string | number>
   if (operation.kind === 'text.replace') {
     requested = {

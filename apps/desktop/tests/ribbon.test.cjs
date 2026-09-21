@@ -280,3 +280,40 @@ test('the shared ribbon primitives: alignment toggles and a colour button, ready
   assert.equal(view.root.findByProps({ 'aria-label': 'Fill color' }).props['aria-expanded'], false, 'picking closes the palette');
   await act(async () => view.unmount());
 });
+
+test('File opens backstage without selecting a ribbon panel and passes live export controls', async () => {
+  const { default: Ribbon, WorkspaceFileGroupsContext } = await load('Ribbon.tsx');
+  let opened = 0, supplied, view;
+  const tabs = [{ id: 'File', label: 'File', groups: [{ id: 'export', label: 'Export', children: h('select', { 'aria-label': 'PDF font handling' }) }] }, { id: 'Home', label: 'Home', groups: [{ id: 'edit', label: 'Edit', children: 'Text' }] }];
+  await act(async () => { view = create(h(WorkspaceFileGroupsContext, { value: { before: [], after: [], backstage: { open: () => opened++, render: groups => { supplied = groups; return null; } } } }, h(Ribbon, { label: 'Tools', tabs, active: 'Home', onChange: () => assert.fail('File must not select a ribbon panel') }))); });
+  assert.deepEqual(view.root.findAllByProps({ role: 'tab' }).map(text), ['Home']);
+  assert.equal(view.root.findAllByType('select').length, 0);
+  assert.equal(supplied[0].children.props['aria-label'], 'PDF font handling');
+  await act(async () => view.root.findByProps({ 'aria-haspopup': 'dialog' }).props.onClick());
+  assert.equal(opened, 1);
+  await act(async () => view.unmount());
+});
+
+test('backstage panes expose real actions, honest metadata and Escape/back navigation', async () => {
+  const { default: Backstage, backstagePages } = await load('Backstage.tsx');
+  const calls = []; let view;
+  global.document = { activeElement: null, querySelector: () => null };
+  const props = { page: 'New', onPage: page => calls.push(page), onBack: () => calls.push('back'), name: 'Report.docx', size: 1234, dirty: false, busy: false, available: true, recentFiles: [{ id: 'r1', name: 'Recent.docx', path: '/docs/Recent.docx' }], onCreate: kind => calls.push(kind), onOpen: id => calls.push(id), onSave: saveAs => calls.push(saveAs), onCloseDocument() {}, onPreferences() {}, onUpdates() {} };
+  try {
+    await act(async () => { view = create(h(Backstage, props)); });
+    assert.deepEqual(view.root.findByType('nav').findAllByType('button').map(text), [...backstagePages]);
+    await act(async () => view.root.findAllByType('button').find(button => text(button).includes('Blank spreadsheet')).props.onClick());
+    assert.deepEqual(calls, ['xlsx']);
+    await act(async () => view.update(h(Backstage, { ...props, page: 'Info' })));
+    assert.match(text(view.root), /1,234 bytes/);
+    assert.match(text(view.root), /Unavailable.*does not expose file modification times/);
+    assert.match(text(view.root), /Engine capabilities/);
+    await act(async () => view.update(h(Backstage, { ...props, page: 'Open' })));
+    await act(async () => view.root.findAllByType('button').find(button => text(button).includes('Recent.docx')).props.onClick());
+    assert.equal(calls.at(-1), 'r1');
+    await act(async () => view.root.findByProps({ role: 'dialog' }).props.onKeyDown({ key: 'Escape', preventDefault() {}, stopPropagation() {} }));
+    assert.equal(calls.at(-1), 'back');
+    await act(async () => view.update(h(Backstage, { ...props, page: 'Save as', busy: true })));
+    assert.equal(view.root.findAllByType('button').find(button => text(button) === 'Choose location…').props.disabled, true);
+  } finally { if (view) await act(async () => view.unmount()); delete global.document; }
+});

@@ -73,7 +73,24 @@ const (
 	VerticalBottom VerticalAlignment = "bottom"
 )
 
+type BorderEdge struct {
+	Style string `json:"style"`
+	Color string `json:"color"`
+}
+
+func (edge *BorderEdge) UnmarshalJSON(data []byte) error {
+	type wire BorderEdge
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	return decoder.Decode((*wire)(edge))
+}
+
 type StyleDelta struct {
+	BorderTop    StyleProperty[BorderEdge] `json:"border_top"`
+	BorderBottom StyleProperty[BorderEdge] `json:"border_bottom"`
+	BorderLeft   StyleProperty[BorderEdge] `json:"border_left"`
+	BorderRight  StyleProperty[BorderEdge] `json:"border_right"`
+
 	NumberFormat        StyleProperty[string]              `json:"number_format"`
 	FontName            StyleProperty[string]              `json:"font_name"`
 	FontSizePoints      StyleProperty[float64]             `json:"font_size_points"`
@@ -257,7 +274,17 @@ func validateStyleMutations(mutations []StylePatchMutation) ([]normalizedStyleMu
 }
 
 func validateStyleDelta(delta StyleDelta) error {
+	for _, edge := range []StyleProperty[BorderEdge]{delta.BorderTop, delta.BorderBottom, delta.BorderLeft, delta.BorderRight} {
+		if !edge.Present && edge.Value != nil {
+			return fmt.Errorf("border value requires Present=true")
+		}
+		if edge.Value != nil && ((edge.Value.Style != "none" && !supportedBorderStyleTokens[edge.Value.Style]) || !canonicalRGBColor(edge.Value.Color)) {
+			return fmt.Errorf("border requires a supported line style and canonical uppercase #RRGGBB")
+		}
+	}
+
 	properties := []bool{
+		delta.BorderTop.Present, delta.BorderBottom.Present, delta.BorderLeft.Present, delta.BorderRight.Present,
 		delta.NumberFormat.Present, delta.FontName.Present, delta.FontSizePoints.Present,
 		delta.Bold.Present, delta.Italic.Present, delta.FontColor.Present,
 		delta.FillColor.Present, delta.HorizontalAlignment.Present,
@@ -342,6 +369,19 @@ func canonicalRGBColor(value string) bool {
 }
 
 func mergeStyleDelta(current, next StyleDelta) StyleDelta {
+	if next.BorderTop.Present {
+		current.BorderTop = next.BorderTop
+	}
+	if next.BorderBottom.Present {
+		current.BorderBottom = next.BorderBottom
+	}
+	if next.BorderLeft.Present {
+		current.BorderLeft = next.BorderLeft
+	}
+	if next.BorderRight.Present {
+		current.BorderRight = next.BorderRight
+	}
+
 	if next.NumberFormat.Present {
 		current.NumberFormat = next.NumberFormat
 	}
