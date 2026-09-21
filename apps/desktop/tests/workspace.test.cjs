@@ -364,3 +364,44 @@ test('the save state is spelled once, in the title bar, in Office wording', asyn
     assert.equal(title(), 'Unsaved changes');
   } finally { if (renderer) await act(async () => renderer.unmount()); delete global.window; }
 });
+
+// Word's Focus mode shows the page alone and leaves on Esc; ours kept the ribbon and ignored Esc.
+test('Focus mode strips the chrome and Esc leaves it unless a draft is being edited', async () => {
+  const App = await loadApp();
+  const listeners = new Map();
+  const press = key => { for (const listener of [...(listeners.get('keydown') ?? [])]) listener({ key, defaultPrevented: false, preventDefault() { this.defaultPrevented = true; }, metaKey: false, ctrlKey: false, altKey: false }); };
+  global.window = {
+    localStorage: { getItem: () => null, setItem() {} },
+    document: { title: '', querySelector: () => null, activeElement: null },
+    addEventListener(type, listener) { listeners.set(type, [...(listeners.get(type) ?? []), listener]); },
+    removeEventListener(type, listener) { listeners.set(type, (listeners.get(type) ?? []).filter(entry => entry !== listener)); },
+    injDesktop: {
+      recent: async () => [], recovery: async () => [], nextExternal: async () => null, setDirty() {}, setBusy() {}, onMenuAction() { return () => {}; }, checkpoint: async () => {},
+      create: async format => ({ id: `id-${format}`, name: `Untitled.${format}`, bytes: new Uint8Array([0x50, 0x4b, 3, 4]), untitled: true }),
+    },
+  };
+  let renderer;
+  const focused = () => /\bis-focused\b/.test(renderer.toJSON().props.className);
+  try {
+    await act(async () => { renderer = create(React.createElement(App)); });
+    await act(async () => renderer.root.findByType('test-start').props.onCreate('docx'));
+    const editor = renderer.root.findByType('test-editor');
+    assert.equal(editor.props.viewOptions.focus, false);
+    const toggle = () => renderer.root.findAllByType('button').find(button => /Focus mode|Exit focus mode/.test(button.props['aria-label'] ?? ''));
+    await act(async () => toggle().props.onClick());
+    assert.ok(focused(), 'the workspace marks focus mode for the stylesheet');
+    assert.equal(renderer.root.findByType('test-editor').props.viewOptions.focus, true, 'the editors drop their own side panes');
+    assert.equal(toggle().props['aria-pressed'], true);
+    // A draft owns Esc: the editor cancels it and focus mode stays.
+    await act(async () => editor.props.onDraftChange(true));
+    await act(async () => press('Escape'));
+    assert.ok(focused(), 'Esc cancels the draft first, it does not leave focus mode');
+    await act(async () => editor.props.onDraftChange(false));
+    await act(async () => press('Escape'));
+    assert.equal(focused(), false, 'Esc leaves focus mode once nothing is being edited');
+    assert.equal(renderer.root.findByType('test-editor').props.viewOptions.focus, false);
+    // The toggle brings it back, and no listener leaks when the workspace unmounts.
+    await act(async () => toggle().props.onClick());
+    assert.ok(focused());
+  } finally { if (renderer) await act(async () => renderer.unmount()); delete global.window; }
+});
