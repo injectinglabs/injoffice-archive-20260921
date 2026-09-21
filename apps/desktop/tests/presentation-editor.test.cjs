@@ -38,7 +38,7 @@ async function loadEditor() {
   try {
     const { output } = await bundle.generate({ format: 'cjs', codeSplitting: false });
     const mod = { exports: {} };
-    const req = id => (id.includes('pptxRoundTrip') ? { editablePptxTextTargets: () => [], editablePptxShapeTargets: () => [] } : require(id));
+    const req = id => (id.includes('pptxRoundTrip') ? { editablePptxTextTargets: deck => globalThis.__textTargets?.(deck) ?? [], editablePptxShapeTargets: () => [] } : require(id));
     new Function('require', 'module', 'exports', output[0].code)(req, mod, mod.exports);
     return mod.exports.default ?? mod.exports;
   } finally {
@@ -222,5 +222,92 @@ test('the Format pane is closed until Format is pressed and Arrange is one of it
   } finally {
     if (view) await act(async () => view.unmount());
     delete globalThis.__pptxClient;
+  }
+});
+
+/** A deck with one editable text box, so the caret can be put in painted text. */
+function textClient() {
+  const applied = [];
+  const compatibility = { status: 'editable', diagnostics: [] };
+  const paragraphs = () => [{ align: 'left', runs: [{ text: 'Hello', fontFamily: 'Arial', fontSizeHundredthPt: 1800, bold: false, italic: false, color: '20242B' }] }];
+  let text = 'Hello';
+  let revision = 'rev-1';
+  const element = () => ({ id: 'e1', kind: 'text', name: 'Title', source: { partName: 'ppt/slides/slide1.xml', objectId: '2' }, compatibility, rotation60000: 0,
+    transform: { x: 0, y: 0, cx: 4572000, cy: 1143000 }, textBody: { leftInsetEmu: 0, rightInsetEmu: 0, topInsetEmu: 0, bottomInsetEmu: 0, wrap: 'square', verticalAnchor: 'top' },
+    paragraphs: [{ ...paragraphs()[0], runs: [{ ...paragraphs()[0].runs[0], text }] }] });
+  const deck = () => ({ contractVersion: 'pptx-native/v1', documentId: 'deck', sourceRevision: revision, size: { cx: 9144000, cy: 5143500 }, assets: [], compatibility,
+    slides: [{ id: 's1', elements: [element()], compatibility }] });
+  globalThis.__textTargets = value => value.slides[0].elements.map(item => ({ slideIndex: 0, elementId: item.id, sourcePartName: item.source.partName, sourceObjectId: item.source.objectId, expectedFingerprintSha256: 'f', paragraphs: item.paragraphs }));
+  return {
+    applied,
+    extract: async () => deck(),
+    apply: async (_bytes, _deck, request) => { applied.push(request); text = request.operations[0].paragraphs[0].runs[0].text; revision = `rev-${applied.length + 1}`; return new Uint8Array([1]); },
+    terminate() {},
+  };
+}
+
+test('clicking slide text puts the caret on the canvas; Enter commits through the text transaction', async () => {
+  const client = textClient();
+  globalThis.__pptxClient = client;
+  const PresentationEditor = await loadEditor();
+  const busy = [];
+  let view;
+  try {
+    await act(async () => {
+      view = create(React.createElement(PresentationEditor, { name: 'Deck.pptx', bytes: new Uint8Array([1]), onChange: () => {}, onBusyChange: value => busy.push(value) }));
+    });
+    await until(() => busy.at(-1) === false && view.root.findAllByProps({ 'aria-label': 'Select Title' }).length > 0);
+    assert.equal(view.root.findAllByProps({ role: 'textbox' }).length, 0, 'no caret before the text is clicked');
+    const object = view.root.findByProps({ 'aria-label': 'Select Title' });
+    await act(async () => object.props.onClick({ stopPropagation() {}, target: {}, clientX: 40, clientY: 40, ctrlKey: false, metaKey: false }));
+    const caret = view.root.findByProps({ role: 'textbox' });
+    assert.equal(caret.props['aria-label'], 'Slide text');
+    assert.equal(caret.props.contentEditable, 'plaintext-only');
+    assert.equal(caret.props.style.fontFamily, 'Arial', 'the caret keeps the painted font');
+    await act(async () => caret.props.onInput({ currentTarget: { textContent: 'Hello world' } }));
+    assert.equal(client.applied.length, 0, 'typing stays a draft');
+    await act(async () => caret.props.onKeyDown({ key: 'Enter', preventDefault() {}, stopPropagation() {} }));
+    await until(() => client.applied.length === 1 && busy.at(-1) === false);
+    assert.equal(client.applied[0].operations[0].kind, 'text.replace');
+    assert.equal(client.applied[0].operations[0].paragraphs[0].runs[0].text, 'Hello world');
+    assert.equal(view.root.findAllByProps({ role: 'textbox' }).length, 0, 'the caret leaves on commit');
+  } finally {
+    if (view) await act(async () => view.unmount());
+    delete globalThis.__pptxClient;
+    delete globalThis.__textTargets;
+  }
+});
+
+test('the inspector has no text segment select or textarea, and the wrapping caveat is a status-row tooltip', async () => {
+  const client = textClient();
+  globalThis.__pptxClient = client;
+  const PresentationEditor = await loadEditor();
+  const busy = [];
+  let view;
+  try {
+    await act(async () => {
+      view = create(React.createElement(PresentationEditor, { name: 'Deck.pptx', bytes: new Uint8Array([1]), onChange: () => {}, onBusyChange: value => busy.push(value) }));
+    });
+    await until(() => busy.at(-1) === false && view.root.findAllByProps({ 'aria-label': 'Select Title' }).length > 0);
+    const object = view.root.findByProps({ 'aria-label': 'Select Title' });
+    await act(async () => object.props.onClick({ stopPropagation() {}, target: {}, clientX: 40, clientY: 40, ctrlKey: false, metaKey: false }));
+    assert.equal(view.root.findAllByProps({ 'aria-label': 'Slide text segment' }).length, 0);
+    assert.equal(view.root.findAllByType('textarea').length, 0);
+    assert.equal(view.root.findAllByType('button').filter(node => text(node) === 'Text' && node.props['aria-pressed'] !== undefined).length, 0, 'no Text tab in the pane');
+    const label = view.root.findByProps({ className: 'presentation-canvas-label' });
+    assert.equal(/wrapping/.test(text(label)), false, 'the caveat is off the canvas');
+    const note = view.root.findByProps({ 'aria-label': 'Preview note' });
+    assert.match(note.props.title, /text wrapping may differ in PowerPoint/);
+    assert.equal(view.root.findByProps({ className: 'presentation-status' }) != null, true);
+    // Esc puts the painted text back and drops the draft.
+    const caret = view.root.findByProps({ role: 'textbox' });
+    await act(async () => caret.props.onInput({ currentTarget: { textContent: 'Draft' } }));
+    await act(async () => caret.props.onKeyDown({ key: 'Escape', preventDefault() {}, stopPropagation() {} }));
+    assert.equal(client.applied.length, 0);
+    assert.equal(view.root.findAllByProps({ role: 'textbox' }).length, 0);
+  } finally {
+    if (view) await act(async () => view.unmount());
+    delete globalThis.__pptxClient;
+    delete globalThis.__textTargets;
   }
 });

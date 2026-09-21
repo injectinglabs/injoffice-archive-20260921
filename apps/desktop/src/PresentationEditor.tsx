@@ -38,13 +38,18 @@ export default function PresentationEditor({ name, bytes, onChange, onBusyChange
   const [selected, setSelected] = useState('');
   const [arrangeKeys, setArrangeKeys] = useState<string[]>([]);
   const [index, setIndex] = useState(0);
-  const [panel, setPanel] = useState<'text' | 'shape' | 'position' | 'table' | 'rotation'>('text');
+  const [panel, setPanel] = useState<'shape' | 'position' | 'table' | 'rotation'>('position');
   const [cellSelection, setCellSelection] = useState({ row: 0, column: 0 });
   const [cellSegment, setCellSegment] = useState({ paragraph: 0, run: 0 });
   const [cellTextEdit, setCellTextEdit] = useState<{ text: string; paragraphs: readonly PptxNativeExactParagraphV1[] }>();
   const [tableSize, setTableSize] = useState({ rows: 3, columns: 3 });
   const [tableInsertOpen, setTableInsertOpen] = useState(false);
   const [segment, setSegment] = useState({ paragraph: 0, run: 0 });
+  // The run whose text carries the caret on the slide, with the point the caret was placed from.
+  const [editing, setEditing] = useState<{ paragraph: number; run: number; offset?: number }>();
+  const editingRef = useRef(false); editingRef.current = !!editing;
+  const closingEdit = useRef(false);
+  const [caretAnchor, setCaretAnchor] = useState<{ left: number; top: number; below: boolean }>();
   const [error, setError] = useState('');
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [ribbonTab, setRibbonTab] = useState('Home');
@@ -68,7 +73,7 @@ export default function PresentationEditor({ name, bytes, onChange, onBusyChange
       try { const recovered = restorePresentationDraft(deck, initialRecoveryDraft); if (recovered) {
         const target = recovered.draft.kind === 'rotation' ? rotationTarget(deck, recovered.key) : recovered.draft.kind === 'table' ? tableTarget(deck, recovered.key) : recovered.draft.kind === 'geometry' ? geometryTarget(deck, recovered.key) : recovered.draft.kind === 'text' ? textTarget(deck, recovered.key) : shapeTarget(deck, recovered.key);
         if (recovered.draft.kind === 'table') setCellSelection({ row: recovered.draft.row, column: recovered.draft.column });
-        setIndex(target!.slideIndex); setSelected(recovered.key); setPanel(recovered.draft.kind === 'geometry' ? 'position' : recovered.draft.kind);
+        setIndex(target!.slideIndex); setSelected(recovered.key); setPanel(recovered.draft.kind === 'geometry' || recovered.draft.kind === 'text' ? (shapeTarget(deck, recovered.key) ? 'shape' : 'position') : recovered.draft.kind);
         draftRef.current = recovered.draft; setDraft(recovered.draft); callbacks.current.onDraftChange?.(true); callbacks.current.onBusyChange?.(busyRef.current);
       } } catch (reason) { setError(describeError(reason)); }
     } })
@@ -81,6 +86,21 @@ export default function PresentationEditor({ name, bytes, onChange, onBusyChange
     const observer = new ResizeObserver(entries => setWorkspaceWidth(entries[0]?.contentRect.width ?? 740)); observer.observe(workspace.current);
     return () => observer.disconnect();
   }, [!!snapshot, viewOptions?.focus]);
+  // Keep the floating text toolbar over the shape that holds the caret.
+  useEffect(() => {
+    if (!editing) { setCaretAnchor(undefined); return; }
+    const node = workspace.current; if (!node || typeof node.getBoundingClientRect !== 'function') return;
+    const place = () => {
+      const object = node.querySelector('.presentation-object.is-selected');
+      const box = object?.getBoundingClientRect(); const frame = node.getBoundingClientRect();
+      if (!box) return;
+      const below = box.top - frame.top < 48;
+      setCaretAnchor({ left: Math.max(frame.left + 8, Math.min(box.left, frame.right - 320)), top: below ? box.bottom + 8 : box.top - 8, below });
+    };
+    place();
+    node.addEventListener('scroll', place); window.addEventListener('resize', place);
+    return () => { node.removeEventListener('scroll', place); window.removeEventListener('resize', place); };
+  }, [editing, index, selected, workspaceWidth, viewOptions?.zoom]);
   const blocked = busy || !!draft || confirmDelete;
   const canUndo = !blocked && undo.length > 0, canRedo = !blocked && redo.length > 0;
   useEffect(() => { registerHistory?.({ undo: () => historyRef.current('undo'), redo: () => historyRef.current('redo'), canUndo, canRedo }); }, [registerHistory, canUndo, canRedo]);
@@ -110,14 +130,45 @@ export default function PresentationEditor({ name, bytes, onChange, onBusyChange
       return;
     }
     setArrangeKeys(current.current && arrangeTargets(current.current.deck,index).some(item => elementKey(item) === key) ? [key] : []);
-    setSelected(key); setCellSelection({ row: 0, column: 0 }); setSegment({ paragraph: 0, run: 0 }); setPanel(current.current && tableTarget(current.current.deck, key) ? 'table' : current.current && textTarget(current.current.deck, key) ? 'text' : current.current && geometryTarget(current.current.deck, key)?.element.kind === 'picture' ? 'position' : 'shape'); setError('');
+    setSelected(key); setCellSelection({ row: 0, column: 0 }); setSegment({ paragraph: 0, run: 0 }); setEditing(undefined); setPanel(current.current && tableTarget(current.current.deck, key) ? 'table' : current.current && shapeTarget(current.current.deck, key) ? 'shape' : current.current && geometryTarget(current.current.deck, key) ? 'position' : 'shape'); setError('');
+  }
+  /** Put the caret in a run painted on the slide. The ribbon and the floating toolbar keep working on the same segment. */
+  function beginEdit(key: string, at: { paragraph: number; run: number; offset?: number }) {
+    if (busyRef.current || confirmDelete || !current.current) return;
+    const target = textTarget(current.current.deck, key); if (!target) return;
+    const paragraph = Math.min(Math.max(at.paragraph, 0), target.paragraphs.length - 1);
+    const run = Math.min(Math.max(at.run, 0), (target.paragraphs[paragraph]?.runs.length ?? 1) - 1);
+    if (run < 0) return;
+    closingEdit.current = false; setSegment({ paragraph, run }); setEditing({ paragraph, run, offset: at.offset });
+  }
+  /** Canvas selection. A pending caret edit is committed first so one click moves on. */
+  async function selectFromCanvas(key: string, additive: boolean, at?: { paragraph: number; run: number; offset?: number }) {
+    if (editingRef.current && draftRef.current?.kind === 'text') {
+      closingEdit.current = true; setEditing(undefined);
+      if (!await applyDraft()) return;
+    }
+    choose(key, additive);
+    if (!additive && at) beginEdit(key, at);
+  }
+  function editText(value: string) {
+    if (!editingRef.current) return;
+    // The native text transaction has no line breaks inside a run; pasted ones become spaces.
+    textPatch({ text: value.replace(/[\r\n\t]+/g, ' ') });
+  }
+  async function commitEdit() {
+    closingEdit.current = true; setEditing(undefined);
+    if (draftRef.current) await applyDraft();
+  }
+  function cancelEdit() {
+    closingEdit.current = true; setEditing(undefined);
+    if (draftRef.current?.kind === 'text') { updateDraft(undefined); setError(''); }
   }
   function arrange(action: ArrangeAction) {
     if (blocked || !current.current || dragging.current || composing.current) return;
     try { void applyCommand(arrangeCommand(current.current.deck,index,arrangeKeys,action,newId())); }
     catch (reason) { setError(describeError(reason)); }
   }
-  function selectSlide(next: number) { if (blocked) return; setIndex(next); setSelected(''); setArrangeKeys([]); setSegment({ paragraph: 0, run: 0 }); setError(''); }
+  function selectSlide(next: number) { if (blocked) return; setIndex(next); setSelected(''); setArrangeKeys([]); setSegment({ paragraph: 0, run: 0 }); setEditing(undefined); setError(''); }
   function textPatch(patch: Partial<NonNullable<typeof run>>, alignment?: 'left' | 'center' | 'right') {
     if (!paragraphs || busyRef.current) return;
     const next = structuredClone(paragraphs) as PptxNativeExactParagraphV1[];
@@ -157,7 +208,7 @@ export default function PresentationEditor({ name, bytes, onChange, onBusyChange
       setIndex(Math.max(0, Math.min(nextIndex, deck.slides.length - 1)));
       if ((request.operations[0]?.kind.startsWith('slide.') && request.operations[0]?.kind !== 'slide.background.set') || request.operations[0]?.kind === 'element.delete') { setSelected(''); setArrangeKeys([]); }
       if (request.operations[0]?.kind === 'table.insert' || request.operations[0]?.kind === 'picture.insert' || request.operations[0]?.kind === 'text.insert' || request.operations[0]?.kind === 'autoshape.insert') {
-        const item = deck.slides[nextIndex]?.elements.at(-1); if (item) { setArrangeKeys([]); setSelected(elementKey(item)); setPanel(request.operations[0].kind === 'table.insert' ? 'table' : request.operations[0].kind === 'text.insert' ? 'text' : request.operations[0].kind === 'picture.insert' ? 'position' : 'shape'); setSegment({ paragraph: 0, run: 0 }); setCellSelection({ row: 0, column: 0 }); }
+        const item = deck.slides[nextIndex]?.elements.at(-1); if (item) { setArrangeKeys([]); setSelected(elementKey(item)); setPanel(request.operations[0].kind === 'table.insert' ? 'table' : request.operations[0].kind === 'autoshape.insert' ? 'shape' : 'position'); setSegment({ paragraph: 0, run: 0 }); setCellSelection({ row: 0, column: 0 }); }
       }
       return true;
     } catch (reason) { if (mounted.current) setError(describeError(reason)); return false; }
@@ -286,7 +337,7 @@ export default function PresentationEditor({ name, bytes, onChange, onBusyChange
     }} onCompositionStart={() => { composing.current = true; }} onCompositionEnd={() => { composing.current = false; }}>
     {presentation && <PresentationPlayer initial={presentation} onExit={() => { presenting.current = false; setPresentation(undefined); }} renderSlide={(slide, scale) => <SlideCanvas deck={presentation.deck} slide={slide} scale={scale} thumbnail />} />}
     <Ribbon label="Presentation tools" tabs={ribbonTabs} active={ribbonTab} onChange={setRibbonTab} />
-    {(tableInsertOpen || draft) && <div className="presentation-toolbar">
+    {(tableInsertOpen || (draft && !editing)) && <div className="presentation-toolbar">
       {tableInsertOpen && <div className="presentation-table-options" aria-label="Insert table"><label>Rows <input type="number" min="1" max="100" aria-label="New table rows" value={Number.isFinite(tableSize.rows) ? tableSize.rows : ''} onChange={event => setTableSize({ ...tableSize, rows: event.target.valueAsNumber })} /></label><label>Columns <input type="number" min="1" max="100" aria-label="New table columns" value={Number.isFinite(tableSize.columns) ? tableSize.columns : ''} onChange={event => setTableSize({ ...tableSize, columns: event.target.valueAsNumber })} /></label><RibbonButton icon="check" label="Insert table" disabled={blocked} onClick={insertTable} /><RibbonButton icon="close" label="Cancel" onClick={() => setTableInsertOpen(false)} /></div>}
       {draft && <div className="presentation-pending"><span>Pending changes</span><RibbonButton className="presentation-primary ribbon-primary" icon="check" label="Apply changes" disabled={busy} onClick={applyDraft} /><RibbonButton icon="close" label="Cancel" disabled={busy} onClick={() => { updateDraft(undefined); setError(''); }} /></div>}
     </div>}
@@ -294,8 +345,11 @@ export default function PresentationEditor({ name, bytes, onChange, onBusyChange
     {!snapshot ? <div className="presentation-loading" role="status">{busy ? 'Opening presentation…' : 'This presentation could not be opened.'}</div> : <div className="presentation-layout">
       {!viewOptions?.focus && <nav className="presentation-thumbnails" aria-label="Slides"><div className="presentation-rail-title">Slides <span>{snapshot.deck.slides.length}</span></div>{snapshot.deck.slides.map((item, i) => <SlideThumbnail key={item.id} deck={snapshot.deck} slide={item} number={i + 1} current={index === i} disabled={blocked} onSelect={() => selectSlide(i)} />)}</nav>}
       <div className="presentation-workspace" ref={workspace} onContextMenu={event => { selectObjectAt(event); menu.open(event); }}>
-        <div className="presentation-canvas-label"><strong>Slide {index + 1}</strong><span>Positioned preview · text wrapping may differ in PowerPoint</span></div>
-        <div className="presentation-canvas-scroll">{slide && <SlideCanvas deck={snapshot.deck} slide={slide} scale={scale} selected={selected} selectedKeys={arrangeKeys} onSelect={choose} disabled={blocked} draft={draft} onGeometry={geometryPatch} selectedCell={cellSelection} onCellSelect={chooseCell} onGestureChange={value => { dragging.current = value; }} />}</div>
+        <div className="presentation-canvas-label"><strong>Slide {index + 1}</strong></div>
+        <div className="presentation-canvas-scroll">{slide && <SlideCanvas deck={snapshot.deck} slide={slide} scale={scale} selected={selected} selectedKeys={arrangeKeys} onSelect={(key, additive, at) => void selectFromCanvas(key, !!additive, at)} disabled={busy || confirmDelete} editing={editing} onTextInput={editText} onTextCommit={() => void commitEdit()} onTextCancel={cancelEdit} onTextBlur={keepEditing => { if (closingEdit.current) { closingEdit.current = false; return; } if (!keepEditing) void commitEdit(); }} draft={draft} onGeometry={geometryPatch} selectedCell={cellSelection} onCellSelect={chooseCell} onGestureChange={value => { dragging.current = value; }} />}</div>
+        {editing && text && caretAnchor && <div className="presentation-floating-toolbar" style={{ left: caretAnchor.left, top: caretAnchor.top, transform: caretAnchor.below ? undefined : 'translateY(-100%)' }}>
+          <PresentationTextToolbar run={run} align={selectedParagraph?.align} disabled={busy || confirmDelete} onRunChange={patch => textPatch(patch)} onAlignChange={align => textPatch({}, align)} />
+        </div>}
         {slide && <details className="presentation-fidelity"><summary>Preview and editing limits</summary><p>Exact text and supported shapes can be edited. Images use embedded previews when available. Unsupported content stays in the file and appears as a placeholder. Slide commands can be refused for notes, comments, links, sections, or other relationships that cannot be changed safely.</p>{slide.compatibility.diagnostics.length > 0 && <ul>{slide.compatibility.diagnostics.slice(0, 10).map((diagnostic, i) => <li key={i}>{diagnostic.message}</li>)}</ul>}</details>}
       </div>
       {paneOpen && <aside className="presentation-inspector" aria-label="Format">
@@ -305,17 +359,9 @@ export default function PresentationEditor({ name, bytes, onChange, onBusyChange
         </div>
         {arrangeKeys.length > 1 ? <p className="presentation-help">Choose a single object to edit its content or appearance.</p> : <>
         {!selectedItem ? <p className="presentation-help">Choose text or a shape on the slide to edit it.</p> : <>
-          <div className="presentation-inspector-tabs">{rotationTarget(snapshot.deck, selected) && <button aria-pressed={panel === 'rotation'} disabled={!!draft || busy} onClick={() => setPanel('rotation')}>Rotation</button>}{table && <button aria-pressed={panel === 'table'} disabled={!!draft || busy} onClick={() => setPanel('table')}>Cell</button>}{snapshot && geometryTarget(snapshot.deck, selected) && <button aria-pressed={panel === 'position'} disabled={!!draft || busy} onClick={() => setPanel('position')}>Position</button>}{text && <button aria-pressed={panel === 'text'} disabled={!!draft || busy} onClick={() => setPanel('text')}>Text</button>}{shape && <button aria-pressed={panel === 'shape'} disabled={!!draft || busy} onClick={() => setPanel('shape')}>Shape</button>}</div>
+          <div className="presentation-inspector-tabs">{rotationTarget(snapshot.deck, selected) && <button aria-pressed={panel === 'rotation'} disabled={!!draft || busy} onClick={() => setPanel('rotation')}>Rotation</button>}{table && <button aria-pressed={panel === 'table'} disabled={!!draft || busy} onClick={() => setPanel('table')}>Cell</button>}{snapshot && geometryTarget(snapshot.deck, selected) && <button aria-pressed={panel === 'position'} disabled={!!draft || busy} onClick={() => setPanel('position')}>Position</button>}{shape && <button aria-pressed={panel === 'shape'} disabled={!!draft || busy} onClick={() => setPanel('shape')}>Shape</button>}</div>
           {!text && !shape && !geometryTarget(snapshot.deck, selected) && <p className="presentation-help">This object is preserved in the original file. Editing is not available for its current format.</p>}
-          {panel === 'text' && text && paragraphs && <fieldset disabled={busy}>
-            <label>Text segment<select aria-label="Slide text segment" value={`${segment.paragraph}:${segment.run}`} onChange={event => { const [paragraph, run] = event.target.value.split(':').map(Number); setSegment({ paragraph: paragraph!, run: run! }); }}>{paragraphs.flatMap((p, pi) => p.runs.map((r, ri) => <option key={`${pi}:${ri}`} value={`${pi}:${ri}`}>Paragraph {pi + 1}, segment {ri + 1}: {r.text.slice(0, 35) || 'Empty text'}</option>))}</select></label>
-            {run && <><label>Text<textarea aria-label="Slide text" rows={5} value={run.text} onChange={event => textPatch({ text: event.target.value })} /></label>
-              <label>Font<input aria-label="Slide font family" list="presentation-fonts" value={run.fontFamily} onChange={event => textPatch({ fontFamily: event.target.value })} /><datalist id="presentation-fonts">{['Arial', 'Calibri', 'Georgia', 'Times New Roman', 'Verdana'].map(font => <option key={font}>{font}</option>)}</datalist></label>
-              <div className="presentation-inspector-row"><label>Size (pt)<input type="number" min="1" max="400" step=".5" aria-label="Slide font size" value={Number.isFinite(run.fontSizeHundredthPt) ? run.fontSizeHundredthPt / 100 : ''} onChange={event => textPatch({ fontSizeHundredthPt: Math.round(event.target.valueAsNumber * 100) })} /></label><label>Color<input type="color" aria-label="Slide text color" value={`#${run.color}`} onChange={event => textPatch({ color: event.target.value.slice(1).toUpperCase() })} /></label></div>
-              <div className="presentation-text-buttons"><button aria-label="Slide bold" aria-pressed={run.bold} onClick={() => textPatch({ bold: !run.bold })}><b>B</b></button><button aria-label="Slide italic" aria-pressed={run.italic} onClick={() => textPatch({ italic: !run.italic })}><i>I</i></button><select aria-label="Slide paragraph alignment" value={selectedParagraph?.align} onChange={event => textPatch({}, event.target.value as 'left' | 'center' | 'right')}><option value="left">Align left</option><option value="center">Center</option><option value="right">Align right</option></select></div>
-              <p className="presentation-help">Text formatting changes this segment. Alignment changes its paragraph. New line breaks are not supported inside a segment.</p>
-            </>}
-          </fieldset>}
+          {text && <p className="presentation-help">Click the text on the slide to put the caret in it. The ribbon Font and Paragraph groups, and the toolbar above the slide, format the segment holding the caret.</p>}
           {panel === 'table' && table && tableCell && <fieldset disabled={busy}>
             <div className="presentation-table-tracks" aria-label="Table rows and columns">
               <button disabled={blocked || table.element.table.rows.length >= 100 || (table.element.table.rows.length + 1) * table.element.table.columnWidths.length > 1000} onClick={() => void changeTableTrack('row', 'insert')}>Insert row below</button>
@@ -350,12 +396,51 @@ export default function PresentationEditor({ name, bytes, onChange, onBusyChange
         {arrangeable.length > 1 && <SlideArrangePanel elements={arrangeable} keys={arrangeKeys} disabled={blocked} onToggle={key => choose(key,true)} onArrange={arrange} />}
       </aside>}
     </div>}
+    {snapshot && <footer className="presentation-status" aria-label="Presentation status">
+      <span>{editing ? 'Editing text · Enter applies, Esc cancels' : selectedItem ? `Selected: ${selectedItem.element.name || selectedItem.element.kind}` : ''}</span>
+      <span className="presentation-status-note" tabIndex={0} role="note" aria-label="Preview note" title="Positioned preview: text wrapping may differ in PowerPoint.">&#9432;</span>
+    </footer>}
     {menu.anchor && snapshot && <ContextMenu anchor={menu.anchor} label="Slide" onClose={menu.close} items={presentationContextMenu({ object: !!selectedItem && !selectedItem.grouped && (!!text || !!shape || !!geometryTarget(snapshot.deck, selected)), slide: !!slide, disabled: blocked, canDeleteSlide: snapshot.deck.slides.length > 1, onDeleteObject: deleteObject, onNewSlide: () => insert('slide'), onDuplicateSlide: () => structure('duplicate'), onDeleteSlide: () => setConfirmDelete(true) })} />}
     {confirmDelete &&<div className="presentation-modal"><section role="alertdialog" aria-modal="true" aria-labelledby="presentation-delete-title" onKeyDown={event => {
       if (event.key === 'Escape') { event.preventDefault(); setConfirmDelete(false); deleteTrigger.current?.focus(); }
       if (event.key === 'Tab') { const buttons = Array.from(event.currentTarget.querySelectorAll('button')); const next = event.shiftKey ? buttons[0] : buttons.at(-1); if (document.activeElement === next) { event.preventDefault(); (event.shiftKey ? buttons.at(-1) : buttons[0])?.focus(); } }
     }}><h2 id="presentation-delete-title">Delete slide {index + 1}?</h2><p>You can undo this change before closing the presentation.</p><div><button autoFocus onClick={() => { setConfirmDelete(false); deleteTrigger.current?.focus(); }}>Cancel</button><button className="presentation-danger" onClick={() => { setConfirmDelete(false); structure('delete'); }}>Delete slide</button></div></section></div>}
   </div>;
+}
+
+/**
+ * The painted run that carries the caret. React never owns its text: the run is
+ * written once on mount and every keystroke is reported upwards, so typing never
+ * moves the caret. Enter commits through the normal engine path, Esc cancels.
+ */
+function EditableRun({ text, style, offset, onInput, onCommit, onCancel, onBlur }: { text: string; style: CSSProperties; offset?: number; onInput(value: string): void; onCommit(): void; onCancel(): void; onBlur(keepEditing: boolean): void }) {
+  const span = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    const node = span.current; if (!node) return;
+    node.textContent = text;
+    node.focus({ preventScroll: true });
+    // The click that started the edit settles its own selection first, so place the caret after it.
+    const place = () => {
+      const selection = window.getSelection(); if (!selection) return;
+      const range = document.createRange();
+      const at = Math.min(Math.max(offset ?? text.length, 0), text.length);
+      if (node.firstChild) range.setStart(node.firstChild, at); else range.selectNodeContents(node);
+      range.collapse(true);
+      selection.removeAllRanges(); selection.addRange(range);
+    };
+    place();
+    const timer = setTimeout(place, 0);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the text is DOM state from here on.
+  }, []);
+  return <span ref={span} className="presentation-text-edit" role="textbox" aria-label="Slide text" contentEditable="plaintext-only" suppressContentEditableWarning spellCheck={false} style={style}
+    onInput={event => onInput(event.currentTarget.textContent ?? '')}
+    onKeyDown={event => {
+      event.stopPropagation();
+      if (event.key === 'Enter') { event.preventDefault(); onCommit(); }
+      if (event.key === 'Escape') { event.preventDefault(); onCancel(); }
+    }}
+    onBlur={event => onBlur(!!(event.relatedTarget as Element | null)?.closest?.('.ribbon, .presentation-text-toolbar, .presentation-toolbar'))} />;
 }
 
 /**
@@ -382,7 +467,7 @@ function SlideThumbnail({ deck, slide, number, current, disabled, onSelect }: { 
   </button>;
 }
 
-function SlideCanvas({ deck, slide, scale, thumbnail = false, selected, selectedKeys = [], onSelect, disabled, draft, onGeometry, onGestureChange, selectedCell, onCellSelect }: { deck: NativePptxDeck; slide: NativeSlide; scale: number; thumbnail?: boolean; selected?: string; selectedKeys?: string[]; onSelect?(key: string, additive?: boolean): void; disabled?: boolean; draft?: Draft; onGeometry?(key: string, transform: NativeTransform): void; onGestureChange?(value: boolean): void; selectedCell?: { row: number; column: number }; onCellSelect?(key: string, row: number, column: number): void }) {
+function SlideCanvas({ deck, slide, scale, thumbnail = false, selected, selectedKeys = [], onSelect, disabled, draft, onGeometry, onGestureChange, selectedCell, onCellSelect, editing, onTextInput, onTextCommit, onTextCancel, onTextBlur }: { deck: NativePptxDeck; slide: NativeSlide; scale: number; thumbnail?: boolean; selected?: string; selectedKeys?: string[]; onSelect?(key: string, additive?: boolean, at?: { paragraph: number; run: number; offset?: number }): void; disabled?: boolean; draft?: Draft; onGeometry?(key: string, transform: NativeTransform): void; onGestureChange?(value: boolean): void; selectedCell?: { row: number; column: number }; onCellSelect?(key: string, row: number, column: number): void; editing?: { paragraph: number; run: number; offset?: number }; onTextInput?(value: string): void; onTextCommit?(): void; onTextCancel?(): void; onTextBlur?(keepEditing: boolean): void }) {
   const gesture = useRef<{ key: string; pointer: number; x: number; y: number; transform: NativeTransform; sx: number; sy: number; resize: boolean } | null>(null);
   const width = deck.size.cx / EMU_PER_PIXEL, height = deck.size.cy / EMU_PER_PIXEL;
   const elements = positionElements(slide.elements).map(item => {
@@ -410,7 +495,8 @@ function SlideCanvas({ deck, slide, scale, thumbnail = false, selected, selected
       const asset = element.kind === 'picture' ? deck.assets.find(value => value.id === element.assetId) : undefined;
       const paint = element.compatibility.status !== 'refused' && (element.kind !== 'picture' || element.compatibility.status === 'editable') && (element.kind !== 'shape' || ['rect', 'ellipse', 'triangle', 'diamond'].includes(element.preset ?? ''));
       return <div key={key} className={`presentation-object${selectedHere ? ' is-selected' : ''}${!paint ? ' is-placeholder' : ''}`} style={style} role={thumbnail ? undefined : element.kind === 'table' ? 'group' : 'button'} tabIndex={thumbnail || disabled ? -1 : 0} aria-label={thumbnail ? undefined : `Select ${element.name || element.kind}`} aria-pressed={thumbnail || element.kind === 'table' ? undefined : selectedHere} onPointerDown={event => {
-          if (event.ctrlKey || event.metaKey || !selectedHere || disabled || !movable || event.button !== 0 || (element.kind === 'table' && (event.target as Element).closest('td'))) return;
+          // A press on painted text puts the caret there instead of moving the object, so the pointer must not be captured.
+          if (event.ctrlKey || event.metaKey || !selectedHere || disabled || !movable || event.button !== 0 || (event.target as Element).closest?.('[contenteditable], [data-slide-run]') || (element.kind === 'table' && (event.target as Element).closest('td'))) return;
           event.preventDefault(); event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId); onGestureChange?.(true);
           gesture.current = { key, pointer: event.pointerId, x: event.clientX, y: event.clientY, transform: { ...element.transform }, sx: scale * scaleX / EMU_PER_PIXEL, sy: scale * scaleY / EMU_PER_PIXEL, resize: (event.target as HTMLElement).classList.contains('presentation-resize-handle') };
         }} onPointerMove={event => {
@@ -418,12 +504,24 @@ function SlideCanvas({ deck, slide, scale, thumbnail = false, selected, selected
           const t = pointerTransform(g.transform, event.clientX - g.x, event.clientY - g.y, g.sx, g.sy, g.resize);
           onGeometry?.(g.key, t);
         }} onPointerUp={() => { gesture.current = null; onGestureChange?.(false); }} onPointerCancel={() => { gesture.current = null; onGestureChange?.(false); }} onLostPointerCapture={() => { gesture.current = null; onGestureChange?.(false); }}
-        onClick={event => { event.stopPropagation(); if (!disabled) onSelect?.(key, event.ctrlKey || event.metaKey); }} onKeyDown={event => { if (!disabled && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); onSelect?.(key, event.ctrlKey || event.metaKey); } }}>
+        onClick={event => { event.stopPropagation(); if (disabled) return;
+          const span = (event.target as Element).closest?.('[data-slide-run]') as HTMLElement | undefined;
+          const paragraphs = (element.kind === 'text' || element.kind === 'shape') ? element.paragraphs : undefined;
+          const last = paragraphs?.length ? { paragraph: paragraphs.length - 1, run: Math.max(0, (paragraphs.at(-1)?.runs.length ?? 1) - 1) } : undefined;
+          const point = span ? (document as Document & { caretRangeFromPoint?(x: number, y: number): Range | null }).caretRangeFromPoint?.(event.clientX, event.clientY) : null;
+          const offset = point && span?.firstChild === point.startContainer ? point.startOffset : undefined;
+          const at = span ? { paragraph: Number(span.dataset.paragraph), run: Number(span.dataset.run), offset } : last;
+          onSelect?.(key, event.ctrlKey || event.metaKey, at);
+        }} onKeyDown={event => { if (!disabled && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); onSelect?.(key, event.ctrlKey || event.metaKey); } }}>
         {selectedHere && movable && element.kind === 'table' && <span className="presentation-move-handle" aria-hidden="true">✥</span>}
         {selectedHere && movable && !angle && <span className="presentation-resize-handle" aria-hidden="true" />}
         {!paint ? <span className="presentation-object-placeholder">{element.name || element.kind} · preserved</span> : <>
           {(element.kind === 'shape' || element.kind === 'connector') && <svg className="presentation-shape-art" width="100%" height="100%" viewBox={`0 0 ${rect.cx / EMU_PER_PIXEL} ${rect.cy / EMU_PER_PIXEL}`} preserveAspectRatio="none"><ShapeArt element={element} width={rect.cx / EMU_PER_PIXEL} height={rect.cy / EMU_PER_PIXEL} fill={fill ? `#${fill}` : 'none'} stroke={stroke ? `#${stroke.color}` : 'none'} strokeWidth={stroke ? stroke.widthEmu * scaleX / EMU_PER_PIXEL : 0} /></svg>}
-          {(element.kind === 'text' || element.kind === 'shape') && <div className="presentation-object-text" style={{ paddingLeft: (textBody?.leftInsetEmu ?? 0) * scaleX / EMU_PER_PIXEL, paddingRight: (textBody?.rightInsetEmu ?? 0) * scaleX / EMU_PER_PIXEL, paddingTop: (textBody?.topInsetEmu ?? 0) * scaleY / EMU_PER_PIXEL, paddingBottom: (textBody?.bottomInsetEmu ?? 0) * scaleY / EMU_PER_PIXEL, justifyContent: textBody?.verticalAnchor === 'center' ? 'center' : textBody?.verticalAnchor === 'bottom' ? 'flex-end' : 'flex-start', whiteSpace: textBody?.wrap === 'none' ? 'pre' : 'pre-wrap' }}>{element.paragraphs.map((p, pi) => <p key={pi} style={{ textAlign: p.align }}>{p.runs.map((r, ri) => <span key={ri} style={{ fontFamily: r.fontFamily, fontSize: (r.fontSizeHundredthPt ?? 1800) / 100 * 96 / 72 * scaleY, color: r.color ? `#${r.color}` : '#20242b', fontWeight: r.bold ? 'bold' : 'normal', fontStyle: r.italic ? 'italic' : 'normal' }}>{r.text || (element.paragraphs.length === 1 && p.runs.length === 1 && !thumbnail ? <span className="presentation-empty-text">Select to add text</span> : '')}</span>)}</p>)}</div>}
+          {(element.kind === 'text' || element.kind === 'shape') && <div className="presentation-object-text" style={{ paddingLeft: (textBody?.leftInsetEmu ?? 0) * scaleX / EMU_PER_PIXEL, paddingRight: (textBody?.rightInsetEmu ?? 0) * scaleX / EMU_PER_PIXEL, paddingTop: (textBody?.topInsetEmu ?? 0) * scaleY / EMU_PER_PIXEL, paddingBottom: (textBody?.bottomInsetEmu ?? 0) * scaleY / EMU_PER_PIXEL, justifyContent: textBody?.verticalAnchor === 'center' ? 'center' : textBody?.verticalAnchor === 'bottom' ? 'flex-end' : 'flex-start', whiteSpace: textBody?.wrap === 'none' ? 'pre' : 'pre-wrap' }}>{element.paragraphs.map((p, pi) => <p key={pi} style={{ textAlign: p.align }}>{p.runs.map((r, ri) => {
+            const runStyle: CSSProperties = { fontFamily: r.fontFamily, fontSize: (r.fontSizeHundredthPt ?? 1800) / 100 * 96 / 72 * scaleY, color: r.color ? `#${r.color}` : '#20242b', fontWeight: r.bold ? 'bold' : 'normal', fontStyle: r.italic ? 'italic' : 'normal' };
+            if (!thumbnail && selectedHere && editing && editing.paragraph === pi && editing.run === ri) return <EditableRun key={ri} text={r.text} style={runStyle} offset={editing.offset} onInput={value => onTextInput?.(value)} onCommit={() => onTextCommit?.()} onCancel={() => onTextCancel?.()} onBlur={keepEditing => onTextBlur?.(keepEditing)} />;
+            return <span key={ri} data-slide-run="" data-paragraph={pi} data-run={ri} style={runStyle}>{r.text || (element.paragraphs.length === 1 && p.runs.length === 1 && !thumbnail ? <span className="presentation-empty-text">Click to add text</span> : '')}</span>;
+          })}</p>)}</div>}
           {element.kind === 'picture' && (asset?.dataBase64 && /^image\/(png|jpeg|gif|webp|bmp)$/.test(asset.contentType) ? <img draggable={false} src={`data:${asset.contentType};base64,${asset.dataBase64}`} alt={element.name || 'Slide image'} /> : <span className="presentation-object-placeholder">Image preserved</span>)}
           {element.kind === 'table' && <table className="presentation-table"><colgroup>{element.table.columnWidths.map((w, c) => <col key={c} style={{ width: `${w / element.table.columnWidths.reduce((a, b) => a + b, 0) * 100}%` }} />)}</colgroup><tbody>{element.table.rows.map((row, r) => <tr key={r} style={{ height: `${element.table.rowHeights[r]! / element.table.rowHeights.reduce((a, b) => a + b, 0) * 100}%` }}>{row.map((cell, c) => <td key={c} tabIndex={thumbnail || disabled ? -1 : 0} aria-label={thumbnail ? undefined : `Select table cell row ${r + 1} column ${c + 1}`} className={selectedHere && selectedCell?.row === r && selectedCell.column === c ? 'is-selected-cell' : undefined} onClick={event => { event.stopPropagation(); if (!disabled) onCellSelect?.(key, r, c); }} onKeyDown={event => { if (!disabled && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); event.stopPropagation(); onCellSelect?.(key, r, c); } }} style={{ background: cell.fill ? `#${cell.fill}` : undefined }}><div className="presentation-cell-text" style={{ paddingLeft: (cell.textBody?.leftInsetEmu ?? 0) * scaleX / EMU_PER_PIXEL, paddingRight: (cell.textBody?.rightInsetEmu ?? 0) * scaleX / EMU_PER_PIXEL, paddingTop: (cell.textBody?.topInsetEmu ?? 0) * scaleY / EMU_PER_PIXEL, paddingBottom: (cell.textBody?.bottomInsetEmu ?? 0) * scaleY / EMU_PER_PIXEL }}>{cell.paragraphs ? cell.paragraphs.map((p, pi) => <p key={pi} style={{ textAlign: p.align }}>{p.runs.map((run, ri) => <span key={ri} style={{ fontFamily: run.fontFamily, fontSize: (run.fontSizeHundredthPt ?? 1800) / 100 * 96 / 72 * scaleY, fontWeight: run.bold ? 'bold' : 'normal', fontStyle: run.italic ? 'italic' : 'normal', color: run.color ? `#${run.color}` : undefined }}>{run.text}</span>)}</p>) : cell.text}</div></td>)}</tr>)}</tbody></table>}
 
