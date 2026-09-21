@@ -4754,6 +4754,16 @@
               "signature": "export interface NativeDocxNoteNumberingV1"
             },
             {
+              "name": "NativeDocxNumberingDefinitionV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxNumberingDefinitionV1"
+            },
+            {
+              "name": "NativeDocxNumberingLevelDefinitionV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxNumberingLevelDefinitionV1"
+            },
+            {
               "name": "NativeDocxNumberingReferenceV1",
               "kind": "interface",
               "signature": "export interface NativeDocxNumberingReferenceV1"
@@ -6218,6 +6228,16 @@
               "name": "NativeDocxNoteNumberingV1",
               "kind": "interface",
               "signature": "export interface NativeDocxNoteNumberingV1"
+            },
+            {
+              "name": "NativeDocxNumberingDefinitionV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxNumberingDefinitionV1"
+            },
+            {
+              "name": "NativeDocxNumberingLevelDefinitionV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxNumberingLevelDefinitionV1"
             },
             {
               "name": "NativeDocxNumberingReferenceV1",

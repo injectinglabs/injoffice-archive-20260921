@@ -246,6 +246,8 @@ test('docx: packaged worker applies margins, orientation and paper size to a sec
     assert.equal(geometry.margins.footer_twips, section.page.margins.footer_twips);
     assert.equal(geometry.margins.gutter_twips, section.page.margins.gutter_twips);
   }
+});
+
 // List numbering has to work in the packaged worker: turn a blank paragraph
 // into a bullet, prove the numbering catalog and w:numPr read back, then
 // remove the list.
