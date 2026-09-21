@@ -440,6 +440,42 @@ describe('DOCX WASM package client', () => {
     expect(() => client.apply(new Uint8Array([1]), fixtureDocument, onRun)).toThrow(/whole paragraph target/)
   })
 
+  it('carries paragraph numbering on its own paragraph anchor', async () => {
+    const worker = new FakeWorker()
+    const client = createDocxWasmClient({ workerFactory: () => worker })
+    const numbered = { ...envelope(), payload: { mutations: [{
+      target_kind: 'paragraph' as const,
+      target_id: fixtureParagraph.id,
+      expected_xml_sha256: fixtureParagraph.anchor.xml_sha256,
+      properties: { numbering_kind: 'bullet' as const },
+    }] } }
+    await expect(client.apply(new Uint8Array([1]), fixtureDocument, numbered)).resolves.toEqual(new Uint8Array([4, 5, 6]))
+    expect(JSON.parse((worker.requests[1] as { payload: string }).payload)).toEqual({ mutations: [{
+      target_kind: 'paragraph',
+      target_id: fixtureParagraph.id,
+      expected_xml_sha256: fixtureParagraph.anchor.xml_sha256,
+      properties: { numbering_kind: 'bullet' },
+    }] })
+    const numbering = (properties: unknown, extra: Record<string, unknown> = {}) => ({ ...envelope(), payload: { mutations: [{
+      target_kind: 'paragraph' as const,
+      target_id: fixtureParagraph.id,
+      expected_xml_sha256: fixtureParagraph.anchor.xml_sha256,
+      properties,
+      ...extra,
+    }] } } as unknown as NativeDocxOfficeMutationEnvelopeV1)
+    expect(() => client.apply(new Uint8Array([1]), fixtureDocument, numbering({ numbering_kind: 'outline' }))).toThrow(/numbering_kind must be bullet or decimal/)
+    expect(() => client.apply(new Uint8Array([1]), fixtureDocument, numbering({ numbering_kind: 'bullet', bold: true }))).toThrow(/numbering on its own/)
+    expect(() => client.apply(new Uint8Array([1]), fixtureDocument, numbering({ numbering_kind: 'bullet' }, { range: { start_utf16: 0, end_utf16: 2 } }))).toThrow(/takes no range/)
+    expect(() => client.apply(new Uint8Array([1]), fixtureDocument, numbering({ numbering_num_id: '1', numbering_level: 9 }))).toThrow(/0\.\.8/)
+    const onRun = { ...envelope(), payload: { mutations: [{
+      target_kind: 'run' as const,
+      target_id: fixtureRun.id,
+      expected_xml_sha256: fixtureRun.anchor.xml_sha256,
+      properties: { numbering_kind: 'bullet' },
+    }] } } as unknown as NativeDocxOfficeMutationEnvelopeV1
+    expect(() => client.apply(new Uint8Array([1]), fixtureDocument, onRun)).toThrow(/needs a paragraph target/)
+  })
+
   it('refuses paragraph targets with multiple runs and paragraph/run overlap', () => {
     const client = createDocxWasmClient({ workerFactory: () => new FakeWorker() })
     const unsupported = envelope(multiRunDocument)

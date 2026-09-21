@@ -9,7 +9,7 @@ and independently hashes an owned byte snapshot. It returns
 The response is bounded to 16 MiB and malformed/mismatched responses retire the
 worker. Existing extract/apply request and response contracts are unchanged.
 
-The shared build script enforces a 6.5 MiB + 224 KiB uncompressed WASM ceiling locally and
+The shared build script enforces a 6.5 MiB + 800 KiB uncompressed WASM ceiling locally and
 in CI; `build.sh` records what each raise bought. The CI toolchain builds this
 module about 5.4 KiB larger than a local darwin/arm64 build (measured on three
 commits), so measure against the CI number before spending headroom. Adding same-byte style resolution and bounded equation inspection grew

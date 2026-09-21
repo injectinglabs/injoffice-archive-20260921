@@ -119,6 +119,9 @@ export interface NativeDocxParagraphPropertyPatchV1 {
   line_rule?: 'auto' | 'exact' | 'atLeast' | null
 
   alignment?: 'left' | 'center' | 'right' | 'both' | 'distribute'
+  numbering_num_id?: string | null
+  numbering_level?: number | null
+  numbering_kind?: 'bullet' | 'decimal'
 }
 
 /** Part of the target's own text, in UTF-16 code units, as the selection has it. */

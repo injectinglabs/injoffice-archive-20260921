@@ -247,3 +247,51 @@ test('docx: packaged worker applies margins, orientation and paper size to a sec
     assert.equal(geometry.margins.gutter_twips, section.page.margins.gutter_twips);
   }
 });
+
+// List numbering has to work in the packaged worker: turn a blank paragraph
+// into a bullet, prove the numbering catalog and w:numPr read back, then
+// remove the list.
+test('docx: the built worker attaches and removes a bullet list', async () => {
+  const files = engineFiles('docx');
+  const worker = startWorker(files);
+  const envelope = { protocol: PROTOCOL, version: 1, format: 'docx' };
+  const init = await worker.send({ ...envelope, id: 'init', op: 'init', assets: { wasmUrl: files.wasm, goRuntimeUrl: files.goRuntime } });
+  assert.equal(init.ok, true, `init: ${JSON.stringify(init.error)}`);
+
+  const source = await createBlankDocument('docx');
+  const buffer = source.buffer.slice(source.byteOffset, source.byteOffset + source.byteLength);
+  const extract = await worker.send({ ...envelope, id: 'extract', op: 'extract', bytes: buffer });
+  assert.equal(extract.ok, true, `extract: ${JSON.stringify(extract.error)}`);
+  const contract = JSON.parse(extract.result.contractJson);
+  const paragraph = contract.body.blocks[0].paragraph;
+  assert.ok(paragraph.edit_policy.allowed_operations.includes('properties.patch'), `paragraph policy: ${JSON.stringify(paragraph.edit_policy)}`);
+  assert.ok(Array.isArray(contract.numbering_definitions) && contract.numbering_definitions.some(item => item.levels[0].format === 'bullet'),
+    `blank document numbering catalog: ${JSON.stringify(contract.numbering_definitions)}`);
+
+  const payload = JSON.stringify({ mutations: [{
+    target_kind: 'paragraph',
+    target_id: paragraph.id,
+    expected_xml_sha256: paragraph.anchor.xml_sha256,
+    properties: { numbering_kind: 'bullet', numbering_level: 0 },
+  }] });
+  const applied = await worker.send({ ...envelope, id: 'apply', op: 'apply', original: buffer, payload, expectedRevision: contract.source.package_sha256 });
+  assert.equal(applied.ok, true, `apply: ${JSON.stringify(applied.error)}`);
+
+  const after = await worker.send({ ...envelope, id: 'reextract', op: 'extract', bytes: applied.result.bytes });
+  assert.equal(after.ok, true, `re-extract: ${JSON.stringify(after.error)}`);
+  const reread = JSON.parse(after.result.contractJson);
+  const listed = reread.body.blocks[0].paragraph;
+  assert.equal(listed.properties.numbering.num_id, '1');
+  assert.equal(listed.properties.numbering.level, 0);
+
+  const remove = JSON.stringify({ mutations: [{
+    target_kind: 'paragraph',
+    target_id: listed.id,
+    expected_xml_sha256: listed.anchor.xml_sha256,
+    properties: { numbering_num_id: null, numbering_level: null },
+  }] });
+  const cleared = await worker.send({ ...envelope, id: 'apply', op: 'apply', original: applied.result.bytes, payload: remove, expectedRevision: reread.source.package_sha256 });
+  assert.equal(cleared.ok, true, `remove: ${JSON.stringify(cleared.error)}`);
+  const gone = JSON.parse((await worker.send({ ...envelope, id: 'final', op: 'extract', bytes: cleared.result.bytes })).result.contractJson).body.blocks[0].paragraph;
+  assert.equal(gone.properties.numbering, undefined);
+});
