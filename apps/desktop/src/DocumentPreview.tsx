@@ -81,6 +81,14 @@ function bodyParagraphs(story: NativeDocxStoryV1) {
 }
 
 /** Note part order and numeric XML identities do not determine reading order. */
+/**
+ * Word writes a header and footer story for every section, most of them empty, and shows nothing
+ * for the empty ones. Only a story that actually carries content belongs in the preview.
+ */
+function storyHasContent(story: NativeDocxStoryV1) {
+  return bodyParagraphs(story).some(paragraph => paragraph.runs.some(run => (run.text ?? '').trim() !== '' || run.kind === 'drawing' || run.kind === 'reference'))
+}
+
 function referencedNotes(document: NativeDocxDocumentV1) {
   const content = new Map(document.notes.filter(note => note.note_role === 'content').map(note => [note.id, note]))
   const labels = nativeDocxNoteLabelsV1(document)
@@ -189,11 +197,13 @@ export default function DocumentPreview(props: DocumentPreviewProps) {
   const section=document.sections.length===1?document.sections[0]:undefined
   const page=section?.edit_policy?.allowed_operations.includes('section.page.patch')?section.page:undefined
   const paperStyle:CSSProperties|undefined=page?{boxSizing:'border-box',width:`${page.width_twips/20}pt`,minHeight:`${page.height_twips/20}pt`,paddingTop:`${page.margins.top_twips/20}pt`,paddingRight:`${page.margins.right_twips/20}pt`,paddingBottom:`${page.margins.bottom_twips/20}pt`,paddingLeft:`${(page.margins.left_twips+page.margins.gutter_twips)/20}pt`}:undefined
+  const usedHeaders = document.headers.filter(storyHasContent)
+  const usedFooters = document.footers.filter(storyHasContent)
   const secondaryStories = [
-    ...document.headers.map((value, index) => ({ value, label: `Header ${index + 1}` })),
-    ...document.footers.map((value, index) => ({ value, label: `Footer ${index + 1}` })),
+    ...usedHeaders.map((value, index) => ({ value, label: usedHeaders.length > 1 ? `Header ${index + 1}` : 'Header' })),
+    ...usedFooters.map((value, index) => ({ value, label: usedFooters.length > 1 ? `Footer ${index + 1}` : 'Footer' })),
     ...notes,
-    ...document.comment_stories.map((value, index) => ({ value, label: `Comment ${index + 1}` })),
+    ...document.comment_stories.filter(storyHasContent).map((value, index) => ({ value, label: `Comment ${index + 1}` })),
   ]
   // The preview flows; the file keeps its own page layout. Pages are measured off the paper so the
   // status row can say where the reader is, and the status row says where the number comes from.

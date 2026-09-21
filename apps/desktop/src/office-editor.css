@@ -1,9 +1,9 @@
 .office-editor { display: flex; flex-direction: column; min-height: 0; height: 100%; color: var(--text); font-family: inherit; }
 .office-editbar, .office-paging, .office-sheet-tabs { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .office-editbar { padding: 8px 20px; border-bottom: 1px solid var(--border); background: var(--surface); flex-shrink: 0; }
-.office-editor button:not(.ribbon-button, [role="tab"]) { font: inherit; font-size: 12px; cursor: pointer; padding: 6px 11px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: inherit; }
-.office-editor button:not(.ribbon-button, [role="tab"]):hover:not(:disabled) { background: var(--hover); }
-.office-editor button:not(.ribbon-button, [role="tab"]):disabled { opacity: .45; cursor: default; }
+.office-editor button:not(.ribbon-button, [role="tab"], .ribbon-file) { font: inherit; font-size: 12px; cursor: pointer; padding: 6px 11px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: inherit; }
+.office-editor button:not(.ribbon-button, [role="tab"], .ribbon-file):hover:not(:disabled) { background: var(--hover); }
+.office-editor button:not(.ribbon-button, [role="tab"], .ribbon-file):disabled { opacity: .45; cursor: default; }
 .office-editor button:focus-visible, .office-editor select:focus-visible, .office-editor textarea:focus-visible, .office-text-run:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .office-editbar label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; font-weight: 600; }
 .office-editbar select, .office-editbar textarea { font: inherit; font-size: 13px; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 7px; max-width: 450px; color: inherit; }
