@@ -5264,9 +5264,19 @@
               "signature": "export interface NativeDocxReviewInventoryV1"
             },
             {
+              "name": "NativeDocxRunFormatPayloadV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxRunFormatPayloadV1"
+            },
+            {
               "name": "NativeDocxRunPropertiesV1",
               "kind": "interface",
               "signature": "export interface NativeDocxRunPropertiesV1"
+            },
+            {
+              "name": "NativeDocxRunPropertyPatchV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxRunPropertyPatchV1"
             },
             {
               "name": "NativeDocxRunV1",
@@ -5479,9 +5489,19 @@
               "signature": "export interface NativeDocxTextboxV1"
             },
             {
+              "name": "NativeDocxTextMutationEnvelopeV1",
+              "kind": "type",
+              "signature": "export type NativeDocxTextMutationEnvelopeV1 = NativeDocxOfficeMutationEnvelopeV1 &"
+            },
+            {
               "name": "NativeDocxTextMutationPayloadV1",
               "kind": "interface",
               "signature": "export interface NativeDocxTextMutationPayloadV1"
+            },
+            {
+              "name": "NativeDocxTextRangeV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxTextRangeV1"
             },
             {
               "name": "NativeDocxTransactionAdapterIssueCode",
@@ -6315,9 +6335,19 @@
               "signature": "export interface NativeDocxReviewInventoryV1"
             },
             {
+              "name": "NativeDocxRunFormatPayloadV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxRunFormatPayloadV1"
+            },
+            {
               "name": "NativeDocxRunPropertiesV1",
               "kind": "interface",
               "signature": "export interface NativeDocxRunPropertiesV1"
+            },
+            {
+              "name": "NativeDocxRunPropertyPatchV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxRunPropertyPatchV1"
             },
             {
               "name": "NativeDocxRunV1",
@@ -6435,9 +6465,19 @@
               "signature": "export interface NativeDocxTextboxV1"
             },
             {
+              "name": "NativeDocxTextMutationEnvelopeV1",
+              "kind": "type",
+              "signature": "export type NativeDocxTextMutationEnvelopeV1 = NativeDocxOfficeMutationEnvelopeV1 &"
+            },
+            {
               "name": "NativeDocxTextMutationPayloadV1",
               "kind": "interface",
               "signature": "export interface NativeDocxTextMutationPayloadV1"
+            },
+            {
+              "name": "NativeDocxTextRangeV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxTextRangeV1"
             },
             {
               "name": "NativeDocxTransactionAdapterIssueCode",

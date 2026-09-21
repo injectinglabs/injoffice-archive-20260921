@@ -86,13 +86,52 @@ export interface NativeDocxTextMutationPayloadV1 {
   }>
 }
 
+/**
+ * The bounded direct character formatting the native engine writes back with
+ * the contract's `properties.patch` operation. An absent field leaves that
+ * property exactly as the source has it; `underline` and `highlight` carry
+ * only the values native extraction reads back.
+ */
+export interface NativeDocxRunPropertyPatchV1 {
+  bold?: boolean
+  italic?: boolean
+  underline?: 'none' | 'single' | 'double' | 'words'
+  font_family?: string
+  /** Half-points, as w:sz carries them: 24 is 12pt. */
+  font_size_half_points?: number
+  /** Six upper-case hex digits, no leading #. */
+  color?: string
+  highlight?: string
+}
+
+/** Part of the target's own text, in UTF-16 code units, as the selection has it. */
+export interface NativeDocxTextRangeV1 {
+  start_utf16: number
+  end_utf16: number
+}
+
+export interface NativeDocxRunFormatPayloadV1 {
+  mutations: Array<{
+    /** A paragraph target spans every text run it owns; a run target spans one. */
+    target_kind: 'paragraph' | 'run'
+    target_id: string
+    expected_xml_sha256: string
+    properties: NativeDocxRunPropertyPatchV1
+    range?: NativeDocxTextRangeV1
+  }>
+}
+
+/** The envelope shape a producer that only replaces text builds and returns. */
+export type NativeDocxTextMutationEnvelopeV1 = NativeDocxOfficeMutationEnvelopeV1 & { payload: NativeDocxTextMutationPayloadV1 }
+
 export interface NativeDocxOfficeMutationEnvelopeV1 {
   protocol: typeof OFFICE_MUTATION_PROTOCOL
   version: typeof OFFICE_MUTATION_VERSION
   format: 'docx'
   mutation_id: string
   expected_revision: string
-  payload: NativeDocxTextMutationPayloadV1
+  /** One transaction carries exact text replacements or run-property patches, never both. */
+  payload: NativeDocxTextMutationPayloadV1 | NativeDocxRunFormatPayloadV1
 }
 
 export type NativeDocxTransactionAdapterIssueCode =
@@ -123,7 +162,7 @@ export type NativeDocxTransactionAdapterResultV1 =
   | {
       ok: true
       value: {
-        envelope: NativeDocxOfficeMutationEnvelopeV1
+        envelope: NativeDocxTextMutationEnvelopeV1
         encoded_envelope: string
       }
     }
@@ -469,7 +508,7 @@ function adaptDecoded(document: NativeDocxDocumentV1, transaction: NativeDocxPro
   }))
   if (mutations.length === 0) return fail('SEMANTIC_NO_OP', '/steps', 'transaction produces no native text change')
   const payload: NativeDocxTextMutationPayloadV1 = { mutations }
-  const envelope: NativeDocxOfficeMutationEnvelopeV1 = {
+  const envelope: NativeDocxTextMutationEnvelopeV1 = {
     protocol: OFFICE_MUTATION_PROTOCOL,
     version: OFFICE_MUTATION_VERSION,
     format: 'docx',
