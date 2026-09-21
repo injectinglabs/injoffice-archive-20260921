@@ -215,6 +215,15 @@
           "xml_sha256": "sha256:d74b695c6d9b45b9e320e2f541cf4d5e00c762284c9ed7abb9539ddf18049dfd"
         },
         "break_type": "next-page",
+        "edit_policy": {
+          "allowed_operations": [],
+          "mode": "read-only",
+          "refusal": {
+            "code": "UNSUPPORTED_SECTION_STRUCTURE",
+            "message": "Page setup requires a single explicit section with one column and known geometry",
+            "preservation": "refuse-mutation"
+          }
+        },
         "footer_refs": [],
         "header_refs": [],
         "id": "section:4cb160eb611d77278ea39cd1",

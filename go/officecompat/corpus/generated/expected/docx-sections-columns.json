@@ -269,6 +269,15 @@
           "xml_sha256": "sha256:3403160e25b1d11753f357dc502ef9f0c5913a0578200071e6ede23415196476"
         },
         "break_type": "continuous",
+        "edit_policy": {
+          "allowed_operations": [],
+          "mode": "read-only",
+          "refusal": {
+            "code": "UNSUPPORTED_SECTION_STRUCTURE",
+            "message": "Page setup requires a single explicit section with one column and known geometry",
+            "preservation": "refuse-mutation"
+          }
+        },
         "footer_refs": [],
         "header_refs": [],
         "id": "section:277891b561a6dc61b647524c",
@@ -311,6 +320,15 @@
           "xml_sha256": "sha256:88e9d2540b6d58d51b69c9956f9d3bf463f4e80c8da8a470728f55836879226c"
         },
         "break_type": "next-page",
+        "edit_policy": {
+          "allowed_operations": [],
+          "mode": "read-only",
+          "refusal": {
+            "code": "UNSUPPORTED_SECTION_STRUCTURE",
+            "message": "Page setup requires a single explicit section with one column and known geometry",
+            "preservation": "refuse-mutation"
+          }
+        },
         "footer_refs": [],
         "header_refs": [],
         "id": "section:5d29a3134a727f984e86d8b0",
@@ -357,6 +375,15 @@
           "xml_sha256": "sha256:894050f79c45090b57e095760e4d51feae7fa48df8e223c40ea76e37a415d5a4"
         },
         "break_type": "even-page",
+        "edit_policy": {
+          "allowed_operations": [],
+          "mode": "read-only",
+          "refusal": {
+            "code": "UNSUPPORTED_SECTION_STRUCTURE",
+            "message": "Page setup requires a single explicit section with one column and known geometry",
+            "preservation": "refuse-mutation"
+          }
+        },
         "footer_refs": [],
         "header_refs": [],
         "id": "section:4d21394a77dc753aadabfb64",
@@ -399,6 +426,15 @@
           "xml_sha256": "sha256:ae57cab15d4a7a8481a309b946b79e0c3d62e4a5494b4255ae2c03aedd6b59eb"
         },
         "break_type": "odd-page",
+        "edit_policy": {
+          "allowed_operations": [],
+          "mode": "read-only",
+          "refusal": {
+            "code": "UNSUPPORTED_SECTION_STRUCTURE",
+            "message": "Page setup requires a single explicit section with one column and known geometry",
+            "preservation": "refuse-mutation"
+          }
+        },
         "footer_refs": [],
         "header_refs": [],
         "id": "section:6472918637632d3b384bfff6",
@@ -445,6 +481,15 @@
           "xml_sha256": "sha256:52926d26d3e436ac9d0365bf8cb089c17346ebd297f2b4d6e60eb1a00068bab0"
         },
         "break_type": "next-column",
+        "edit_policy": {
+          "allowed_operations": [],
+          "mode": "read-only",
+          "refusal": {
+            "code": "UNSUPPORTED_SECTION_STRUCTURE",
+            "message": "Page setup requires a single explicit section with one column and known geometry",
+            "preservation": "refuse-mutation"
+          }
+        },
         "footer_refs": [],
         "header_refs": [],
         "id": "section:02592db3a1be1e94b1dac711",
