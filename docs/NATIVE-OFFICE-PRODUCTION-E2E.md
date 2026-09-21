@@ -1,14 +1,14 @@
 # Native Office production E2E contract kit
 
-The v1 kit is the executable, offline handoff between InjOffice and its
+The v2 kit is the executable, offline handoff between InjOffice and its
 production consumers:
 
-- [`testdata/native-office-production-e2e/v1/manifest.json`](../testdata/native-office-production-e2e/v1/manifest.json)
+- [`testdata/native-office-production-e2e/v2/manifest.json`](../testdata/native-office-production-e2e/v2/manifest.json)
   selects exact DOCX, PPTX, XLSX, and authored-deck bytes and binds SHA-256,
   native protocol/version, engine identity, canonical semantic output,
   preservation/refusal evidence, replay, production entrypoint, and bounded
   resource observations.
-- [`schemas/native-office-production-e2e-v1.schema.json`](../schemas/native-office-production-e2e-v1.schema.json)
+- [`schemas/native-office-production-e2e-v2.schema.json`](../schemas/native-office-production-e2e-v2.schema.json)
   publishes the portable record shape.
 - [`scripts/verify-native-office-production-e2e.mjs`](../scripts/verify-native-office-production-e2e.mjs)
   is the dependency-free Node 24 verifier and adapter-request producer.
@@ -19,6 +19,21 @@ secret, and does not query GitHub. Corpus fixtures remain owned by
 records instead of copying or regenerating their bytes. It hashes the complete
 selected corpus records in fixture order, so unrelated corpus additions do not
 rewrite a released contract version while any selected-record drift fails.
+
+## Current evidence revision
+
+Version 2 binds the schemas and corpus expectations at commit
+`a5c7a09e` after native paragraph layout, section editing, numbering, and XLSX
+AutoFilter support. The two accepted DOCX corpus outputs now include section
+edit policies. Fixture bytes, case projections, refusal policy, and the v1
+adapter/observation wire formats are unchanged. The corpus generator's
+`--check` validates those expected outputs against the native engines.
+
+The v1 manifest and schema remain unchanged for historical consumers. They
+reference their original source/corpus revision and are not evidence for current
+`main`. The default verifier and request recorder use v2. No live host observation
+is claimed by this update; consumers must run their own adapters and record the
+v2 observations.
 
 ## Boundary with the completion matrix
 
@@ -37,7 +52,7 @@ bind their own case projection digest; they cannot mislabel a parser-output
 digest as the digest of a different protocol.
 
 The completion matrix binds this kit's verifier, tests, and case manifest as
-host-owned `productionE2E` evidence. This v1 manifest still owns none of the
+host-owned `productionE2E` evidence. The manifests still own none of the
 matrix records: capability status, selectors, and pending work remain
 matrix-owned. Architecture, dependency, provenance, allocation, and synthetic
 work qualification remain owned by their repository checks. The resource
@@ -61,7 +76,7 @@ adapters should reuse the website's static/runtime authority probe and add
 explicit traps for Canvas measurement and screenshot assertions in the native
 entrypoint closure.
 
-## Included v1 cases
+## Included cases
 
 The suite has positive DOCX table/font-provider and inline-image page-paint
 cases, a parsed PPTX picture case, an authored-deck native compile case, and a
@@ -161,7 +176,7 @@ node scripts/record-native-office-production-e2e.mjs --write-requests
 ```
 
    Requests are generated locally under
-   [`testdata/native-office-production-e2e/v1/host-observations/adapter-requests/`](../testdata/native-office-production-e2e/v1/host-observations/adapter-requests/).
+   [`testdata/native-office-production-e2e/v2/host-observations/adapter-requests/`](../testdata/native-office-production-e2e/v2/host-observations/adapter-requests/).
    Generated requests and observations are ignored by Git because they can
    contain environment-specific implementation details. The tamper case is not
    a request: request creation must terminate with
@@ -170,13 +185,13 @@ node scripts/record-native-office-production-e2e.mjs --write-requests
 
 2. The host executes each request against its production entrypoint twice and
    writes the observation array locally to
-   `testdata/native-office-production-e2e/v1/host-observations/observations.json`.
+   `testdata/native-office-production-e2e/v2/host-observations/observations.json`.
 
 3. Verify the host-generated observations without network access:
 
 ```sh
 node scripts/verify-native-office-production-e2e.mjs \
-  --observations testdata/native-office-production-e2e/v1/host-observations/observations.json
+  --observations testdata/native-office-production-e2e/v2/host-observations/observations.json
 ```
 
 InjOffice CI does not treat a missing observations file as a production pass.
@@ -192,7 +207,13 @@ npm run check:native-office-production-e2e
 npm run test:native-office-production-e2e
 ```
 
-Version by copying the v1 manifest directory and schema to v2 whenever fixture
+Both checks run in required PR CI and before npm release artifacts are built.
+When a native schema gains compatible optional fields or operations, review the
+schema diff and rerun native fixture and semantic reproducibility checks before
+updating its recorded digest. A digest update alone does not establish new live
+host observations. Existing fixture and semantic expectations must still pass.
+
+Create a new manifest directory and schema version whenever fixture
 identity, canonical semantics, adapter/observation shape, engine identity, or
 authority policy changes. Never rewrite a released version to follow a moving
 host implementation.

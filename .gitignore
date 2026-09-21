@@ -4,8 +4,8 @@ dist/
 artifacts/
 .DS_Store
 go/xlsxpatch/cmd/xlsxnativewasm/dist/
-testdata/native-office-production-e2e/v1/host-observations/*.json
-testdata/native-office-production-e2e/v1/host-observations/adapter-requests/*.json
+testdata/native-office-production-e2e/v*/host-observations/*.json
+testdata/native-office-production-e2e/v*/host-observations/adapter-requests/*.json
 
 # Locally built Go helper binaries (go build -o ... from the repository root)
 /injoffice-server

@@ -47,6 +47,10 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm run typecheck
+      - name: Verify native Office evidence contracts
+        run: |
+          npm run check:native-office-production-e2e
+          npm run test:native-office-production-e2e
       - run: npm test
       - name: Require dependency and license integrity
         run: npm run check:dependency-integrity

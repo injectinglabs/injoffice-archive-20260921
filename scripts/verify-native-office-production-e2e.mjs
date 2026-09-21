@@ -5,13 +5,17 @@ import { lstatSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import { dirname, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-export const MANIFEST_PROTOCOL = 'injoffice.native-office-production-e2e/v1'
+export const MANIFEST_PROTOCOL = 'injoffice.native-office-production-e2e/v2'
 export const ADAPTER_PROTOCOL = 'injoffice.native-office-production-e2e-adapter/v1'
 export const OBSERVATION_PROTOCOL = 'injoffice.native-office-production-e2e-observation/v1'
-export const BASELINE_COMMIT = 'ddf2e523a9d6422e2dfccd93e263fcbb10322cca'
+export const BASELINE_COMMIT = 'a5c7a09e89222033074eca9c6be0ede8dca40dc7'
+const MANIFEST_BASELINES = new Map([
+  ['injoffice.native-office-production-e2e/v1', { version: 1, commit: 'ddf2e523a9d6422e2dfccd93e263fcbb10322cca' }],
+  [MANIFEST_PROTOCOL, { version: 2, commit: BASELINE_COMMIT }],
+])
 
 const scriptRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-export const DEFAULT_MANIFEST = resolve(scriptRoot, 'testdata/native-office-production-e2e/v1/manifest.json')
+export const DEFAULT_MANIFEST = resolve(scriptRoot, 'testdata/native-office-production-e2e/v2/manifest.json')
 const SHA256 = /^[a-f0-9]{64}$/
 const ID = /^[a-z0-9]+(?:[.-][a-z0-9]+)*$/
 const FORMAT = new Set(['docx', 'pptx', 'xlsx'])
@@ -210,9 +214,10 @@ export function loadManifest(path = DEFAULT_MANIFEST) {
 
 export function validateManifest(manifest, { root = scriptRoot } = {}) {
   exactKeys(manifest, ['protocol', 'version', 'baseline', 'authority', 'adapter', 'contracts', 'resourceProfiles', 'fixtures', 'cases'], [], 'manifest')
-  if (manifest.protocol !== MANIFEST_PROTOCOL || manifest.version !== 1) fail('unsupported production E2E manifest protocol/version')
+  const baseline = MANIFEST_BASELINES.get(manifest.protocol)
+  if (!baseline || manifest.version !== baseline.version) fail('unsupported production E2E manifest protocol/version')
   exactKeys(manifest.baseline, ['repository', 'commit', 'corpusManifest', 'completionMatrix'], [], 'manifest.baseline')
-  if (manifest.baseline.repository !== 'injectinglabs/injoffice' || manifest.baseline.commit !== BASELINE_COMMIT) fail('manifest baseline drift')
+  if (manifest.baseline.repository !== 'injectinglabs/injoffice' || manifest.baseline.commit !== baseline.commit) fail('manifest baseline drift')
   exactKeys(manifest.baseline.completionMatrix, ['protocol', 'relationship'], [], 'manifest.baseline.completionMatrix')
   if (manifest.baseline.completionMatrix.protocol !== 'injoffice.native-office-completion/v1') fail('completion matrix protocol drift')
   if (/capabilit(?:y|ies)|pending work|test selector/i.test(manifest.baseline.completionMatrix.relationship) === false) fail('completion matrix relationship must state the non-duplication boundary')
