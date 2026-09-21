@@ -23,12 +23,12 @@ function stubRequire(id) {
   if (id === '@injoffice/xlsx-wasm') {
     return {
       createXlsxWasmClient: () => globalThis.__xlsxClient,
-      adaptWorkbookMutationBatchV1,
+      adaptWorkbookMutationBatchV1: (workbook, batch) => (globalThis.__xlsxAdapter ?? adaptWorkbookMutationBatchV1)(workbook, batch),
     };
   }
   if (id === '@injoffice/sheets/browser') {
     return {
-      formatNativeSheetCellDisplayV2: () => { throw new Error('WASM display is mocked'); },
+      formatNativeSheetCellDisplayV2: (...args) => { if (globalThis.__xlsxSheets) return globalThis.__xlsxSheets.formatNativeSheetCellDisplayV2(...args); throw new Error('WASM display is mocked'); },
       editableDefinedName: name => !String(name).startsWith('_'),
     };
   }
@@ -118,7 +118,7 @@ async function until(predicate) {
 
 const text = node => node.children.map(child => typeof child === 'string' ? child : text(child)).join('');
 function button(view, label) {
-  return view.root.findAllByType('button').find(node => node.props.children === label || text(node) === label);
+  return view.root.findAllByType('button').find(node => node.props['aria-label'] === label || node.props.children === label || text(node) === label);
 }
 
 test('SpreadsheetEditor mounts, reports busy, and applies a cell edit', async () => {
@@ -359,6 +359,7 @@ test('XLSX Home uses Excel icon controls: six alignment toggles, colour buttons,
     const borders = font.findByProps({ 'aria-label': 'Borders' });
     assert.equal(borders.findAllByType('svg').length, 1, 'Borders is an icon control');
     assert.equal(borders.props.title, 'Borders');
+    assert.equal(view.root.findByProps({ 'aria-label': 'Border color' }).props.value, '#000000');
 
     const cells = group('Cells');
     const cellCommands = [...cells.findAllByType('button'), ...cells.findAllByType('summary')].map(node => node.props['aria-label']).filter(Boolean);
@@ -424,7 +425,7 @@ test('Merge and Unmerge submit native range mutations, including a selected merg
  } finally {if(view)await act(async()=>view.unmount());delete globalThis.__xlsxClient;}
 });
 
-test('Rows and columns menu confirms whole-axis mutations for the selected range', async () => {
+test('Rows and columns menu immediately applies all four whole-axis mutations', async () => {
  const client=mockClient();globalThis.__xlsxClient=client;const Editor=await loadEditor();let view;
  try {
   await act(async()=>{view=create(React.createElement(Editor,{name:'Rows.xlsx',bytes:new Uint8Array([1]),onChange:()=>{}}));});
@@ -432,11 +433,11 @@ test('Rows and columns menu confirms whole-axis mutations for the selected range
   const location=()=>view.root.findByProps({'aria-label':'Cell or range address'});
   await act(async()=>location().props.onChange({target:{value:'B2:C3'}}));
   await act(async()=>location().parent.props.onSubmit({preventDefault(){}}));
-  for (const [label,kind] of [['Insert sheet rows','row.insert'],['Delete sheet columns','column.delete']]) {
+  for (const [label,kind] of [['Insert sheet rows','row.insert'],['Delete sheet rows','row.delete'],['Insert sheet columns','column.insert'],['Delete sheet columns','column.delete']]) {
    const component=view.root.findByProps({label});
    assert.equal(component.props.disabled,false);
    await act(async()=>component.props.onClick());
-   await act(async()=>view.root.findByProps({'aria-label':'Row and column changes'}).props.onSubmit({preventDefault(){}}));
+   assert.equal(view.root.findAllByProps({'aria-label':'Row and column changes'}).length,0, 'no second Apply step');
    await until(()=>client.applied.some(value=>value.structure?.[0]?.kind===kind));
    assert.equal(client.applied.at(-1).structure[0].index,1);
    assert.equal(client.applied.at(-1).structure[0].count,2);
@@ -490,4 +491,98 @@ test('mounted workbooks have document-scoped cell ids and local active descendan
       assert.match(target, /^sheet-cell-[12]-1-A1$/);
     }
   } finally { if (view) await act(async () => view.unmount()); delete globalThis.__xlsxClient; }
+});
+
+test('native XLSX range writes and both structure menus preserve cells and undo exact bytes after borders and merge/unmerge', async () => {
+  const { nativeClient } = require('./xlsx-native-client.cjs');
+  const { createBlankDocument } = require('../electron/new-document.cjs');
+  const native = await nativeClient();
+  globalThis.__xlsxClient = native;
+  globalThis.__xlsxAdapter = (await import('@injoffice/xlsx-wasm')).adaptWorkbookMutationBatchV1;
+  globalThis.__xlsxSheets = await import('@injoffice/sheets/browser');
+  const Editor = await loadEditor();
+  let view, history;
+  let bytes = new Uint8Array(await createBlankDocument('xlsx'));
+  try {
+    await act(async () => { view = create(React.createElement(Editor, {
+      name: 'Native.xlsx', bytes, onChange: value => { bytes = value; }, registerHistory: value => { history = value; },
+    })); });
+    const settled = () => view.root.findByProps({ className: 'sheet-editor' }).props['aria-busy'] === false;
+    await until(settled);
+    const select = async value => {
+      const input = () => view.root.findByProps({ 'aria-label': 'Cell or range address' });
+      await act(async () => input().props.onChange({ target: { value } }));
+      await act(async () => input().parent.props.onSubmit({ preventDefault() {} }));
+    };
+    const click = async label => {
+      await act(async () => button(view, label).props.onClick());
+      await until(settled);
+    };
+    const read = async () => (await native.extract(bytes)).sheets[0];
+    const values = sheet => Object.fromEntries(sheet.cells.filter(c => c.value?.text || c.value?.lexical).map(c => [`${c.row},${c.column}`, c.value.text ?? c.value.lexical]));
+    const paste = async text => {
+      const target = {};
+      await act(async () => view.root.findByProps({ role: 'grid' }).props.onPaste({ target, currentTarget: target, preventDefault() {}, clipboardData: { getData: () => text } }));
+      await until(settled);
+    };
+    await paste('Revenue\tAmount\nQ1\t120.5\nQ2\t340\nQ3\t210.25\nQ4\t95');
+    const originalValues = values(await read());
+    assert.equal(Object.keys(originalValues).length, 10, 'rectangular paste retains both columns');
+    await select('A1:B1');
+    await click('All borders');
+    await select('F5:H5');
+    await click('Merge cells');
+    await click('Unmerge cells');
+    const before = bytes.slice();
+    const baseline = await read();
+    for (const context of [false, true]) {
+      for (const kind of ['row.insert', 'row.delete', 'column.insert', 'column.delete']) {
+        await select('A3');
+        if (context) {
+          await act(async () => view.root.findByProps({ role: 'grid' }).props.onContextMenu({ preventDefault() {}, clientX: 0, clientY: 0, currentTarget: null, target: null }));
+          const menu = view.root.findAll(node => node.props.label === 'Worksheet' && Array.isArray(node.props.items))[0];
+          await act(async () => menu.props.items.find(item => item.id === kind).run());
+          await until(settled);
+          await act(async () => menu.props.onClose());
+        } else {
+          await click(`${kind.endsWith('insert') ? 'Insert' : 'Delete'} sheet ${kind.startsWith('row') ? 'rows' : 'columns'}`);
+        }
+        assert.notDeepEqual(bytes, before, kind);
+        const expected = {};
+        for (const [key, value] of Object.entries(originalValues)) {
+          let [r, c] = key.split(',').map(Number);
+          const rows = kind.startsWith('row'), index = rows ? 2 : 0, pos = rows ? r : c;
+          if (kind.endsWith('delete') && pos === index) continue;
+          if (pos >= index) { const offset = kind.endsWith('insert') ? 1 : -1; if (rows) r += offset; else c += offset; }
+          expected[`${r},${c}`] = value;
+        }
+        assert.deepEqual(values(await read()), expected, `${context ? 'context' : 'ribbon'} ${kind} neither duplicates nor garbles cells`);
+        assert.equal(history.canUndo, true);
+        const changed = bytes.slice();
+        await act(async () => history.undo());
+        assert.deepEqual(bytes, before, 'Undo restores the complete package, including styles and merge state');
+        assert.deepEqual(await read(), baseline);
+        await act(async () => history.redo());
+        assert.deepEqual(bytes, changed);
+        await act(async () => history.undo());
+      }
+    }
+    // Reproduce the reported column-copy shape as a range write, then undo it.
+    await select('A6');
+    await paste('Amount\n120.5\n340\n210.25\n95');
+    assert.equal(values(await read())['5,0'], 'Amount');
+    await act(async () => history.undo());
+    assert.deepEqual(bytes, before, 'one Undo removes the entire pasted column');
+    // A later invalid cell must not publish an earlier valid range write.
+    await select('A6');
+    await paste('would overwrite\t' + 'x'.repeat(32768));
+    assert.deepEqual(bytes, before, 'rejected range write is atomic');
+    assert.ok(view.root.findAllByProps({ role: 'alert' }).length, 'refusal is visible');
+    assert.deepEqual(values(await read()), originalValues);
+  } finally {
+    if (view) await act(async () => view.unmount());
+    delete globalThis.__xlsxClient;
+    delete globalThis.__xlsxAdapter;
+    delete globalThis.__xlsxSheets;
+  }
 });
