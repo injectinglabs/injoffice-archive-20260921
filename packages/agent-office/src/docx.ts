@@ -1,6 +1,6 @@
 import {
   OFFICE_MUTATION_PROTOCOL, OFFICE_MUTATION_VERSION, decodeNativeDocxDocument,
-  type NativeDocxDocumentV1, type NativeDocxOfficeMutationEnvelopeV1, type NativeDocxParagraphV1, type NativeDocxRunV1,
+  type NativeDocxDocumentV1, type NativeDocxOfficeMutationEnvelopeV1, type NativeDocxParagraphV1, type NativeDocxRunV1, type NativeDocxTextMutationPayloadV1,
 } from '@injoffice/docs/native-docx'
 import type { AgentArtifactAdapter, AgentArtifactIdentity, AgentCapability, AgentIssue, AgentOperation, JsonValue } from '@injoffice/agent-tools'
 import { assertFresh, boundedObject, cursorOffset, errorIssue, toJson } from './hash.js'
@@ -38,8 +38,12 @@ function target(document: NativeDocxDocumentV1, kind: 'paragraph' | 'run', id: s
   return undefined
 }
 function xmlTextValid(value: string): boolean { if (value.length > 1_048_576) return false; for (let index = 0; index < value.length;) { const code = value.codePointAt(index)!; if (!(code === 9 || code === 10 || code === 13 || code >= 0x20 && code <= 0xd7ff || code >= 0xe000 && code <= 0xfffd || code >= 0x10000 && code <= 0x10ffff) || code === 0xfffe || code === 0xffff) return false; index += code > 0xffff ? 2 : 1 } return true }
-function envelope(document: NativeDocxDocumentV1, operations: readonly AgentOperation[], mutationId: string): { value?: NativeDocxOfficeMutationEnvelopeV1; issues: AgentIssue[] } {
-  const issues: AgentIssue[] = []; const mutations: NativeDocxOfficeMutationEnvelopeV1['payload']['mutations'] = []; const targets = new Map<string, string>()
+// This adapter only replaces exact text; the envelope's other payload shape
+// (run-property patches) is not part of its capability, so it is typed out.
+type DocxTextEnvelope = NativeDocxOfficeMutationEnvelopeV1 & { payload: NativeDocxTextMutationPayloadV1 }
+
+function envelope(document: NativeDocxDocumentV1, operations: readonly AgentOperation[], mutationId: string): { value?: DocxTextEnvelope; issues: AgentIssue[] } {
+  const issues: AgentIssue[] = []; const mutations: NativeDocxTextMutationPayloadV1['mutations'] = []; const targets = new Map<string, string>()
   for (const operation of operations) {
     if (operation.name !== CAPABILITY.name) { issues.push({ severity: 'refusal', code: 'UNSUPPORTED_OPERATION', operationId: operation.operationId, message: `unsupported DOCX operation ${operation.name}` }); continue }
     const allowed = ['targetKind', 'targetId', 'text', 'expectedText']; const extra = Object.keys(operation.input).find((key) => !allowed.includes(key)); if (extra) { issues.push({ severity: 'refusal', code: 'UNKNOWN_FIELD', operationId: operation.operationId, path: `/input/${extra}`, message: `unknown input field ${extra}` }); continue }
