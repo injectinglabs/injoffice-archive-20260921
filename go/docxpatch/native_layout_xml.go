@@ -124,6 +124,9 @@ func nativeMergeLayoutAttributes(part []byte, node *nativeXMLNode, prefix, local
 	raw := []byte("<" + prefix + local + "/>")
 	if node != nil {
 		raw = part[node.Start:node.End]
+		if name := nativeFormatQName(part, node); strings.Contains(name, ":") {
+			prefix = name[:strings.Index(name, ":")+1]
+		}
 		if len(node.Children) > 0 || strings.TrimSpace(node.Text) != "" {
 			return nil, fmt.Errorf("%s must be a leaf", local)
 		}
@@ -139,6 +142,7 @@ func nativeMergeLayoutAttributes(part []byte, node *nativeXMLNode, prefix, local
 	}
 	output := append([]byte(nil), raw[:i]...)
 	seen := map[string]bool{}
+	attributeIndex := 0
 	for i < end-1 && raw[i] != '/' {
 		start := i
 		for i < end && nativeMutationXMLSpace(raw[i]) {
@@ -167,8 +171,17 @@ func nativeMergeLayoutAttributes(part []byte, node *nativeXMLNode, prefix, local
 		}
 		i++
 		attr := strings.TrimPrefix(name, prefix)
+		wordAttribute := name == prefix+attr
+		if node != nil {
+			if attributeIndex >= len(node.Attrs) {
+				return nil, fmt.Errorf("attribute inventory mismatch")
+			}
+			resolved := node.Attrs[attributeIndex].Name
+			attributeIndex++
+			attr, wordAttribute = resolved.Local, resolved.Space == node.Name.Space
+		}
 		value, change := changes[attr]
-		change = change && name == prefix+attr
+		change = change && wordAttribute
 		if change {
 			seen[attr] = true
 			if value != nil {

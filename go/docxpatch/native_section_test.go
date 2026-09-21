@@ -120,3 +120,20 @@ func TestNativeSectionPageRefusesMultipleSectionsAndSignatures(t *testing.T) {
 		assertNativeMutationCode(t, err, test.code)
 	}
 }
+
+func TestNativeSectionPagePreservesAttributeNamespaceAliases(t *testing.T) {
+	main := nativeMutationMain(`<w:p><w:r><w:t>Body</w:t></w:r></w:p><w:sectPr>` + strings.ReplaceAll(nativePageTestSize, "w:w=", "alias:w=") + nativePageTestMargins + `</w:sectPr>`)
+	main = strings.Replace(main, `xmlns:w14=`, `xmlns:alias="`+testW+`" xmlns:w14=`, 1)
+	source := buildNativeDOCX(t, nativeEntries(nativeMutationParts(main)))
+	doc, err := ExtractNativeDocumentV1(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := ApplyNativeMutationPayloadV1(source, nativePageTestPayload(doc.Sections[0], nativePageTestPatch), doc.Source.PackageSHA256)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(readNativeZipPart(t, result.Package, "word/document.xml")), `alias:w="16838"`) {
+		t.Fatal("lost the source attribute prefix")
+	}
+}
