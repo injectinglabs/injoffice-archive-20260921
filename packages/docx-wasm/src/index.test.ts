@@ -263,6 +263,20 @@ describe('DOCX WASM package client', () => {
     })
   })
 
+  it('validates and forwards body paragraph insertion without enabling other block payloads', async () => {
+    const worker = new FakeWorker()
+    const client = createDocxWasmClient({workerFactory: () => worker})
+    const document = structuredClone(fixtureDocument)
+    const paragraph = document.body.blocks.find(block => block.paragraph)!.paragraph!
+    if (!paragraph.edit_policy.allowed_operations.includes('block.insert_after')) paragraph.edit_policy.allowed_operations.push('block.insert_after')
+    const mutation = {target_kind: 'paragraph' as const, target_id: paragraph.id, expected_xml_sha256: paragraph.anchor.xml_sha256, operation: 'block.insert_after' as const, text: '' as const}
+    const request = {...envelope(document), payload: {mutations: [mutation]}}
+    await client.apply(new Uint8Array([1]), document, request)
+    expect(worker.requests.at(-1)).toMatchObject({payload: JSON.stringify(request.payload)})
+    expect(() => client.apply(new Uint8Array([1]), document, {...request, payload: {mutations: [{...mutation, table: {rows: 2}}]}} as never)).toThrow()
+    expect(() => client.apply(new Uint8Array([1]), document, {...request, payload: {mutations: [{...mutation, text: 'unsupported'}]}} as never)).toThrow()
+  })
+
   it('terminates on extraction JSON that fails the public Docs contract', async () => {
     const worker = new FakeWorker('{"version":1}')
     const client = createDocxWasmClient({ workerFactory: () => worker })

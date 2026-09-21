@@ -78,6 +78,14 @@ func ApplyNativeMutationPayloadV1(packageBytes, payload []byte, outerExpectedRev
 	if err != nil {
 		return nil, err
 	}
+	for _, mutation := range decoded {
+		if mutation.Operation != "" {
+			if len(decoded) != 1 {
+				return nil, nativeMutationError("INVALID_PAYLOAD", "", "structural operations require a single mutation")
+			}
+			return applyNativeParagraphStructure(packageBytes, outerExpectedRevision, mutation)
+		}
+	}
 	formatting := 0
 	for _, mutation := range decoded {
 		if mutation.Properties != nil || mutation.ParagraphProperties != nil {

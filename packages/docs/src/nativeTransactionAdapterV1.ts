@@ -130,6 +130,14 @@ export interface NativeDocxRunFormatPayloadV1 {
   }>
 }
 
+export interface NativeDocxStructurePayloadV1 {
+  mutations: Array<{
+    target_kind: 'paragraph'
+    target_id: string
+    expected_xml_sha256: string
+  } & ({operation: 'block.insert_after'; text: ''} | {operation: 'paragraph.split'; split: {run_id: string; offset_utf16: number}})>
+}
+
 /** The envelope shape a producer that only replaces text builds and returns. */
 export type NativeDocxTextMutationEnvelopeV1 = NativeDocxOfficeMutationEnvelopeV1 & { payload: NativeDocxTextMutationPayloadV1 }
 
@@ -140,7 +148,7 @@ export interface NativeDocxOfficeMutationEnvelopeV1 {
   mutation_id: string
   expected_revision: string
   /** One transaction carries exact text replacements or run-property patches, never both. */
-  payload: NativeDocxTextMutationPayloadV1 | NativeDocxRunFormatPayloadV1
+  payload: NativeDocxTextMutationPayloadV1 | NativeDocxRunFormatPayloadV1 | NativeDocxStructurePayloadV1
 }
 
 export type NativeDocxTransactionAdapterIssueCode =

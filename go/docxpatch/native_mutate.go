@@ -38,7 +38,7 @@ func DecodeNativeDOCXTextMutationPayloadV1(data []byte) ([]NativeDOCXTextMutatio
 	}
 	mutations := make([]NativeDOCXTextMutationV1, 0, len(decoded))
 	for index, mutation := range decoded {
-		if mutation.Properties != nil || mutation.ParagraphProperties != nil {
+		if mutation.Operation != "" || mutation.Properties != nil || mutation.ParagraphProperties != nil {
 			return nil, nativeMutationError("INVALID_PAYLOAD", "", fmt.Sprintf("mutation %d: this payload replaces text and may not carry properties", index))
 		}
 		mutations = append(mutations, mutation.NativeDOCXTextMutationV1)
@@ -75,6 +75,9 @@ func DecodeNativeDOCXFormatMutationPayloadV1(data []byte) ([]NativeDOCXFormatMut
 // envelope carries: an exact text replacement, or a run-property patch.
 type nativeDOCXMutationV1 struct {
 	NativeDOCXTextMutationV1
+	Operation           string
+	SplitRunID          string
+	SplitOffset         int
 	HasText             bool
 	Properties          *NativeDOCXRunPropertyPatchV1
 	ParagraphProperties *NativeDOCXParagraphPropertyPatchV1
@@ -177,7 +180,7 @@ func decodeNativeDOCXTextMutationV1(decoder *json.Decoder, index int) (nativeDOC
 	}
 	seen := map[string]bool{}
 	values := map[string]string{}
-	allowed := map[string]bool{"target_kind": true, "target_id": true, "expected_xml_sha256": true, "text": true, "properties": true, "range": true}
+	allowed := map[string]bool{"target_kind": true, "target_id": true, "expected_xml_sha256": true, "text": true, "properties": true, "range": true, "operation": true, "split": true}
 	for decoder.More() {
 		fieldToken, tokenErr := decoder.Token()
 		if tokenErr != nil {
@@ -194,6 +197,19 @@ func decodeNativeDOCXTextMutationV1(decoder *json.Decoder, index int) (nativeDOC
 		var rawValue json.RawMessage
 		if valueErr := decoder.Decode(&rawValue); valueErr != nil {
 			return invalid(fmt.Sprintf("field %q contains invalid JSON", field))
+		}
+		if field == "split" {
+			members, err := nativeFlatJSONObject(rawValue)
+			if err != nil || len(members) != 2 {
+				return invalid("split must carry run_id and offset_utf16")
+			}
+			runID, err := decodeNativeMutationJSONString(members["run_id"])
+			offset, ok := nativeJSONInt(members["offset_utf16"])
+			if err != nil || !ok || offset < 0 {
+				return invalid("invalid split selector")
+			}
+			mutation.SplitRunID, mutation.SplitOffset = runID, offset
+			continue
 		}
 		if field == "properties" || field == "range" {
 			structured, structuredErr := decodeNativeDOCXStructuredMutationField(field, rawValue)
@@ -221,7 +237,7 @@ func decodeNativeDOCXTextMutationV1(decoder *json.Decoder, index int) (nativeDOC
 		return invalid("object is unterminated")
 	}
 	required := []string{"target_kind", "target_id", "expected_xml_sha256", "text"}
-	if mutation.Properties != nil || mutation.ParagraphProperties != nil {
+	if mutation.Properties != nil || mutation.ParagraphProperties != nil || seen["operation"] {
 		required = required[:3]
 	}
 	for _, field := range required {
@@ -232,6 +248,24 @@ func decodeNativeDOCXTextMutationV1(decoder *json.Decoder, index int) (nativeDOC
 	if seen["range"] && mutation.Properties == nil {
 		return invalid("field \"range\" is only meaningful beside run properties")
 	}
+	mutation.Operation = values["operation"]
+	if seen["operation"] || seen["split"] {
+		if mutation.Properties != nil || mutation.ParagraphProperties != nil || mutation.Range != nil {
+			return invalid("structural operations cannot carry properties or range")
+		}
+		switch mutation.Operation {
+		case "block.insert_after":
+			if !seen["text"] || values["text"] != "" || seen["split"] {
+				return invalid("insert_after requires only empty text")
+			}
+		case "paragraph.split":
+			if !seen["split"] || seen["text"] {
+				return invalid("paragraph.split requires only split")
+			}
+		default:
+			return invalid("unsupported operation")
+		}
+	}
 	mutation.HasText = seen["text"]
 	mutation.NativeDOCXTextMutationV1 = NativeDOCXTextMutationV1{
 		TargetKind: values["target_kind"], TargetID: values["target_id"],
@@ -239,8 +273,6 @@ func decodeNativeDOCXTextMutationV1(decoder *json.Decoder, index int) (nativeDOC
 	}
 	return mutation, nil
 }
-
-
 
 // encoding/json deliberately repairs malformed UTF-8 and unpaired UTF-16
 // escapes with U+FFFD. Native mutation text is exact authority, so inspect the
