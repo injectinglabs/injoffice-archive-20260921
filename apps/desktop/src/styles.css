@@ -200,8 +200,19 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .titlebar-search { display: inline-flex; align-items: center; gap: 8px; width: min(320px, 28vw); min-width: 160px; height: 28px; padding: 0 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text-muted); font-size: 12px; text-align: left; }
 .titlebar-search:hover:enabled { background: var(--hover); border-color: var(--border-strong); color: var(--text-secondary); }
 .titlebar-search span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-/* Focus mode keeps the slim title bar (it holds the exit toggle) and hides the document tab strip. */
-.is-focused .document-tabs { display: none; }
+/* Focus mode, like Word's: the title bar (it holds the exit toggle), the document and the app
+   status bar stay; every command surface around them goes away. The editors already drop their
+   own side panes for viewOptions.focus; these rules cover the rows they keep. */
+.is-focused .document-tabs,
+.is-focused .ribbon,
+.is-focused .office-toolbar,
+.is-focused .office-document-note,
+.is-focused .office-document-status,
+.is-focused .sheet-status,
+.is-focused .presentation-inspector,
+.is-focused .pdf-tools,
+.is-focused .pdf-page-actions,
+.is-focused .pdf-export-row { display: none; }
 .editor-workspace { flex: 1; min-height: 0; overflow: auto; position: relative; }
 .editor-content { height: 100%; min-height: 0; }
 .primary-button, .dialog-actions .primary-button { color: var(--accent-text); background: var(--accent-fill); border: 1px solid var(--accent-fill); border-radius: 5px; font-weight: 500; padding: 10px 19px; font-size: 14px; }
