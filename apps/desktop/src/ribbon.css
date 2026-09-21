@@ -13,7 +13,7 @@
 /* Office's ribbon is 94px: 66px of controls (one row centred, or two 30px rows) over a
    label strip, so single-row groups line up with each other and every group label sits on
    the same baseline. */
-.ribbon-panel { position: relative; display: flex; align-items: stretch; gap: 4px; min-height: 94px; padding: 4px 10px 6px; overflow-x: auto; overflow-y: visible; }
+.ribbon-panel { position: relative; display: flex; align-items: stretch; gap: 4px; min-height: 94px; padding: 4px 10px 6px; overflow: visible; }
 .ribbon-panel[hidden] { display: none; }
 .ribbon-group { display: flex; flex: 0 0 auto; flex-direction: column; gap: 0; padding: 0 8px; }
 .ribbon-group + .ribbon-group { border-left: 1px solid var(--border-subtle); }
@@ -53,6 +53,18 @@
 .ribbon select:disabled, .ribbon input:disabled { opacity: .45; }
 .ribbon label { display: flex; flex-direction: column; gap: 3px; color: var(--text-muted); font-size: 11px; }
 .ribbon-note { color: var(--text-muted); font-size: 11px; white-space: nowrap; }
+
+/* Narrow windows: labels and button text collapse to icons first, then whole groups
+   move behind the overflow chevron at the right edge (Office collapses groups too). */
+.ribbon-panel-compact .ribbon-group-label, .ribbon-panel-compact .ribbon-button-label { display: none; }
+.ribbon-panel-compact .ribbon-group-body { min-height: 66px; }
+.ribbon-panel-compact .ribbon-button { padding-inline: 6px; }
+.ribbon-panel-compact .ribbon-group { padding-inline: 5px; }
+.ribbon-overflow { position: relative; display: flex; align-items: center; margin-left: auto; padding-left: 4px; border-left: 1px solid var(--border-subtle); }
+.ribbon-overflow-button { min-width: 32px; justify-content: center; }
+.ribbon-overflow-popover { position: absolute; z-index: 40; top: calc(100% + 2px); right: 0; display: flex; align-items: stretch; gap: 4px; min-height: 84px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-raised); box-shadow: 0 10px 30px var(--shadow); }
+.ribbon-overflow-popover .ribbon-group-label { display: flex; }
+.ribbon-overflow-popover .ribbon-button-label { display: inline; }
 
 @media (max-width: 900px) {
   .ribbon-strip { padding: 0 6px; }
