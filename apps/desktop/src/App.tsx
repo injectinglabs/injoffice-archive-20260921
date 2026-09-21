@@ -339,7 +339,8 @@ export default function App() {
   const isDocx = document?.name.toLowerCase().endsWith('.docx') ?? false;
   const changeZoom = (zoom: number) => setViewOptions(value => ({ ...value, zoom: Math.max(50, Math.min(200, zoom)) }));
   const toggleFocus = () => setViewOptions(value => ({ ...value, focus: !value.focus }));
-  const localStatus = document?.untitled ? 'Not saved yet' : draftDirty || document?.dirty ? 'Unsaved changes' : document ? 'Saved on this device' : 'Local workspace';
+  // Office states the save state once, in the title bar. The status bar keeps messages and zoom.
+  const saveStatus = document?.untitled ? 'Not saved yet' : draftDirty || document?.dirty ? 'Unsaved changes' : 'Saved';
   const canUndo = !!document && !busy && (draftDirty || (historyState[document.key]?.undo ?? true));
   const canRedo = !!document && !busy && (draftDirty || (historyState[document.key]?.redo ?? true));
   const searchLabel = `Search (${shortcutLabel('commands')})`, searchTitle = shortcutTooltip('Search commands', 'commands');
@@ -399,7 +400,7 @@ export default function App() {
           <div className="title-document">
             <span className={`document-format format-${document.name.split('.').pop()?.toLowerCase()}`}>{document.name.split('.').pop()?.toUpperCase()}</span>
             <span className="document-name" title={document.name}>{document.name}</span>
-            <span className="title-save-status" role="status">{(document.dirty || draftDirty) && <span className="dirty-indicator" aria-hidden="true" />}{localStatus}</span>
+            <span className="title-save-status" role="status">{(document.dirty || draftDirty) && <span className="dirty-indicator" aria-hidden="true" />}{saveStatus}</span>
           </div>
           <button className="titlebar-search" disabled={busy} onClick={() => setCommandSearch(true)} title={searchTitle}><RibbonIcon name="find" /><span>{searchLabel}</span></button>
         </div>
@@ -430,7 +431,7 @@ export default function App() {
         </div>
       </main>)}</WorkspaceFileGroupsContext>
 
-      <footer className="app-status" hidden={showHome}><span className="status-message" role="status">{busy ? 'Working…' : draftDirty ? 'Draft changes · Save applies your edits.' : notice || localStatus}</span><div className="status-view-controls"><div className="status-zoom"><button disabled={!document || viewOptions.zoom <= 50} aria-label="Zoom out" onClick={() => changeZoom(viewOptions.zoom - 10)}>−</button><input type="range" aria-label="Document zoom" min="50" max="200" step="5" disabled={!document} value={viewOptions.zoom} onChange={event => changeZoom(Number(event.target.value))} /><button disabled={!document || viewOptions.zoom >= 200} aria-label="Zoom in" onClick={() => changeZoom(viewOptions.zoom + 10)}>+</button><output>{viewOptions.zoom}%</output></div></div></footer>
+      <footer className="app-status" hidden={showHome}><span className="status-message" role="status">{busy ? 'Working…' : draftDirty ? 'Draft changes · Save applies your edits.' : notice}</span><div className="status-view-controls"><div className="status-zoom"><button disabled={!document || viewOptions.zoom <= 50} aria-label="Zoom out" onClick={() => changeZoom(viewOptions.zoom - 10)}>−</button><input type="range" aria-label="Document zoom" min="50" max="200" step="5" disabled={!document} value={viewOptions.zoom} onChange={event => changeZoom(Number(event.target.value))} /><button disabled={!document || viewOptions.zoom >= 200} aria-label="Zoom in" onClick={() => changeZoom(viewOptions.zoom + 10)}>+</button><output>{viewOptions.zoom}%</output></div></div></footer>
 
       <UpdateNotice onOpen={() => setUpdatesOpen(true)} />
       {updatesOpen && <UpdatesDialog onClose={() => setUpdatesOpen(false)} />}
