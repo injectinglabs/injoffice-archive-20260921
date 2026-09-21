@@ -80,14 +80,13 @@ func TestNativeAbsentRunEffectProperty(t *testing.T) {
 				t.Fatalf("resolve letter_spacing_twips=%v, want %v", got, tc.resolverModels)
 			}
 			// The accepted leaf is disclosed without making the run's exposed
-			// properties partial, and never makes the source writable.
-			if got := hasUnsupportedCode(doc, "PARTIAL_RUN_PROPERTIES"); got == tc.accepted {
-				t.Fatalf("PARTIAL_RUN_PROPERTIES=%v, want %v: %#v", got, !tc.accepted, doc.Unsupported)
+			// properties partial. Text editing preserves the source decoration.
+			// These decorations (including unmodeled source shapes) do not own
+			// text. Keep paint diagnostics, but prove that editing retains them.
+			if hasUnsupportedCode(doc, "PARTIAL_RUN_PROPERTIES") != (tc.name == "duplicate") {
+				t.Fatalf("decoration incorrectly blocks text: %#v", doc.Unsupported)
 			}
-			paragraph := doc.Body.Blocks[0].Paragraph
-			if paragraph.EditPolicy.Mode != "read-only" || len(paragraph.EditPolicy.AllowedOperations) != 0 {
-				t.Fatalf("preserved source became mutable: %#v", paragraph.EditPolicy)
-			}
+			assertNativeTextPreservationPolicy(t, data, doc, tc.name != "duplicate")
 		})
 	}
 }

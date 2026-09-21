@@ -70,7 +70,8 @@ func TestNativeLigatureModeDirectRunProperties(t *testing.T) {
 		t.Run(tc.value, func(t *testing.T) {
 			parts := resolvedStylesTestParts(`<w:styles xmlns:w="` + wordMLTransitional + `"/>`)
 			parts["word/document.xml"] = `<w:document xmlns:w="` + wordMLTransitional + `"` + nativeLigatureTestNSDecl + `><w:body><w:p><w:r><w:rPr><w:rFonts w:ascii="Arial"/><w14:ligatures w14:val="` + tc.value + `"/></w:rPr><w:t>Ligature</w:t></w:r></w:p><w:sectPr/></w:body></w:document>`
-			doc, err := ExtractNativeDocumentV1(buildNativeDOCX(t, nativeEntries(parts)))
+			data := buildNativeDOCX(t, nativeEntries(parts))
+			doc, err := ExtractNativeDocumentV1(data)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -78,16 +79,17 @@ func TestNativeLigatureModeDirectRunProperties(t *testing.T) {
 				t.Fatalf("LIGATURE_MODE_MATCHES_SHAPER=%v, want %v: %#v", got, tc.accepted, doc.Unsupported)
 			}
 			// A named mode this tier does not apply is its own code now, so the
-			// run stays unsafe (PARTIAL_RUN_PROPERTIES) but is never foreign.
+			// run keeps its paint diagnostic but is never foreign.
 			if hasUnsupportedCode(doc, "FOREIGN_RUN_PROPERTY") {
 				t.Fatalf("a named ST_Ligatures value must not be foreign markup: %#v", doc.Unsupported)
 			}
 			if got := hasUnsupportedCode(doc, "LIGATURE_MODE_UNAPPLIED"); got == tc.accepted {
 				t.Fatalf("LIGATURE_MODE_UNAPPLIED=%v, want %v: %#v", got, !tc.accepted, doc.Unsupported)
 			}
-			if got := hasUnsupportedCode(doc, "PARTIAL_RUN_PROPERTIES"); got == tc.accepted {
-				t.Fatalf("PARTIAL_RUN_PROPERTIES=%v, want %v: %#v", got, !tc.accepted, doc.Unsupported)
+			if hasUnsupportedCode(doc, "PARTIAL_RUN_PROPERTIES") {
+				t.Fatalf("paint-only ligature mode blocked text: %#v", doc.Unsupported)
 			}
+			assertNativeTextPreservationPolicy(t, data, doc, true)
 		})
 	}
 }

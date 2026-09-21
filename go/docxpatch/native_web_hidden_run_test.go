@@ -48,14 +48,11 @@ func TestNativeWebHiddenRunProperty(t *testing.T) {
 				t.Fatalf("resolve UNMODELED_RUN_PROPERTY=%v, want %v: %#v", got, !tc.accepted, resolved.Diagnostics)
 			}
 			// The accepted leaf is disclosed without making the run's exposed
-			// properties partial, and never makes the source writable.
+			// properties partial. Text editing preserves the source decoration.
 			if got := hasUnsupportedCode(doc, "PARTIAL_RUN_PROPERTIES"); got == tc.accepted {
 				t.Fatalf("PARTIAL_RUN_PROPERTIES=%v, want %v: %#v", got, !tc.accepted, doc.Unsupported)
 			}
-			paragraph := doc.Body.Blocks[0].Paragraph
-			if paragraph.EditPolicy.Mode != "read-only" || len(paragraph.EditPolicy.AllowedOperations) != 0 {
-				t.Fatalf("preserved source became mutable: %#v", paragraph.EditPolicy)
-			}
+			assertNativeTextPreservationPolicy(t, data, doc, tc.accepted)
 		})
 	}
 }

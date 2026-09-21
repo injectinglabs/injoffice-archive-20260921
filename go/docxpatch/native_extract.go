@@ -1987,6 +1987,7 @@ func (extractor *nativeExtractor) extractParagraph(partName string, node *native
 		unsafe = true
 		extractor.addUnsupported(paraIDIssueCode, "identity", id, partName, node, paraIDIssueMessage)
 	}
+	preserveProperties := false
 	paragraphProperties := directNativeChildren(node, extractor.wordNS, "pPr")
 	if len(paragraphProperties) > 1 {
 		unsafe = true
@@ -1994,11 +1995,12 @@ func (extractor *nativeExtractor) extractParagraph(partName string, node *native
 	}
 	if len(paragraphProperties) == 1 {
 		pPr := paragraphProperties[0]
-		properties, propertyUnsafe, err := extractor.extractParagraphProperties(partName, id, pPr)
+		properties, propertyUnsafe, propertyPreserved, err := extractor.extractParagraphProperties(partName, id, pPr)
 		if err != nil {
 			return NativeParagraphV1{}, err
 		}
 		paragraph.Properties = properties
+		preserveProperties = propertyPreserved
 		unsafe = unsafe || propertyUnsafe
 	}
 	runs, runUnsafe, err := extractor.extractParagraphRuns(partName, id, node)
@@ -2013,6 +2015,11 @@ func (extractor *nativeExtractor) extractParagraph(partName string, node *native
 		for _, run := range runs {
 			if run.Kind == "text" && run.Text != nil {
 				paragraph.EditPolicy = nativeMutableParagraphPolicy()
+				if preserveProperties {
+					// Text and structural splices retain source properties verbatim;
+					// formatting must not rewrite a partially modeled property block.
+					paragraph.EditPolicy.AllowedOperations = []string{"text.replace"}
+				}
 				break
 			}
 		}
@@ -2065,7 +2072,7 @@ func nativeValidLongHexNumber(value string) bool {
 	return true
 }
 
-func (extractor *nativeExtractor) extractParagraphProperties(partName, paragraphID string, node *nativeXMLNode) (*NativeParagraphPropertiesV1, bool, error) {
+func (extractor *nativeExtractor) extractParagraphProperties(partName, paragraphID string, node *nativeXMLNode) (*NativeParagraphPropertiesV1, bool, bool, error) {
 	properties := &NativeParagraphPropertiesV1{}
 	unsafe := false
 	preserveOnly := false
@@ -2167,12 +2174,10 @@ func (extractor *nativeExtractor) extractParagraphProperties(partName, paragraph
 			}
 		case "rPr":
 			// Paragraph-mark metrics are owned by the resolved-layout projection,
-			// including empty paragraphs. Admit only a closed direct-formatting
-			// subset; do not make the paragraph writable or apply mark properties
-			// to its body runs.
+			// including empty paragraphs. Preserve the mark verbatim during text
+			// edits; never expose it through paragraph/run property patches.
 			preserveOnly = true
 			if !nativeExactParagraphMarkProperties(child, extractor.wordNS) {
-				preserveOnly = true
 				extractor.addUnsupported("UNMODELED_PARAGRAPH_MARK_PROPERTIES", "paragraph-properties", paragraphID, partName, child, "Paragraph-mark formatting has unknown, duplicate, or noncanonical source structure")
 			} else if _, invalid, _ := extractor.extractRunPropertiesState(partName, paragraphID, child); invalid {
 				unsafe = true
@@ -2224,10 +2229,7 @@ func (extractor *nativeExtractor) extractParagraphProperties(partName, paragraph
 	if unsafe {
 		extractor.addUnsupported("PARTIAL_PARAGRAPH_PROPERTIES", "paragraph-properties", paragraphID, partName, node, "Only the conservative v1 paragraph-property subset is exposed")
 	}
-	// Preserved-verbatim paragraph properties ride through every v1 operation, so
-	// they are disclosed by their diagnostic instead of freezing the paragraph.
-	_ = preserveOnly
-	return properties, unsafe, nil
+	return properties, unsafe, preserveOnly, nil
 }
 
 func nativeExactParagraphMarkProperties(node *nativeXMLNode, wordNS string) bool {
@@ -3446,12 +3448,19 @@ func (extractor *nativeExtractor) extractRunProperties(partName, paragraphID str
 }
 
 // Keep source-layout invalidity separate from valid but noneditable metadata.
-// Paragraph marks already retain a read-only policy even when fully qualified.
+// Paragraph marks retain a property-patch refusal even when fully qualified.
 func (extractor *nativeExtractor) extractRunPropertiesState(partName, paragraphID string, node *nativeXMLNode) (*NativeRunPropertiesV1, bool, bool) {
 	properties := &NativeRunPropertiesV1{}
 	unsafe := false
 	preserveOnly := false
+	seen := map[xml.Name]bool{}
 	for _, child := range node.Children {
+		// Duplicate property diagnostics cannot retain unambiguous identity
+		// through write-back. Keep those sources outside text authority.
+		if seen[child.Name] {
+			unsafe = true
+		}
+		seen[child.Name] = true
 		if child.Name.Space != extractor.wordNS {
 			if nativeShaperDefaultLigatureMode(child, node) {
 				preserveOnly = true
@@ -3464,8 +3473,8 @@ func (extractor *nativeExtractor) extractRunPropertiesState(partName, paragraphI
 				continue
 			}
 			// A Word 2010 typography extension this tier records and does not
-			// apply. It stays out of the writable model - the run's properties
-			// are still unsafe - but it carries its own code and a message
+			// apply. It stays out of the modeled property subset, but carries
+			// its own code and a message
 			// naming the unapplied property, so the approximate tier can paint
 			// the run and disclose the deviation instead of dropping the page.
 			if nativeAbsentStylisticSetRequest(child, node) {
@@ -3474,7 +3483,7 @@ func (extractor *nativeExtractor) extractRunPropertiesState(partName, paragraphI
 				continue
 			}
 			if code, detail, ok := nativeUnappliedTypographicRunFeature(child, node); ok {
-				unsafe = true
+				preserveOnly = true
 				extractor.addUnsupported(code, "run-properties", paragraphID, partName, child, detail)
 				continue
 			}
@@ -3607,7 +3616,6 @@ func (extractor *nativeExtractor) extractRunPropertiesState(partName, paragraphI
 			if nativeAbsentRunBorder(child, node, extractor.wordNS) {
 				extractor.addUnsupported("RUN_BORDER_ABSENT_PRESERVED", "run-properties", paragraphID, partName, child, "A run border that states no border is preserved and not applied; it paints no stroke and reserves no space, so it moves no glyph, line or page")
 			} else {
-				unsafe = true
 				extractor.addUnsupported("UNMODELED_RUN_PROPERTY", "run-properties", paragraphID, partName, child, "Only a run border that states no border is proven layout-neutral; a painted run border reserves space this tier does not model")
 			}
 		case "vertAlign":
