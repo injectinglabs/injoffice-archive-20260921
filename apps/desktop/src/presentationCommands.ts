@@ -110,7 +110,10 @@ export function insertCommand(deck: NativePptxDeck, index: number, kind: 'slide'
   const slideId = deck.slides[index]?.id; if (!slideId) throw new Error('Select a slide before inserting.');
   const base = { operationId, slideId }; const expectedSourceRevision = revision(deck);
   const transform = { x: Math.round(deck.size.cx * .15), y: Math.round(deck.size.cy * .2), cx: Math.max(1, Math.round(deck.size.cx * .4)), cy: Math.max(1, Math.round(deck.size.cy * .2)) };
-  if (kind === 'slide') return { expectedSourceRevision, operations: [{ ...base, kind: 'slide.insert' }] };
+  if (kind === 'slide') {
+    const source = deck.slides[index]?.source; if (!source) throw new Error('This slide has no source layout anchor.');
+    return { expectedSourceRevision, operations: [{ ...base, kind: 'slide.insert', expectedFingerprintSha256: source.fingerprintSha256 }] };
+  }
   if (kind === 'shape') return { expectedSourceRevision, operations: [{ ...base, kind: 'autoshape.insert', autoShape: { transform, preset: 'rect', fill: 'DCE8F7', stroke: { color: '2459AD', widthEmu: 12700, cap: 'flat', join: 'round', dash: 'solid' } } }] };
   return { expectedSourceRevision, operations: [{ ...base, kind: 'text.insert', transform, paragraphs: [{ align: 'left', level: 0, bullet: false, runs: [{ text: '', fontFamily: 'Arial', fontSizeHundredthPt: 2400, bold: false, italic: false, color: '20242B' }] }] }] };
 }

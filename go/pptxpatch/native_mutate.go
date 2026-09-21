@@ -25,13 +25,15 @@ const (
 )
 
 // NativePPTXMutationKind is the source-authoritative PPTX mutation subset.
-// It deliberately excludes structural edits, pictures, charts, tables, and
+// It deliberately excludes pictures, charts, tables, and
 // any mutation that would require reconstructing a slide from a render model.
 type NativePPTXMutationKind string
 
 const (
-	NativePPTXReplaceText     NativePPTXMutationKind = "text.replace"
-	NativePPTXUpdateAutoShape NativePPTXMutationKind = "autoshape.update"
+	NativePPTXInsertSlide        NativePPTXMutationKind = "slide.insert"
+	NativePPTXSetSlideBackground NativePPTXMutationKind = "slide.background.set"
+	NativePPTXReplaceText        NativePPTXMutationKind = "text.replace"
+	NativePPTXUpdateAutoShape    NativePPTXMutationKind = "autoshape.update"
 )
 
 // NativePPTXMutationRequest binds an atomic mutation batch to the exact input
@@ -47,8 +49,10 @@ type NativePPTXMutationRequest struct {
 type NativePPTXMutation struct {
 	OperationID               string                       `json:"operationId"`
 	Kind                      NativePPTXMutationKind       `json:"kind"`
-	ElementID                 string                       `json:"elementId"`
+	ElementID                 string                       `json:"elementId,omitempty"`
 	ExpectedFingerprintSHA256 string                       `json:"expectedFingerprintSha256"`
+	SlideID                   string                       `json:"slideId,omitempty"`
+	Fill                      *string                      `json:"fill,omitempty"`
 	Paragraphs                *[]NativeParagraph           `json:"paragraphs,omitempty"`
 	AutoShape                 *NativePPTXAutoShapeMutation `json:"autoShape,omitempty"`
 }
@@ -233,6 +237,8 @@ func validateNativePPTXMutationFieldNames(payload []byte) error {
 			"operationId":               true,
 			"kind":                      true,
 			"elementId":                 true,
+			"slideId":                   true,
+			"fill":                      true,
 			"expectedFingerprintSha256": true,
 			"paragraphs":                true,
 			"autoShape":                 true,
@@ -343,6 +349,9 @@ func ApplyNativePPTXMutations(orig []byte, request NativePPTXMutationRequest) ([
 		return nil, fmt.Errorf("pptxpatch: native mutations: stale source revision: got %q want %q", request.ExpectedSourceRevision, nativeStringValue(before.SourceRevision))
 	}
 
+	if isNativeSlideMutation(request.Operations[0].Kind) {
+		return applyNativeSlideMutation(orig, before, request.Operations[0])
+	}
 	resolved, err := resolveNativePPTXMutations(before, request.Operations)
 	if err != nil {
 		return nil, err
@@ -432,6 +441,27 @@ func validateNativePPTXMutationRequestPayload(request NativePPTXMutationRequest)
 			return fmt.Errorf("%s: duplicate operation id %q", prefix, operation.OperationID)
 		}
 		seenOperations[operation.OperationID] = true
+		if isNativeSlideMutation(operation.Kind) {
+			if len(request.Operations) != 1 {
+				return fmt.Errorf("%s: slide mutations require a standalone operation", prefix)
+			}
+			if !nativeIDPattern.MatchString(operation.SlideID) || !sha256Pattern.MatchString(operation.ExpectedFingerprintSHA256) {
+				return fmt.Errorf("%s: invalid slide anchor", prefix)
+			}
+			if operation.ElementID != "" || operation.Paragraphs != nil || operation.AutoShape != nil {
+				return fmt.Errorf("%s: slide operation contains element fields", prefix)
+			}
+			if operation.Kind == NativePPTXInsertSlide && operation.Fill != nil {
+				return fmt.Errorf("%s: slide.insert cannot set fill", prefix)
+			}
+			if operation.Kind == NativePPTXSetSlideBackground && (operation.Fill == nil || !colorPattern.MatchString(*operation.Fill)) {
+				return fmt.Errorf("%s: invalid background fill", prefix)
+			}
+			continue
+		}
+		if operation.SlideID != "" || operation.Fill != nil {
+			return fmt.Errorf("%s: element operation contains slide fields", prefix)
+		}
 		if !nativeIDPattern.MatchString(operation.ElementID) {
 			return fmt.Errorf("%s: invalid element id", prefix)
 		}
