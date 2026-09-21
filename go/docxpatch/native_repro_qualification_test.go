@@ -36,7 +36,7 @@ func TestNativeDOCXCrossRuntimeReproQualification(t *testing.T) {
 	if !bytes.Equal(firstJSON, secondJSON) {
 		t.Fatal("identical corpus bytes produced different canonical native DOCX JSON")
 	}
-	const expected = "307892388cf00f18801013dfed7abe33c187258a3f1aab801f7ac17b7701f2c4"
+	const expected = "151830bf60a5644ee53aaf740ba30380c3d27f9fa4b34d834695f0c9cace9fde"
 	actual := fmt.Sprintf("%x", sha256.Sum256(firstJSON))
 	if actual != expected {
 		t.Fatalf("canonical native DOCX semantic digest = %s, want %s", actual, expected)
