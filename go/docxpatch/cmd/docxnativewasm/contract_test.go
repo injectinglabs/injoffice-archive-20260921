@@ -428,3 +428,34 @@ func stderrFrom(err error) string {
 	}
 	return ""
 }
+
+// Run formatting must cross the JS boundary with the same bytes as the
+// in-process engine, including the run split at the selection's boundary.
+func TestWASMApplyRunFormattingMatchesInProcessGo(t *testing.T) {
+	wasm, wasmExec, script := requireNodeHarness(t)
+	original := buildContractDOCX(t)
+	document, _ := extractNativeJSON(t, original)
+	run := document.Body.Blocks[0].Paragraph.Runs[0]
+	payload := []byte(`{"mutations":[{"target_kind":"run","target_id":"` + run.ID + `","expected_xml_sha256":"` + run.Anchor.XMLSHA256 + `","properties":{"bold":true,"color":"FF0000"},"range":{"start_utf16":0,"end_utf16":3}}]}`)
+	wanted, err := docxpatch.ApplyNativeMutationPayloadV1(original, payload, document.Source.PackageSHA256)
+	if err != nil {
+		t.Fatal(err)
+	}
+	originalPath, payloadPath := writeContractInputs(t, original, payload)
+	command := exec.Command("node", script, "apply", "--wasm", wasm, "--wasm-exec", wasmExec, "--original", originalPath, "--payload", payloadPath, "--expected-revision", document.Source.PackageSHA256)
+	got, err := command.Output()
+	if err != nil {
+		t.Fatalf("WASM run formatting failed: %v\n%s", err, stderrFrom(err))
+	}
+	if !bytes.Equal(got, wanted.Package) {
+		t.Fatalf("WASM run formatting bytes disagreed with in-process Go (%d vs %d bytes)", len(got), len(wanted.Package))
+	}
+	after, err := docxpatch.ExtractNativeDocumentV1(got)
+	if err != nil {
+		t.Fatalf("WASM output did not reopen: %v", err)
+	}
+	runs := after.Body.Blocks[0].Paragraph.Runs
+	if len(runs) != 2 || *runs[0].Text != "Bef" || runs[0].Properties.Bold == nil || !*runs[0].Properties.Bold || runs[1].Properties != nil {
+		t.Fatalf("re-extracted runs after WASM formatting = %#v", runs)
+	}
+}

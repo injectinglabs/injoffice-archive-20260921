@@ -61,6 +61,7 @@ export default function PdfEditor({ name, bytes, onChange, onBusyChange, onDraft
   const [findOpen, setFindOpen] = useState(false)
   const [allPages, setAllPages] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
+  const [supportOpen, setSupportOpen] = useState(false)
   const menu = useContextMenu()
   const menuPoint = useRef<[number, number] | undefined>(undefined)
   const [query, setQuery] = useState('')
@@ -396,6 +397,7 @@ export default function PdfEditor({ name, bytes, onChange, onBusyChange, onDraft
         <span className="ribbon-note">of {count || '…'}</span>
       </> },
       { id: 'export', label: 'Export', children: bridge?.exportBytes && <RibbonButton icon="export" label="Export pages…" title="Export a page range as a new PDF" aria-expanded={exportOpen} disabled={disabled} onClick={() => setExportOpen(true)} /> },
+      { id: 'help', label: 'Help', children: <RibbonButton icon="more" label="Editing support" title="What this editor can change in a PDF" aria-expanded={supportOpen} onClick={() => setSupportOpen(true)} /> },
     ] },
   ]
   const activeRibbonTab = ['File', ...visibleRibbonTabs(ribbonTabs).map(tab => tab.id)].includes(ribbonTab) ? ribbonTab : 'Home'
@@ -471,6 +473,12 @@ export default function PdfEditor({ name, bytes, onChange, onBusyChange, onDraft
         <div className="pdf-export-actions"><button type="button" onClick={() => setExportOpen(false)}>Cancel</button><button type="submit" className="pdf-primary" disabled={disabled}>Export PDF…</button></div>
       </form>
     </dialog>}
-    <div className="pdf-status"><span role="status">{working ? 'Applying change…' : rendering ? 'Rendering page…' : notice || (tool === 'view' ? 'Choose a tool to add content or arrange pages.' : 'Press Esc to cancel. Ctrl / ⌘ + Enter applies.')}</span><details><summary>Editing support</summary><p>Adds text, annotations, and form values. Existing text replacement uses the original font and refuses unsupported or ambiguous content. Select text to copy it, or search across document pages. Document search is bounded to 2,000 pages, 10 million characters and 10,000 matches. Imported pages retain page content; form PDFs cannot be imported or split. Images are inserted at the center of the page. Added text embeds Liberation Sans and supports available Latin, Greek, and Cyrillic characters. Complex scripts are not yet supported. Text stays on one line. Page changes and additions can be undone until the file is closed.</p></details></div>
+    {supportOpen && <dialog className="pdf-export-dialog pdf-support-dialog" aria-labelledby={`${arrowMarkerId}-support`} ref={node => { node?.showModal?.() }} onCancel={event => { event.preventDefault(); setSupportOpen(false) }}>
+      <h2 id={`${arrowMarkerId}-support`}>Editing support</h2>
+      <p>Adds text, annotations, and form values. Existing text replacement uses the original font and refuses unsupported or ambiguous content. Select text to copy it, or search across document pages. Document search is bounded to 2,000 pages, 10 million characters and 10,000 matches. Imported pages retain page content; form PDFs cannot be imported or split. Images are inserted at the center of the page. Added text embeds Liberation Sans and supports available Latin, Greek, and Cyrillic characters. Complex scripts are not yet supported. Text stays on one line. Page changes and additions can be undone until the file is closed.</p>
+      <div className="pdf-export-actions"><button type="button" autoFocus className="pdf-primary" onClick={() => setSupportOpen(false)}>Close</button></div>
+    </dialog>}
+    {/* One status row: the page on the left, what the tool expects on the right. The app footer keeps the save state and zoom. */}
+    <div className="pdf-status"><span>Page {page} of {count || '…'}</span><span role="status">{working ? 'Applying change…' : rendering ? 'Rendering page…' : notice || (tool === 'view' ? 'Choose a tool to add content or arrange pages.' : 'Press Esc to cancel. Ctrl / ⌘ + Enter applies.')}</span></div>
   </section>
 }

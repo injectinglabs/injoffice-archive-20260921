@@ -233,7 +233,7 @@ test('the PDF editor uses the shared Office ribbon: tabs, icons, find toggle and
     const label = node => typeof node === 'string' ? node : (node.children ?? []).map(label).join('');
     assert.deepEqual(renderer.root.findAllByProps({ role: 'tab' }).map(label), ['Home', 'Insert', 'View'], 'Office tab strip (File comes from the workspace context)');
     assert.deepEqual(renderer.root.findAllByProps({ role: 'group' }).map(group => group.props['aria-label']),
-      ['Tools', 'Editing', 'Text', 'Markup', 'Shapes', 'Illustrations', 'Pages', 'Arrange', 'Page Navigation', 'Export']);
+      ['Tools', 'Editing', 'Text', 'Markup', 'Shapes', 'Illustrations', 'Pages', 'Arrange', 'Page Navigation', 'Export', 'Help']);
 
     // Every command button carries a glyph and a tooltip; the title-bar Quick Access owns undo/redo.
     const commands = renderer.root.findAllByType('button').filter(button => (button.props.className ?? '').includes('ribbon-button'));
@@ -264,6 +264,15 @@ test('the PDF editor uses the shared Office ribbon: tabs, icons, find toggle and
     assert.equal(dialog.props.className, 'pdf-export-dialog');
     assert.match(label(dialog), /For example: 1-3, 5/);
     assert.equal(renderer.root.findByProps({ 'aria-label': 'PDF pages to export' }).props.placeholder, '1');
+    await act(async () => renderer.root.findByType('dialog').props.onCancel({ preventDefault() {} }));
+
+    // One status row: the page on the left, the tool hint on the right, and no Editing support disclosure.
+    const status = renderer.root.findByProps({ className: 'pdf-status' });
+    const parts = status.children.map(child => child.children.join(''));
+    assert.deepEqual(parts, ['Page 1 of 3', 'Choose a tool to add content or arrange pages.']);
+    assert.equal(status.findAllByType('details').length, 0);
+    await act(async () => ribbonButton(renderer, 'Editing support').props.onClick());
+    assert.match(label(renderer.root.findByType('dialog')), /Editing support/);
     await act(async () => renderer.unmount());
     renderer = undefined;
   } finally {
