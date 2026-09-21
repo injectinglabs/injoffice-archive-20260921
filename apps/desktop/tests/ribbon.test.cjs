@@ -171,3 +171,28 @@ test('every ribbon glyph is a drawable path, including the PDF tool set', async 
   });
   await act(async () => view.unmount());
 });
+
+test('the ribbon panel keeps Office geometry: 94px, one row centred, labels on one baseline', () => {
+  const css = fs.readFileSync(path.resolve(__dirname, '../src/ribbon.css'), 'utf8');
+  const rule = selector => {
+    const match = css.match(new RegExp(`${selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{([^}]*)\\}`));
+    assert.ok(match, `ribbon.css declares ${selector}`);
+    return match[1];
+  };
+  const panel = rule('.ribbon-panel');
+  const body = rule('.ribbon-group-body');
+  const label = rule('.ribbon-group-label');
+  const rows = rule('.ribbon-rows > *');
+  const px = (declarations, property) => Number(declarations.match(new RegExp(`(?:^|;|\\s)${property}:\\s*(\\d+)px`))?.[1]);
+  // 4 + 66 + 18 + 6 = 94: Office's ribbon height, two 30px rows or one row centred in the body.
+  assert.equal(px(panel, 'min-height'), 94);
+  assert.equal(px(body, 'min-height'), 66);
+  assert.match(label, /flex:\s*0 0 18px/, 'the label strip is a fixed band, so every group label shares a baseline');
+  assert.equal(px(rows, 'min-height'), 30);
+  assert.match(body, /align-items:\s*center/, 'a single row of controls is vertically centred');
+  assert.match(rule('.ribbon-rows'), /justify-content:\s*center/, 'stacked rows are centred as a block');
+  // Fixed control widths keep a group's geometry when the selection changes.
+  for (const combo of ['.ribbon-combo-font', '.ribbon-combo-size', '.ribbon-combo-style', '.ribbon-combo-list']) {
+    assert.ok(px(rule(combo), 'width') > 0, `${combo} has a fixed width`);
+  }
+});

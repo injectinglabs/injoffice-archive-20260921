@@ -10,14 +10,17 @@
 .ribbon-tabs [role="tab"][aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); background: var(--surface); }
 .ribbon-tabs [role="tab"]:focus-visible { outline: 2px solid var(--accent); outline-offset: -4px; }
 .ribbon-trailing { display: flex; align-items: center; gap: 8px; margin-left: auto; padding-left: 8px; min-width: 0; color: var(--text-muted); font-size: 11px; }
-.ribbon-panel { display: flex; align-items: stretch; gap: 4px; min-height: 84px; padding: 6px 10px 4px; overflow-x: auto; overflow-y: visible; }
+/* Office's ribbon is 94px: 66px of controls (one row centred, or two 30px rows) over a
+   label strip, so single-row groups line up with each other and every group label sits on
+   the same baseline. */
+.ribbon-panel { position: relative; display: flex; align-items: stretch; gap: 4px; min-height: 94px; padding: 4px 10px 6px; overflow-x: auto; overflow-y: visible; }
 .ribbon-panel[hidden] { display: none; }
-.ribbon-group { display: flex; flex: 0 0 auto; flex-direction: column; justify-content: space-between; gap: 5px; padding: 2px 8px 0; }
+.ribbon-group { display: flex; flex: 0 0 auto; flex-direction: column; gap: 0; padding: 0 8px; }
 .ribbon-group + .ribbon-group { border-left: 1px solid var(--border-subtle); }
-.ribbon-group-body { display: flex; align-items: center; gap: 4px; flex: 1; min-height: 0; }
-.ribbon-group-label { align-self: center; color: var(--text-muted); font-size: 10.5px; line-height: 1.2; white-space: nowrap; }
-.ribbon-rows { display: flex; flex-direction: column; gap: 4px; }
-.ribbon-rows > * { display: flex; align-items: center; gap: 4px; }
+.ribbon-group-body { display: flex; align-items: center; gap: 4px; flex: 1 1 auto; min-height: 66px; }
+.ribbon-group-label { display: flex; flex: 0 0 18px; align-items: center; justify-content: center; color: var(--text-muted); font-size: 10.5px; line-height: 1.2; white-space: nowrap; }
+.ribbon-rows { display: flex; flex-direction: column; justify-content: center; gap: 4px; }
+.ribbon-rows > * { display: flex; align-items: center; min-height: 30px; gap: 4px; }
 
 .ribbon-button { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 4px 9px; border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--text); font: inherit; font-size: 12px; line-height: 1.2; white-space: nowrap; cursor: pointer; }
 .ribbon-button:hover:not(:disabled) { background: var(--accent-soft); border-color: var(--accent-border); }
@@ -58,10 +61,15 @@
   .ribbon-group { padding-inline: 5px; }
 }
 
+/* A host that still paints a colour with a captioned <input type="color"> keeps the ribbon's
+   row height, so its group stays 94px and its rows line up with every other group. Adopting
+   ColorButton makes this rule inert. */
+.ribbon .ribbon-group-body label:has(input[type="color"]) { flex-direction: row; align-items: center; gap: 4px; height: 30px; }
+
 /* Existing toolbar components rendered inside ribbon groups drop their own chrome. */
 .ribbon .formatting-toolbar, .ribbon .paragraph-toolbar { padding: 0; gap: 6px; background: transparent; border: 0; font-size: 12px; }
 .ribbon .formatting-group + .formatting-group { padding-left: 0; border-left: 0; }
-.ribbon .paragraph-toolbar { align-items: flex-end; flex-wrap: nowrap; }
+.ribbon .paragraph-toolbar { align-items: center; flex-wrap: nowrap; }
 .ribbon .paragraph-toolbar > span { max-width: 120px; white-space: normal; line-height: 1.3; }
 .ribbon .office-page-layout-note { padding: 0; }
 .ribbon .document-insert-table, .ribbon .office-link-control { position: relative; }
