@@ -297,6 +297,12 @@ test('right-clicking the PDF page opens the shared context menu with the page co
   let renderer;
   const bytes = new Uint8Array([0x25, 0x50, 0x44, 0x46]);
   const listeners = [];
+  const originalFetch = global.fetch;
+  const applied = [];
+  global.fetch = async url => {
+    assert.equal(String(url), 'https://injoffice.invalid/pdf-assets/standard_fonts/LiberationSans-Regular.ttf');
+    return { ok: true, arrayBuffer: async () => new Uint8Array([0, 1, 0, 0]).buffer };
+  };
   global.document = { baseURI: 'https://injoffice.invalid/' };
   global.window = {
     devicePixelRatio: 1,
@@ -352,9 +358,31 @@ test('right-clicking the PDF page opens the shared context menu with the page co
     assert.equal(renderer.root.findAllByProps({ role: 'menu' }).length, 0, 'the menu closes when an entry runs');
     assert.equal(renderer.root.findByProps({ 'aria-label': 'Tool settings' }) != null, true);
     assert.equal(renderer.root.findByProps({ 'aria-label': 'New PDF text' }) != null, true);
+    // Switching to Home tools finishes placed text instead of trapping the user.
+    for (const target of ['Select', 'Edit text', 'Fill forms']) {
+      if (target !== 'Select') {
+        await act(async () => ribbonButton(renderer, 'Add text').props.onClick());
+        await act(async () => surface.props.onPointerDown({ button: 0, pointerId: 1, clientX: 40, clientY: 60,
+          currentTarget: { getBoundingClientRect: () => ({ left: 0, top: 0 }), setPointerCapture() {} } }));
+      }
+      await act(async () => renderer.root.findByProps({ 'aria-label': 'New PDF text' }).props.onChange({ target: { value: `Text for ${target}` } }));
+      for (const label of ['Select', 'Edit text', 'Fill forms']) assert.equal(ribbonButton(renderer, label).props.disabled, false);
+      assert.equal(ribbonButton(renderer, 'Add page').props.disabled, true, 'page mutations still wait for the draft');
+      globalThis.__applyPdfCommand = async () => { throw new Error('Font fetch refused'); };
+      await act(async () => ribbonButton(renderer, target).props.onClick());
+      await until(() => JSON.stringify(renderer.toJSON()).includes('Font fetch refused'));
+      assert.equal(renderer.root.findByProps({ 'aria-label': 'New PDF text' }).props.value, `Text for ${target}`, 'failed commit preserves the draft');
+      globalThis.__applyPdfCommand = async (current, command) => { applied.push(command); return current; };
+      await act(async () => ribbonButton(renderer, target).props.onClick());
+      await until(() => ribbonButton(renderer, target).props['aria-pressed'] && !ribbonButton(renderer, target).props.disabled);
+      assert.equal(applied.at(-1).text, `Text for ${target}`);
+      assert.deepEqual(applied.at(-1).fontBytes, new Uint8Array([0, 1, 0, 0]));
+    }
+    assert.equal(applied.length, 3);
     await act(async () => renderer.unmount());
     renderer = undefined;
   } finally {
+    global.fetch = originalFetch;
     if (renderer) await act(async () => renderer.unmount());
     delete globalThis.__pdfView;
     delete globalThis.__inspectPdf;
