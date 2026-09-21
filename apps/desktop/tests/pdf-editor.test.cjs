@@ -276,6 +276,9 @@ test('the PDF editor uses the shared Office ribbon: tabs, icons, find toggle and
     const parts = status.children.map(child => child.children.join(''));
     assert.deepEqual(parts, ['Page 1 of 3', 'Choose a tool to add content or arrange pages.']);
     assert.equal(status.findAllByType('details').length, 0);
+    await act(async () => ribbonButton(renderer, 'Note').props.onClick());
+    assert.match(label(renderer.root.findByProps({ 'aria-label': 'PDF status' })), /Press Esc to cancel\. (?:⌘↩|Ctrl\+Enter) applies\./);
+    assert.doesNotMatch(label(renderer.root.findByProps({ 'aria-label': 'PDF status' })), /Ctrl \/ ⌘/);
     await act(async () => ribbonButton(renderer, 'Editing support').props.onClick());
     assert.match(label(renderer.root.findByType('dialog')), /Editing support/);
     await act(async () => renderer.unmount());

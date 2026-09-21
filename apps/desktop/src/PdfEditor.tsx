@@ -1,3 +1,4 @@
+import { shortcutLabel } from './shortcuts';
 import { EditorStatus } from './EditorStatus';
 import { useEffect, useId, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type PointerEvent } from 'react'
 import { applyPdfCommand, inspectPdf, PdfHistory, findPdfTextMatches, importPdfPages, exportPdfPages, parsePdfPageRange, type PdfCommand, type PdfAnnotationTarget, type PdfSummary } from './pdf-commands'
@@ -490,6 +491,6 @@ export default function PdfEditor({ name, bytes, onInitialLoadError, onChange, o
       <p>Adds text, annotations, and form values. Existing text replacement uses the original font and refuses unsupported or ambiguous content. Select text to copy it, or search across document pages. Document search is bounded to 2,000 pages, 10 million characters and 10,000 matches. Imported pages retain page content; form PDFs cannot be imported or split. Images are inserted at the center of the page. Added text embeds Liberation Sans and supports available Latin, Greek, and Cyrillic characters. Complex scripts are not yet supported. Text stays on one line. Page changes and additions can be undone until the file is closed.</p>
       <div className="pdf-export-actions"><button type="button" autoFocus className="pdf-primary" onClick={() => setSupportOpen(false)}>Close</button></div>
     </dialog>}
-    <EditorStatus label="PDF status"><span>Page {page} of {count || '…'}</span><span role="status">{working ? 'Applying change…' : rendering ? 'Rendering page…' : notice || (tool === 'view' ? 'Choose a tool to add content or arrange pages.' : 'Press Esc to cancel. Ctrl / ⌘ + Enter applies.')}</span></EditorStatus>
+    <EditorStatus label="PDF status"><span>Page {page} of {count || '…'}</span><span role="status">{working ? 'Applying change…' : rendering ? 'Rendering page…' : notice || (tool === 'view' ? 'Choose a tool to add content or arrange pages.' : `Press ${shortcutLabel('cancel')} to cancel. ${shortcutLabel('apply')} applies.`)}</span></EditorStatus>
   </section>
 }

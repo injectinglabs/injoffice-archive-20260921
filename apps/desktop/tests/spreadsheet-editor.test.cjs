@@ -473,3 +473,21 @@ test('a workbook reload failure after a successful load stays in the editor', as
     assert.match(JSON.stringify(view.toJSON()), /reload refused/);
   } finally { if (view) await act(async () => view.unmount()); delete globalThis.__xlsxClient; }
 });
+
+
+test('mounted workbooks have document-scoped cell ids and local active descendants', async () => {
+  globalThis.__xlsxClient = mockClient();
+  const SpreadsheetEditor = await loadEditor();
+  let view;
+  try {
+    await act(async () => { view = create(React.createElement(React.Fragment, null, ...[1, 2].map(documentKey => React.createElement(SpreadsheetEditor, { key: documentKey, documentKey, name: 'Book.xlsx', bytes: new Uint8Array([1]), onChange() {} })))); });
+    await until(() => view.root.findAllByProps({ role: 'grid' }).length === 2);
+    const ids = view.root.findAllByProps({ role: 'gridcell' }).map(node => node.props.id);
+    assert.equal(new Set(ids).size, ids.length);
+    for (const grid of view.root.findAllByProps({ role: 'grid' })) {
+      const target = grid.props['aria-activedescendant'];
+      assert.equal(grid.findAllByProps({ id: target }).length, 1);
+      assert.match(target, /^sheet-cell-[12]-1-A1$/);
+    }
+  } finally { if (view) await act(async () => view.unmount()); delete globalThis.__xlsxClient; }
+});
