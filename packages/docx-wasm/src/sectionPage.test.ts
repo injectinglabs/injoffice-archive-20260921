@@ -21,6 +21,12 @@ describe('section page WASM boundary', () => {
     const { document, mutation } = input()
     expect(() => validateSectionPageMutation(document, { ...mutation, expected_xml_sha256: 'stale' })).toThrow(/anchor changed/)
     for (const page of [{ ...mutation.page, width_twips: 100 }, { ...mutation.page, margin_left_twips: -1 }, { ...mutation.page, width_twips: 1.5 }, { ...mutation.page, orientation: 'sideways' }, { ...mutation.page, extra: 1 }]) expect(() => validateSectionPageMutation(document, { ...mutation, page })).toThrow()
+    const accessor = { ...mutation.page }
+    Object.defineProperty(accessor, 'width_twips', { get() { throw new Error('getter was invoked') } })
+    expect(() => validateSectionPageMutation(document, { ...mutation, page: accessor })).toThrow('only data fields')
+    const hidden = { ...mutation.page }
+    Object.defineProperty(hidden, 'extra', { value: 1 })
+    expect(() => validateSectionPageMutation(document, { ...mutation, page: hidden })).toThrow('seven fields')
     document.sections[0]!.edit_policy = { mode: 'read-only', allowed_operations: [], refusal: { code: 'UNSUPPORTED_SECTION_STRUCTURE', message: 'Multiple sections', preservation: 'refuse-mutation' } }
     expect(() => validateSectionPageMutation(document, mutation)).toThrow('Multiple sections')
   })

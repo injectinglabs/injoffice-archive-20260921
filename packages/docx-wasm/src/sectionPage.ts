@@ -3,15 +3,16 @@ import { NativeWasmError } from '@injoffice/native-runtime'
 
 export function validateSectionPageMutation(document: NativeDocxDocumentV1, mutation: Record<string, unknown>): NativeDocxSectionPagePayloadV1 {
   const keys = ['target_kind', 'target_id', 'expected_xml_sha256', 'operation', 'page']
-  if (Object.keys(mutation).length !== keys.length || Object.keys(mutation).some(key => !keys.includes(key)) || mutation.target_kind !== 'section') throw new TypeError('Page setup requires only a section target and page geometry.')
+  if (Object.getOwnPropertyNames(mutation).length !== keys.length || Object.getOwnPropertyNames(mutation).some(key => !keys.includes(key)) || mutation.target_kind !== 'section' || mutation.operation !== 'section.page.patch') throw new TypeError('Page setup requires only a section target and page geometry.')
   const section = document.sections.find(section => section.id === mutation.target_id)
   if (!section || section.anchor.xml_sha256 !== mutation.expected_xml_sha256) throw new NativeWasmError('STALE_TARGET', 'The section anchor changed.')
   if (!section.edit_policy?.allowed_operations.includes('section.page.patch')) throw new NativeWasmError('UNSUPPORTED_SECTION_STRUCTURE', section.edit_policy?.refusal?.message ?? 'This section does not allow page setup.')
   const value = mutation.page
-  if (!value || typeof value !== 'object' || Array.isArray(value) || (Object.getPrototypeOf(value) !== Object.prototype && Object.getPrototypeOf(value) !== null)) throw new TypeError('Page geometry must be a plain object.')
+  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.getPrototypeOf(value) !== Object.prototype) throw new TypeError('Page geometry must be a plain object.')
+  if (Object.getOwnPropertySymbols(value).length || Object.values(Object.getOwnPropertyDescriptors(value)).some(descriptor => !('value' in descriptor))) throw new TypeError('Page geometry must contain only data fields.')
   const page = value as Record<string, unknown>
   const fields = ['width_twips', 'height_twips', 'orientation', 'margin_top_twips', 'margin_right_twips', 'margin_bottom_twips', 'margin_left_twips']
-  if (Object.keys(page).length !== fields.length || Object.keys(page).some(key => !fields.includes(key))) throw new TypeError('Page geometry requires all seven fields.')
+  if (Object.getOwnPropertyNames(page).length !== fields.length || Object.getOwnPropertyNames(page).some(key => !fields.includes(key))) throw new TypeError('Page geometry requires all seven fields.')
   for (const key of fields) {
     if (key === 'orientation') {
       if (page[key] !== 'portrait' && page[key] !== 'landscape') throw new TypeError('Invalid page orientation.')
@@ -19,5 +20,5 @@ export function validateSectionPageMutation(document: NativeDocxDocumentV1, muta
   }
   const patch = page as unknown as NativeDocxSectionPagePatchV1
   if (patch.margin_left_twips + patch.margin_right_twips + section.page.margins.gutter_twips >= patch.width_twips || patch.margin_top_twips + patch.margin_bottom_twips >= patch.height_twips) throw new TypeError('Page margins must leave positive body dimensions.')
-  return { mutations: [{ target_kind: 'section', target_id: section.id, expected_xml_sha256: section.anchor.xml_sha256, operation: 'section.page.patch', page: { ...patch } }] }
+  return { mutations: [{ target_kind: 'section', target_id: section.id, expected_xml_sha256: section.anchor.xml_sha256, operation: 'section.page.patch', page: Object.fromEntries(fields.map(key => [key, page[key]])) as unknown as NativeDocxSectionPagePatchV1 }] }
 }
