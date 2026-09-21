@@ -11,8 +11,7 @@ import type { RibbonIconName } from './RibbonIcons'
 export type PagePatch = { width_twips: number; height_twips: number; orientation: 'portrait' | 'landscape'; margin_top_twips: number; margin_right_twips: number; margin_bottom_twips: number; margin_left_twips: number }
 export type LayoutParagraphPatch = { indent_left_twips?: number | null; indent_right_twips?: number | null; spacing_before_twips?: number | null; spacing_after_twips?: number | null; first_line_twips?: number | null; hanging_twips?: number | null; line_spacing?: number | null; line_rule?: 'auto' | 'exact' | 'atLeast' | null; outline_level?: number | null }
 export interface LayoutParagraphSettings { indent_left_twips?: number; indent_right_twips?: number; spacing_before_twips?: number; spacing_after_twips?: number; first_line_twips?: number; hanging_twips?: number; line_spacing?: number; line_rule?: 'auto' | 'exact' | 'atLeast'; outline_level?: number }
-/** The section as the engine reports it, with the edit policy the native contract does not model yet. */
-type LayoutSection = NativeDocxSectionV1 & { edit_policy?: { allowed_operations: string[] } }
+type LayoutSection = NativeDocxSectionV1
 function pagePatch(section: LayoutSection): PagePatch {
   const page = section.page
   return { width_twips: page.width_twips, height_twips: page.height_twips, orientation: page.orientation, margin_top_twips: page.margins.top_twips, margin_right_twips: page.margins.right_twips, margin_bottom_twips: page.margins.bottom_twips, margin_left_twips: page.margins.left_twips }
@@ -37,7 +36,7 @@ const marginPresets = [
 interface MenuItem { id: string; label: string; detail?: string; selected: boolean; apply(): void }
 
 /** A ribbon gallery button: the current value on the face, the choices in a small menu. */
-function LayoutMenu({ icon, label, value, disabled, items }: { icon: RibbonIconName; label: string; value: string; disabled: boolean; items: MenuItem[] }) {
+function LayoutMenu({ icon, label, value, disabled, reason, items }: { icon: RibbonIconName; label: string; value: string; disabled: boolean; reason?: string; items: MenuItem[] }) {
   const [open, setOpen] = useState(false)
   const box = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -48,7 +47,7 @@ function LayoutMenu({ icon, label, value, disabled, items }: { icon: RibbonIconN
     window.document.addEventListener('keydown', escape)
     return () => { window.document.removeEventListener('mousedown', outside); window.document.removeEventListener('keydown', escape) }
   }, [open])
-  const title = disabled ? `${label}: ${value}. ${SCOPE_NOTE}; this document's section structure is read only here.` : `${label}: ${value}. ${SCOPE_NOTE}.`
+  const title = disabled ? `${label}: ${value}. ${SCOPE_NOTE}; ${reason ?? "this document's section structure is read only here"}.` : `${label}: ${value}. ${SCOPE_NOTE}.`
   return <div className="document-layout-menu" ref={box}>
     <RibbonButton icon={icon} label={label} title={title} disabled={disabled} aria-expanded={open} aria-haspopup="menu" onClick={() => setOpen(value => !value)}>
       <span className="document-layout-value">{value}</span>
@@ -71,16 +70,16 @@ export function DocumentPageSetup({ section, disabled, onChange }: { section?: L
   const paper = papers.find(item => value.width_twips === (landscape ? item.height : item.width) && value.height_twips === (landscape ? item.width : item.height))
   const margins = marginPresets.find(item => item.top === value.margin_top_twips && item.bottom === value.margin_bottom_twips && item.left === value.margin_left_twips && item.right === value.margin_right_twips)
   return <>
-    <LayoutMenu icon="margins" label="Margins" disabled={readOnly} value={margins?.name ?? 'Custom'} items={marginPresets.map(preset => ({
+    <LayoutMenu icon="margins" label="Margins" disabled={readOnly} reason={section.edit_policy?.refusal?.message} value={margins?.name ?? 'Custom'} items={marginPresets.map(preset => ({
       id: preset.name, label: preset.name, detail: `Top ${inches(preset.top)} Bottom ${inches(preset.bottom)} Left ${inches(preset.left)} Right ${inches(preset.right)}`,
       selected: margins?.name === preset.name,
       apply: () => onChange({ ...value, margin_top_twips: preset.top, margin_bottom_twips: preset.bottom, margin_left_twips: preset.left, margin_right_twips: preset.right }),
     }))} />
-    <LayoutMenu icon="orientation" label="Orientation" disabled={readOnly} value={landscape ? 'Landscape' : 'Portrait'} items={(['portrait', 'landscape'] as const).map(orientation => ({
+    <LayoutMenu icon="orientation" label="Orientation" disabled={readOnly} reason={section.edit_policy?.refusal?.message} value={landscape ? 'Landscape' : 'Portrait'} items={(['portrait', 'landscape'] as const).map(orientation => ({
       id: orientation, label: orientation === 'portrait' ? 'Portrait' : 'Landscape', selected: value.orientation === orientation,
       apply: () => { if (orientation !== value.orientation) onChange({ ...value, orientation, width_twips: value.height_twips, height_twips: value.width_twips }) },
     }))} />
-    <LayoutMenu icon="pageSetup" label="Size" disabled={readOnly} value={paper?.name ?? `${inches(value.width_twips)} × ${inches(value.height_twips)}`} items={papers.map(item => ({
+    <LayoutMenu icon="pageSetup" label="Size" disabled={readOnly} reason={section.edit_policy?.refusal?.message} value={paper?.name ?? `${inches(value.width_twips)} × ${inches(value.height_twips)}`} items={papers.map(item => ({
       id: item.name, label: item.name, detail: `${inches(item.width)} × ${inches(item.height)}`, selected: paper?.name === item.name,
       apply: () => onChange({ ...value, width_twips: landscape ? item.height : item.width, height_twips: landscape ? item.width : item.height }),
     }))} />

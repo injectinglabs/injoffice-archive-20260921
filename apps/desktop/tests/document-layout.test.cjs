@@ -134,3 +134,12 @@ test('Paragraph layout keeps first line, hanging, line spacing and outline behin
     await act(async () => view.unmount());
   }
 });
+
+test('Page Setup explains the native section refusal on every disabled gallery', async () => {
+  const { DocumentPageSetup } = await loadLayout();
+  mockWindow();
+  let view;
+  await act(async () => { view = create(React.createElement(DocumentPageSetup, { section: section({ edit_policy: { mode: 'read-only', allowed_operations: [], refusal: { message: 'Page setup requires a single explicit section with one column and known geometry' } } }), disabled: false, onChange() { throw new Error('disabled control wrote a page'); } })); });
+  try { for (const button of view.root.findAllByType('button')) { assert.equal(button.props.disabled, true); assert.match(button.props.title, /single explicit section/); } }
+  finally { await act(async () => view.unmount()); }
+});

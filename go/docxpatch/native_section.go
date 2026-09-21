@@ -115,6 +115,9 @@ func applyNativeSectionPage(source []byte, revision string, mutation nativeDOCXM
 		return refuse("STALE_TARGET", "section XML fingerprint changed")
 	}
 	if section.EditPolicy == nil || !nativePolicyAllows(*section.EditPolicy, "section.page.patch") {
+		if section.EditPolicy != nil && section.EditPolicy.Refusal != nil {
+			return refuse(section.EditPolicy.Refusal.Code, section.EditPolicy.Refusal.Message)
+		}
 		return refuse("UNSUPPORTED_SECTION_STRUCTURE", "the extracted section does not allow page setup")
 	}
 	patch := mutation.Page
