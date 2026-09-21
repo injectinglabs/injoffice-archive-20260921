@@ -6,6 +6,8 @@
  * This protocol uses only stable sheet ids and a compare-and-swap revision.
  */
 
+import { CHART_MUTATION_KINDS, parseChartMutation, type ChartDeleteMutation, type ChartInsertMutation, type ChartUpdateMutation } from './chartMutationProtocol.js'
+
 export const WORKBOOK_MUTATION_PROTOCOL = 'injoffice.xlsx.mutations'
 export const WORKBOOK_MUTATION_VERSION = 1 as const
 
@@ -147,6 +149,9 @@ export type SupportedWorkbookMutation =
   | ColumnSetWidthMutation
   | RangeMergeMutation
   | RangeUnmergeMutation
+  | ChartInsertMutation
+  | ChartUpdateMutation
+  | ChartDeleteMutation
 
 /** Recognized UI edits that v1 must refuse rather than omit from a save. */
 export const UNSUPPORTED_STRUCTURAL_MUTATION_KINDS = [
@@ -226,6 +231,7 @@ const supportedKinds = new Set<string>([
   'column.set_width',
   'range.merge',
   'range.unmerge',
+  ...CHART_MUTATION_KINDS,
 ])
 const unsupportedKinds = new Set<string>(UNSUPPORTED_STRUCTURAL_MUTATION_KINDS)
 
@@ -573,6 +579,10 @@ function parseOperation(value: unknown, index: number, issues: WorkbookMutationI
       }
       return base && range ? { ...base, kind, range } : null
     }
+    case 'chart.insert':
+    case 'chart.update':
+    case 'chart.delete':
+      return parseChartMutation(value, path, index, operationId, sheetId, issues)
   }
   return null
 }

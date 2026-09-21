@@ -9,10 +9,24 @@ export {
 } from './mutationProtocol.js'
 
 export type {
+  RangeRef,
   StyleDelta,
   SupportedWorkbookMutation,
   WorkbookMutationBatchV1,
 } from './mutationProtocol.js'
+
+export { CHART_MUTATION_KINDS, CHART_TYPES } from './chartMutationProtocol.js'
+export type {
+  ChartAnchor,
+  ChartDeleteMutation,
+  ChartIdentity,
+  ChartInsertMutation,
+  ChartMutation,
+  ChartTypeV1,
+  ChartUpdateMutation,
+} from './chartMutationProtocol.js'
+export { decodeNativeEditableChartsV1 } from './nativeEditableChartsV1.js'
+export type { NativeEditableChartV1, XlsxNativeChart } from './nativeEditableChartsV1.js'
 
 export { validateNativeWorkbookV1 } from './nativeValidation.js'
 export type { NativeWorkbookV1 } from './nativeContract.generated.js'

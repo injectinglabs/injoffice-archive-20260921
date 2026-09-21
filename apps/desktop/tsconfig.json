@@ -21,22 +21,20 @@
   },
   "include": ["src"],
   // Honest scope, not a clean bill: these renderer modules import package exports that do not exist
-  // on main (localWorkbookCalculation, XlsxNativeChart, NativeDocxRunPropertyPatchV1, chart.insert,
-  // can_format_range, ...) and fail with 213 errors; the four at the end only import them. Every other
-  // src file is type-checked, and tests/typecheck-scope.test.cjs refuses an exclusion that no longer
-  // fails, so the list can only shrink. Remove a file here once its package APIs land.
+  // on main (localWorkbookCalculation, NativeDocxRunPropertyPatchV1, can_format_range, ...) and fail
+  // with remaining errors; the four at the end only import them. Every other src file is type-checked,
+  // and tests/typecheck-scope.test.cjs refuses an exclusion that no longer fails, so the list can only
+  // shrink. Remove a file here once its package APIs land.
   "exclude": [
     "src/DocumentPreview.tsx",
     "src/OfficeEditor.tsx",
     "src/ParagraphToolbar.tsx",
     "src/PresentationEditor.tsx",
-    "src/SpreadsheetCharts.tsx",
     "src/SpreadsheetEditor.tsx",
     "src/document-authoring.ts",
     "src/document-style.ts",
     "src/formatting.ts",
     "src/presentationCommands.ts",
-    "src/spreadsheet-chart-geometry.ts",
     "src/spreadsheetCalculation.ts",
     "src/spreadsheetDelimited.ts",
     "src/spreadsheetSheetPolicy.ts",

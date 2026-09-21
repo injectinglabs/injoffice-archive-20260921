@@ -22,6 +22,8 @@ import {
   type WorkbookMutationBatchV1,
 } from '@injoffice/sheets/browser'
 
+export type { NativeEditableChartV1 as XlsxNativeChart } from '@injoffice/sheets/browser'
+
 export const XLSX_WASM_NATIVE_MAX_PACKAGE_BYTES = 128 * 1024 * 1024
 export const XLSX_WASM_NATIVE_MAX_MUTATION_PAYLOAD_BYTES = 3 * 1024 * 1024
 export const DEFAULT_XLSX_WASM_MAX_PACKAGE_BYTES = 32 * 1024 * 1024
@@ -30,6 +32,7 @@ export const DEFAULT_XLSX_WASM_MAX_MUTATION_PAYLOAD_BYTES = 1024 * 1024
 export type XlsxNativeCellMutationV1 = Extract<SupportedWorkbookMutation, { kind: `cell.${string}` }>
 export type XlsxNativeStyleMutationV1 = Extract<SupportedWorkbookMutation, { kind: 'style.patch' }>
 export type XlsxNativeLayoutMutationV1 = Extract<SupportedWorkbookMutation, { kind: 'row.set_height' | 'column.set_width' }>
+export type XlsxNativeChartMutationV1 = Extract<SupportedWorkbookMutation, { kind: `chart.${string}` }>
 
 type XlsxNativeMergeMutationV1 = Extract<SupportedWorkbookMutation, { kind: 'range.merge' | 'range.unmerge' }>
 
@@ -44,6 +47,7 @@ export interface XlsxNativeMutationTransactionV1 {
   readonly layout?: ReadonlyArray<XlsxNativeLayoutMutationV1>
   readonly merges?: ReadonlyArray<XlsxNativeMergeMutationV1>
   readonly structure?: ReadonlyArray<XlsxNativeStructureMutationV1>
+  readonly charts?: ReadonlyArray<XlsxNativeChartMutationV1>
 }
 
 export interface XlsxWasmAssetUrls {
@@ -115,13 +119,15 @@ export function adaptWorkbookMutationBatchV1(
   const cells: XlsxNativeCellMutationV1[] = []
   const styles: XlsxNativeStyleMutationV1[] = []
   const layout: XlsxNativeLayoutMutationV1[] = []
+  const charts: XlsxNativeChartMutationV1[] = []
   let lastFamily = 0
   for (const operation of batch.operations) {
     validateNativeOperation(operation)
     const family = operation.kind.startsWith('cell.') ? 0
       : operation.kind === 'style.patch' ? 1
         : operation.kind === 'row.set_height' || operation.kind === 'column.set_width' ? 2
-          : -1
+          : operation.kind.startsWith('chart.') ? 3
+            : -1
     if (family < 0) {
       throw new NativeWasmError(
         'UNSUPPORTED_OPERATION',
@@ -131,19 +137,21 @@ export function adaptWorkbookMutationBatchV1(
     if (family < lastFamily) {
       throw new NativeWasmError(
         'UNSUPPORTED_ORDER',
-        'Native XLSX batches must keep cell operations before style operations and style operations before row/column layout operations.',
+        'Native XLSX batches must keep cell operations before style operations, style operations before row/column layout operations, and layout operations before chart operations.',
       )
     }
     lastFamily = family
     if (family === 0) cells.push(operation as XlsxNativeCellMutationV1)
     else if (family === 1) styles.push(operation as XlsxNativeStyleMutationV1)
-    else layout.push(operation as XlsxNativeLayoutMutationV1)
+    else if (family === 2) layout.push(operation as XlsxNativeLayoutMutationV1)
+    else charts.push(operation as XlsxNativeChartMutationV1)
   }
   return {
     expected_revision: workbook.revision,
     ...(cells.length > 0 ? { cells } : {}),
     ...(styles.length > 0 ? { styles } : {}),
     ...(layout.length > 0 ? { layout } : {}),
+    ...(charts.length > 0 ? { charts } : {}),
   }
 }
 
@@ -214,7 +222,7 @@ class XlsxWasmClientImpl implements XlsxWasmClient {
 
 function validateNativeTransaction(workbook: NativeWorkbookV2, input: XlsxNativeMutationTransactionV1): XlsxNativeMutationTransactionV1 {
   if (!isRecord(input)) throw new TypeError('XLSX native transaction must be an object.')
-  rejectUnknownKeys(input, ['expected_revision', 'cells', 'styles', 'layout', 'merges', 'structure'])
+  rejectUnknownKeys(input, ['expected_revision', 'cells', 'styles', 'layout', 'merges', 'structure', 'charts'])
   if (input.expected_revision !== workbook.revision) {
     throw new NativeWasmError(
       'STALE_REVISION',
@@ -226,9 +234,10 @@ function validateNativeTransaction(workbook: NativeWorkbookV2, input: XlsxNative
   const layout = optionalArray(input.layout, 'layout')
   const merges = optionalArray(input.merges, 'merges')
   const structure = optionalArray(input.structure, 'structure')
-  const operations = [...cells, ...styles, ...layout, ...merges, ...structure]
+  const charts = optionalArray(input.charts, 'charts')
+  const operations = [...cells, ...styles, ...layout, ...merges, ...structure, ...charts]
   if (structure.length && operations.length !== 1) throw new TypeError('Send one structural edit per transaction.')
-  if (merges.length && operations.length !== merges.length) throw new TypeError('Merge batches cannot mix with cell/style/layout operations.')
+  if (merges.length && operations.length !== merges.length) throw new TypeError('Merge batches cannot mix with cell/style/layout/chart operations.')
   const decoded = decodeWorkbookMutationBatch({
     protocol: WORKBOOK_MUTATION_PROTOCOL,
     version: WORKBOOK_MUTATION_VERSION,
@@ -250,17 +259,20 @@ function validateNativeTransaction(workbook: NativeWorkbookV2, input: XlsxNative
   }
   const normalizedCells = normalized.slice(0, cells.length)
   const normalizedStyles = normalized.slice(cells.length, cells.length + styles.length)
-  const normalizedLayout = normalized.slice(cells.length + styles.length)
+  const normalizedLayout = normalized.slice(cells.length + styles.length, cells.length + styles.length + layout.length)
+  const normalizedCharts = normalized.slice(cells.length + styles.length + layout.length)
   if (normalizedCells.some((item) => !item.kind.startsWith('cell.'))) throw new TypeError('XLSX native cells may contain only cell operations.')
   if (normalizedStyles.some((item) => item.kind !== 'style.patch')) throw new TypeError('XLSX native styles may contain only style.patch operations.')
   if (normalizedLayout.some((item) => item.kind !== 'row.set_height' && item.kind !== 'column.set_width')) {
     throw new TypeError('XLSX native layout may contain only row.set_height or column.set_width operations.')
   }
+  if (normalizedCharts.some((item) => !item.kind.startsWith('chart.'))) throw new TypeError('XLSX native charts may contain only chart operations.')
   return {
     expected_revision: workbook.revision,
     ...(normalizedCells.length > 0 ? { cells: normalizedCells as XlsxNativeCellMutationV1[] } : {}),
     ...(normalizedStyles.length > 0 ? { styles: normalizedStyles as XlsxNativeStyleMutationV1[] } : {}),
     ...(normalizedLayout.length > 0 ? { layout: normalizedLayout as XlsxNativeLayoutMutationV1[] } : {}),
+    ...(normalizedCharts.length > 0 ? { charts: normalizedCharts as XlsxNativeChartMutationV1[] } : {}),
   }
 }
 

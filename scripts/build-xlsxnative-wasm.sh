@@ -49,7 +49,7 @@ size=$(wc -c < "$out/xlsxnative.wasm" | tr -d ' ')
 echo "xlsxnative.wasm ${size} bytes" >&2
 max_bytes=$(cat "$src/max-bytes.txt")
 if (( size > max_bytes )); then
-  echo "xlsxnative.wasm exceeds the 7.25 MiB + 48 KiB size ceiling (${max_bytes} bytes)" >&2
+  echo "xlsxnative.wasm exceeds the 7.75 MiB size ceiling (${max_bytes} bytes)" >&2
   exit 1
 fi
 echo "copied wasm_exec.js from $wasm_exec" >&2

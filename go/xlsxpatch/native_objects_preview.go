@@ -25,6 +25,7 @@ type NativeWorkbookObjectsV1 struct {
 	PackageSHA256         string                                `json:"package_sha256"`
 	Tables                []NativeTablePreviewV1                `json:"tables"`
 	Charts                []NativeChartPreviewV1                `json:"charts"`
+	EditableCharts        []NativeEditableChartV1               `json:"editable_charts,omitempty"`
 	RowGeometry           []NativeStoredRowGeometryV1           `json:"row_geometry,omitempty"`
 	DimensionNeutrality   []NativeSheetDimensionNeutralityV1    `json:"dimension_neutrality,omitempty"`
 	PageSettings          []NativeSheetPageSettingsV1           `json:"page_settings,omitempty"`
@@ -387,6 +388,7 @@ func InspectNativeWorkbookObjectsV1(data []byte) (*NativeWorkbookObjectsV1, erro
 			}
 		}
 	}
+	result.EditableCharts = projectNativeEditableChartsV1(data)
 	encoded, err := json.Marshal(result)
 	if err != nil {
 		return nil, err

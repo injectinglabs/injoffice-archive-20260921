@@ -33,6 +33,19 @@ export type {
   WorkbookMutationIssueCode,
 } from './mutationProtocol.js'
 
+export { CHART_MUTATION_KINDS, CHART_TYPES } from './chartMutationProtocol.js'
+export type {
+  ChartAnchor,
+  ChartDeleteMutation,
+  ChartIdentity,
+  ChartInsertMutation,
+  ChartMutation,
+  ChartTypeV1,
+  ChartUpdateMutation,
+} from './chartMutationProtocol.js'
+export { decodeNativeEditableChartsV1 } from './nativeEditableChartsV1.js'
+export type { NativeEditableChartV1, XlsxNativeChart } from './nativeEditableChartsV1.js'
+
 export {
   XLSX_NATIVE_OBJECT_BINDINGS,
   XLSX_NATIVE_PROTOCOL,

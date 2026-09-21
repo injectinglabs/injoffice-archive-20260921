@@ -51,7 +51,7 @@ package SHA256 before returning a deeply frozen closed envelope. It exposes
 only `preview` and `terminate`. Its self-contained `xlsxrichsource.worker.js`
 loads a separate `xlsxrichsource.wasm` module with only `previewRichSource`; the
 worker refuses extraction and mutation. The native module's size ceiling is
-7.25 MiB + 48 KiB, read from `go/xlsxpatch/cmd/xlsxnativewasm/max-bytes.txt`; the
+7.75 MiB, read from `go/xlsxpatch/cmd/xlsxnativewasm/max-bytes.txt`; the
 rich-source module retains a 7 MiB bound.
 The native editing module and V1/V2 bindings remain compatible.
 

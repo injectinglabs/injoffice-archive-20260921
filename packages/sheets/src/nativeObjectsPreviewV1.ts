@@ -8,6 +8,7 @@ import { snapshotNativePlainData } from "./nativePlainData.js";
 import {decodeNativeSheetPageSettingsV1,type NativeSheetPageSettingsV1} from './nativeSheetPageSettingsV1.js';
 import {decodeNativeDrawingObjectsV1,type NativeDrawingObjectV1} from './nativeDrawingObjectsV1.js';
 import {decodeNativeFormControlsV1,type NativeFormControlV1} from './nativeFormControlObjectsV1.js';
+import {decodeNativeEditableChartsV1,type NativeEditableChartV1} from './nativeEditableChartsV1.js';
 import {decodeNativeSheetPrintAreasV1,type NativeSheetPrintAreaV1} from './nativeSheetPrintAreasV1.js';
 import {decodeNativeSheetPrintAreaSetsV1,type NativeSheetPrintAreaSetV1} from './nativeSheetPrintAreaSetsV1.js';
 import {decodeNativeSheetPrintTitlesV1,type NativeSheetPrintTitlesV1} from './nativeSheetPrintTitlesV1.js';
@@ -26,6 +27,7 @@ export interface NativeWorkbookObjectsV1 {
   print_titles?: NativeSheetPrintTitlesV1[];
   drawing_objects?: NativeDrawingObjectV1[];
   form_controls?: NativeFormControlV1[];
+  editable_charts?: NativeEditableChartV1[];
   rich_text?: NativeRichTextPreviewV1;
   conditional_fills?: NativeConditionalFillPreviewV1[];
   conditional_scale_fills?: NativeConditionalScaleFillPreviewV1[];
@@ -135,6 +137,7 @@ export function decodeNativeWorkbookObjectsV1(
   const hasConditionalBarFills = !!input && typeof input === "object" && Object.hasOwn(input, "conditional_bar_fills");
   const hasDrawings = !!input && typeof input === "object" && Object.hasOwn(input, "drawing_objects");
   const hasFormControls = !!input && typeof input === "object" && Object.hasOwn(input, "form_controls");
+  const hasEditableCharts = !!input && typeof input === "object" && Object.hasOwn(input, "editable_charts");
   const value = obj(input, [
     "protocol",
     "version",
@@ -149,6 +152,7 @@ export function decodeNativeWorkbookObjectsV1(
     ...(hasPrintTitles ? ["print_titles"] : []),
     ...(hasDrawings ? ["drawing_objects"] : []),
     ...(hasFormControls ? ["form_controls"] : []),
+    ...(hasEditableCharts ? ["editable_charts"] : []),
     ...(hasConditionalFills ? ["conditional_fills"] : []),
     ...(hasConditionalScaleFills ? ["conditional_scale_fills"] : []),
     ...(hasConditionalBarFills ? ["conditional_bar_fills"] : []),
@@ -371,6 +375,7 @@ export function decodeNativeWorkbookObjectsV1(
     ...(hasConditionalBarFills ? { conditional_bar_fills: decodeNativeConditionalBarFillPreviewsV1(value.conditional_bar_fills) } : {}),
     ...(hasDrawings ? { drawing_objects: decodeNativeDrawingObjectsV1(value.drawing_objects) } : {}),
     ...(hasFormControls ? { form_controls: decodeNativeFormControlsV1(value.form_controls) } : {}),
+    ...(hasEditableCharts ? { editable_charts: decodeNativeEditableChartsV1(value.editable_charts) } : {}),
   };
 }
 
