@@ -66,6 +66,7 @@ test('DocumentPreview edits in place and commits without an apply step', async (
   });
   const textbox = view.root.findByProps({ role: 'textbox' });
   assert.equal(textbox.props.contentEditable, 'plaintext-only');
+  assert.equal(view.root.findAllByProps({ className: 'office-document-note' }).length, 0, 'no caption between the ribbon and the page');
   assert.equal(textbox.props['data-placeholder'], undefined, 'the edited paragraph carries no placeholder');
   await act(async () => textbox.props.onCompositionStart());
   await act(async () => textbox.props.onCompositionEnd({ currentTarget: { textContent: 'Hello' } }));
@@ -78,6 +79,11 @@ test('DocumentPreview edits in place and commits without an apply step', async (
   assert.deepEqual(committed, ['commit']);
   await act(async () => textbox.props.onBlur({ relatedTarget: null }));
   assert.deepEqual(committed, ['commit', 'commit']);
+  // Switching away from the window is not leaving the paragraph.
+  global.window.document.hasFocus = () => false;
+  await act(async () => textbox.props.onBlur({ relatedTarget: null }));
+  assert.deepEqual(committed, ['commit', 'commit']);
+  delete global.window.document.hasFocus;
 });
 
 test('DocumentPreview shows an engine notice beside the caret instead of a banner', async () => {

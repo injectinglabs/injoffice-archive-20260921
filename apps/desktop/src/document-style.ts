@@ -30,6 +30,16 @@ export function paragraphAppearance(document: StyleSource, paragraph: NativeDocx
 }
 export function runAppearance(document: StyleSource, paragraph: NativeDocxParagraphV1, run: NativeDocxRunV1): NativeDocxRunPropertiesV1 { return { ...paragraphAppearance(document, paragraph).run, ...run.properties }; }
 
+/**
+ * The style name Word shows in its status bar: the paragraph's own style, else the document
+ * default. Unknown ids are shown as authored rather than replaced with an invented name.
+ */
+export function paragraphStyleName(document: NativeDocxDocumentV1, paragraph?: NativeDocxParagraphV1) {
+  const id = paragraph?.properties.paragraph_style_id ?? document.default_paragraph_style_id;
+  if (!id) return 'Normal';
+  return document.paragraph_styles?.find(style => style.id === id)?.name ?? id;
+}
+
 /** Number only qualified lists, separately for each story, in authored paragraph order. */
 export function paragraphListLabels(document: NativeDocxDocumentV1, paragraphs: NativeDocxParagraphV1[]) {
   const labels = new Map<string, {text:string;suffix:string;properties?:NativeDocxRunPropertiesV1}>();
