@@ -299,7 +299,7 @@ test('the inspector has no text segment select or textarea, and the wrapping cav
     assert.equal(view.root.findAllByType('button').filter(node => text(node) === 'Text' && node.props['aria-pressed'] !== undefined).length, 0, 'no Text tab in the pane');
     const note = view.root.findByProps({ 'aria-label': 'Preview note' });
     assert.match(note.props.title, /text wrapping may differ in PowerPoint/);
-    assert.equal(view.root.findByProps({ className: 'presentation-status' }) != null, true);
+    assert.equal(view.root.findByProps({ 'aria-label': 'Presentation status' }) != null, true);
     // Esc puts the painted text back and drops the draft.
     const caret = view.root.findByProps({ role: 'textbox' });
     await act(async () => caret.props.onInput({ currentTarget: { textContent: 'Draft' } }));
@@ -326,7 +326,7 @@ test('the slide number lives in the status row; the canvas carries no caption or
     await until(() => busy.at(-1) === false && view.root.findAllByProps({ 'aria-label': 'Show slide 1' }).length > 0);
     assert.equal(view.root.findAllByType('details').length, 0, 'no Preview and editing limits disclosure');
     assert.equal(view.root.findAllByProps({ className: 'presentation-canvas-label' }).length, 0);
-    const status = view.root.findByProps({ className: 'presentation-status' });
+    const status = view.root.findByProps({ 'aria-label': 'Presentation status' });
     assert.match(text(status), /Slide 1 of 1/);
     const note = view.root.findByProps({ 'aria-label': 'Preview note' });
     assert.match(note.props.title, /text wrapping may differ in PowerPoint/);

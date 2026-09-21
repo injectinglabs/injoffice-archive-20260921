@@ -295,3 +295,13 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .paragraph-toolbar>span { align-self: center; color: var(--muted); font-size: 10px; }
 
 .app-import-progress{display:flex;align-items:center;justify-content:center;gap:20px;padding:10px 18px;background:var(--accent-soft);color:var(--accent);font-size:13px}.app-import-progress button{padding:5px 10px;border:1px solid var(--accent-border);border-radius:4px;background:var(--surface);color:inherit;font:inherit;cursor:pointer;}
+
+/* Editors contribute content to the shell's single footer. */
+.status-left, .status-editor-slot, .editor-status-segment, .status-modes { display: flex; align-items: center; min-width: 0; }
+.status-left { gap: 16px; overflow: hidden; }
+.status-editor-slot { flex-shrink: 1; overflow: hidden; }
+.editor-status-segment { gap: 12px; white-space: nowrap; overflow: hidden; }
+.editor-status-segment > span { overflow: hidden; text-overflow: ellipsis; }
+.editor-status-segment > span:first-child { flex-shrink: 0; }
+.status-message:empty { display: none; }
+.status-modes { gap: 2px; }
