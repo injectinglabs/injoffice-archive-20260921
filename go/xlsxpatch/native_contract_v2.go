@@ -272,6 +272,9 @@ func (err *NativeWorkbookV2ValidationError) Error() string {
 
 var nativeWorkbookIDPatternV2 = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$`)
 
+// Keep validation diagnostics shared in WASM instead of duplicating them at every call site.
+//
+//go:noinline
 func nativeWorkbookIssueV2(issues *[]NativeWorkbookV2ValidationIssue, code, path, message string) {
 	if len(*issues) >= 100 {
 		return

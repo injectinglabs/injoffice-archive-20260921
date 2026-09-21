@@ -264,6 +264,9 @@ var (
 	nativeWorkbookRevision  = regexp.MustCompile(`^rev:[0-9a-f]{64}$`)
 )
 
+// Keep validation diagnostics shared in WASM instead of duplicating them at every call site.
+//
+//go:noinline
 func nativeWorkbookIssue(issues *[]NativeWorkbookValidationIssue, code, path, message string) {
 	if len(*issues) >= 100 {
 		return

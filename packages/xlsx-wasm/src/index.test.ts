@@ -214,7 +214,7 @@ describe('XLSX WASM package client', () => {
         range: { row: 0, column: 0, end_row: 0, end_column: 1 },
       }],
     } as WorkbookMutationBatchV1
-    expect(() => adaptWorkbookMutationBatchV1(fixtureWorkbook, merge)).toThrow(/not supported/)
+    expect(adaptWorkbookMutationBatchV1(fixtureWorkbook, merge)).toEqual({expected_revision:fixtureWorkbook.revision,merges:merge.operations})
 
     const client = createXlsxWasmClient({ workerFactory: () => new FakeWorker() })
     expect(() => client.apply(new Uint8Array([1]), fixtureWorkbook, {
