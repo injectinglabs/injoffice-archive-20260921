@@ -529,3 +529,30 @@ test('external queue drain retries a busy host and opens all four paths', async 
     assert.equal(calls, 6, 'four files, one retry, then the empty queue');
   } finally { if (renderer) await act(async () => renderer.unmount()); delete global.window; }
 });
+
+// A recovered document is a copy with no file behind it, so Save must ask where to keep it. The
+// UI has to say that plainly, or the prompt reads as Save silently turning into Save as.
+test('a recovered document says it is a copy and explains why Save asks', async t => {
+  const App = await loadApp();
+  const recovered = { id: 'rec-1', name: 'Recovered Report.docx', bytes: new Uint8Array([0x50, 0x4b, 3, 4]), untitled: true, recovered: true };
+  global.window = { localStorage: { getItem: () => null, setItem() {} }, document: { title: '' }, addEventListener() {}, removeEventListener() {}, injDesktop: {
+    open: async () => null, openRecent: async () => null, close: async () => {}, importDocument: async () => null,
+    recent: async () => [], recovery: async () => [{ id: 'draft-1', name: 'Report.docx', updatedAt: Date.now() }],
+    recover: async () => recovered,
+    nextExternal: async () => null, setDirty() {}, setBusy() {}, onMenuAction() { return () => {}; }, checkpoint: async () => {},
+    create: async format => ({ id: `id-${format}`, name: `Untitled.${format}`, bytes: new Uint8Array([0x50, 0x4b, 3, 4]), untitled: true }),
+    save: async input => ({ id: input.id, name: 'Report.docx', untitled: false }),
+  } };
+  let renderer;
+  const title = () => renderer.root.findByProps({ className: 'title-save-status' }).children.filter(child => typeof child === 'string').join('');
+  try {
+    await act(async () => { renderer = create(React.createElement(App)); });
+    await act(async () => renderer.root.findByType('test-start').props.onRecover('draft-1'));
+    assert.match(title(), /Recovered copy/, 'the save state says this is a recovered copy');
+    const editor = renderer.root.findByType('test-editor');
+    await act(async () => editor.props.onChange(new Uint8Array([0x50, 0x4b, 3, 4, 7])));
+    const save = renderer.root.findAllByType('button').find(button => button.props['aria-label'] === 'Save');
+    assert.match(save.props.title ?? '', /recovered copy.*Save asks where to keep it/i, 'Save explains that it will ask for a location');
+    assert.match(save.props.title ?? '', /original file is untouched/i, 'and that the original is safe');
+  } finally { if (renderer) await act(async () => renderer.unmount()); delete global.window; }
+});

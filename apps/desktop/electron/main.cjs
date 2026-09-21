@@ -361,6 +361,9 @@ app.whenReady().then(async () => {
       store.get(created.id).name = `Recovered ${entry.name}`;
       created.name = `Recovered ${entry.name}`;
       created.recoveryDraft = entry.draft;
+      // The renderer says "recovered copy" where it shows the save state, so Save asking for a
+      // location reads as expected rather than as a failure to save in place.
+      created.recovered = true;
       // Transfer durably before removing the old identity. Recovery always opens a copy.
       await recovery.write(created.id, created.name, created.bytes, entry.draft);
       await recovery.remove(id);
