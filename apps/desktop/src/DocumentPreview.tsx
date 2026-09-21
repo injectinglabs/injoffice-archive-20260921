@@ -1,7 +1,8 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode, type RefObject } from 'react'
 import {isPreviewImageUrl} from './document-media'
 import type { NativeDocxDocumentV1, NativeDocxParagraphV1, NativeDocxRunV1, NativeDocxStoryV1 } from '../../../packages/docs/src/nativeContract'
 import { captureParagraphSelection, restoreParagraphSelection, type DocumentTextRange } from './document-range'
+import { caretTargetAt } from './document-caret'
 import { canFormatParagraphRange, paragraphAppearance, paragraphListLabels, runAppearance } from './document-style'
 import { editableDocxRuns } from '../../playground/src/docxRoundTrip'
 import { nativeDocxParagraphText, nativeDocxRunText } from '../../playground/src/docsNativePreview'
@@ -69,7 +70,32 @@ export default function DocumentPreview(props: DocumentPreviewProps) {
   const canvas=useRef<HTMLDivElement>(null),paper=useRef<HTMLElement>(null)
   const paragraphId=(value:NativeDocxParagraphV1)=>`${previewId}-${baseParagraphId(value)}`
   const findParagraph=(id:string)=>Array.from(root.current?.querySelectorAll<HTMLElement>('[data-docx-paragraph]')??[]).find(node=>node.id===id)
-  const targets = new Map(editableDocxRuns(document).map(target => [runIdentity(target.partName, target.runId), target]))
+  const editable = editableDocxRuns(document)
+  const targets = new Map(editable.map(target => [runIdentity(target.partName, target.runId), target]))
+  // The point of the click that activated a run, shared because only one run is ever active.
+  const caretPoint = useRef<{ x: number; y: number } | undefined>(undefined)
+  /**
+   * A click that missed the text still belongs to a paragraph: place the caret at the nearest
+   * character of the nearest editable run, and below the last line at its end. Without this an
+   * empty document offers nowhere to type.
+   */
+  function placeCaret(event: ReactMouseEvent<HTMLElement>) {
+    if (busy || event.button !== 0 || event.defaultPrevented) return
+    const container = event.currentTarget, origin = event.target as HTMLElement
+    if (origin !== container && origin.closest('[data-docx-run],button,input,select,textarea,a,img,[contenteditable]')) return
+    const runs = Array.from(container.querySelectorAll<HTMLElement>('[data-docx-run]'))
+    const spot = caretTargetAt(runs.map(node => node.getBoundingClientRect()), event.clientX, event.clientY)
+    if (spot === undefined) return
+    const node = runs[spot.index]
+    // Only which run was hit comes from the DOM; the engine key is read from the model.
+    const paragraph = node.closest<HTMLElement>('[data-docx-paragraph]')?.dataset.docxParagraph
+    const target = editable.find(item => item.runId === node.dataset.docxRun && item.paragraphId === paragraph)
+    if (!target) return
+    event.preventDefault()
+    if (target.key === selected) { placeDomCaret(node, spot.x, spot.y); return }
+    caretPoint.current = { x: spot.x, y: spot.y }
+    choose(target.key)
+  }
   const headings = bodyParagraphs(document.body).filter(paragraph => headingLevel(paragraph, document) !== undefined)
   useLayoutEffect(()=>{
     if(!props.textRange?.paragraph_id)return
@@ -84,6 +110,9 @@ export default function DocumentPreview(props: DocumentPreviewProps) {
     const isTitle = /^title$/i.test(value.properties.paragraph_style_id ?? '')
     const properties = paragraphAppearance(document, value).paragraph
     const label = listLabels.get(runIdentity(value.anchor.part_name,value.id))
+    // An empty paragraph is one empty editable run: it must offer the whole line as a target.
+    const only = value.runs.length === 1 ? value.runs[0] : undefined
+    const emptyLine = !label && !!only && !only.drawing && !nativeDocxRunText(only) && targets.has(runIdentity(only.anchor.part_name, only.id))
     const alignment = properties.alignment
     const style: CSSProperties = { textAlign: alignment === 'both' || alignment === 'distribute' ? 'justify' : alignment,
       marginTop: properties.spacing_before_twips === undefined ? undefined : `${properties.spacing_before_twips / 20}pt`, marginBottom: properties.spacing_after_twips === undefined ? undefined : `${properties.spacing_after_twips / 20}pt`,
@@ -105,7 +134,7 @@ export default function DocumentPreview(props: DocumentPreviewProps) {
       {value.runs.map(run => {
         const key = runIdentity(run.anchor.part_name, run.id)
         const target = targets.get(key)
-        return <DocumentRun replaceImage={props.replaceImage} deleteImage={props.deleteImage} image={run.drawing?props.images[run.drawing.id]:undefined} key={key} run={{...run, properties:runAppearance(document, value, run)}} background={background} active={!!target && selected === target.key} editable={!!target} disabled={busy} draft={props.draft} textRange={props.textRange} onTextRangeChange={props.onTextRangeChange} caretOffset={props.caretOffset} joinPrevious={props.joinPrevious} insertLines={props.insertLines} activate={() => target && choose(target.key)} updateDraft={props.updateDraft} commit={props.commit} notice={props.notice} onCompositionChange={props.onCompositionChange} />
+        return <DocumentRun fill={emptyLine} caretPoint={caretPoint} replaceImage={props.replaceImage} deleteImage={props.deleteImage} image={run.drawing?props.images[run.drawing.id]:undefined} key={key} run={{...run, properties:runAppearance(document, value, run)}} background={background} active={!!target && selected === target.key} editable={!!target} disabled={busy} draft={props.draft} textRange={props.textRange} onTextRangeChange={props.onTextRangeChange} caretOffset={props.caretOffset} joinPrevious={props.joinPrevious} insertLines={props.insertLines} activate={() => target && choose(target.key)} updateDraft={props.updateDraft} commit={props.commit} notice={props.notice} onCompositionChange={props.onCompositionChange} />
       })}
     </p>
   }
@@ -158,14 +187,27 @@ export default function DocumentPreview(props: DocumentPreviewProps) {
     <div ref={canvas} className="office-document-canvas">
       {props.imageNotice&&<p className="office-document-note">{props.imageNotice}</p>}
       <div className="office-document-zoom" style={{ zoom }}>
-        <article ref={paper} style={paperStyle} className="office-paper" aria-label="Document content">{story(document.body)}</article>
-        {secondaryStories.map(({ value, label }) => <section className="office-story" key={label} aria-label={label}><h2>{label}</h2><div className="office-story-content">{story(value)}</div></section>)}
+        <article ref={paper} style={paperStyle} className="office-paper" aria-label="Document content" onMouseDown={placeCaret}>{story(document.body)}</article>
+        {secondaryStories.map(({ value, label }) => <section className="office-story" key={label} aria-label={label}><h2>{label}</h2><div className="office-story-content" onMouseDown={placeCaret}>{story(value)}</div></section>)}
       </div>
     </div>
   </div>
 }
 
+/** Puts the caret in an already-active run when the click landed outside its text. */
+function placeDomCaret(node: HTMLElement, x: number, y: number) {
+  const selection = window.getSelection()
+  const hit = window.document.caretRangeFromPoint?.(x, y)
+  let range = hit && node.contains(hit.startContainer) ? hit : undefined
+  if (!range) { range = window.document.createRange(); range.selectNodeContents(node); range.collapse(false) }
+  selection?.removeAllRanges(); selection?.addRange(range)
+  node.focus({ preventScroll: true })
+}
+
 interface DocumentRunProps {
+  /** This run is the whole of an empty paragraph, so it takes the whole line as a click target. */
+  fill: boolean
+  caretPoint: RefObject<{ x: number; y: number } | undefined>
   replaceImage?(id:string):void
   deleteImage(id:string):void
   image?:string
@@ -187,9 +229,9 @@ interface DocumentRunProps {
   onCompositionChange(value: boolean): void
 }
 
-function DocumentRun({ replaceImage, deleteImage, image, run, background, active, editable, disabled, draft, textRange, onTextRangeChange, caretOffset, insertLines, joinPrevious, activate, updateDraft, commit, notice, onCompositionChange }: DocumentRunProps) {
+function DocumentRun({ fill, caretPoint, replaceImage, deleteImage, image, run, background, active, editable, disabled, draft, textRange, onTextRangeChange, caretOffset, insertLines, joinPrevious, activate, updateDraft, commit, notice, onCompositionChange }: DocumentRunProps) {
   const element = useRef<HTMLSpanElement>(null)
-  const point = useRef<{ x: number; y: number } | undefined>(undefined)
+  const point = caretPoint
   const composing = useRef(false)
   const [hint, setHint] = useState('')
   const hintTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
@@ -269,13 +311,13 @@ function DocumentRun({ replaceImage, deleteImage, image, run, background, active
   if (run.properties?.hidden) return null
   if(run.drawing)return <span className="office-inline-image" contentEditable={false}>{isPreviewImageUrl(image)?<img src={image} alt={run.drawing.alt_text??run.drawing.name??'Embedded image'} style={{width:`${run.drawing.width_emu/12700}pt`,maxWidth:'100%',height:'auto',aspectRatio:`${run.drawing.width_emu}/${run.drawing.height_emu}`,verticalAlign:'middle'}} draggable={false}/>:<span className="office-preserved-image">Image preserved</span>}<span className="office-image-actions">{replaceImage&&run.drawing.edit_policy.allowed_operations.includes('drawing.replace')&&<button className="office-image-replace" disabled={disabled} aria-label={`Replace picture ${run.drawing.alt_text??run.drawing.name??''}`} onClick={()=>replaceImage(run.drawing!.id)}>Replace picture…</button>}{run.drawing.edit_policy.allowed_operations.includes('block.delete')&&<button className="office-image-delete" disabled={disabled} aria-label={`Delete image ${run.drawing.alt_text??run.drawing.name??''}`} onClick={()=>deleteImage(run.drawing!.id)}>Delete image</button>}</span></span>
   if (!editable) return <span style={style}>{text || (run.kind === 'drawing' ? <span className="office-preserved-image">Image</span> : '')}</span>
-  if (!active) return <span role="button" tabIndex={disabled ? -1 : 0} aria-disabled={disabled} className="office-text-run" data-docx-run={run.id} data-docx-empty={!text?true:undefined} data-hyperlink={run.hyperlink?true:undefined} style={style} title={run.hyperlink?`Link: ${run.hyperlink.url} · Click to edit text`:"Click to edit text"} onClick={event => {
+  if (!active) return <span role="button" tabIndex={disabled ? -1 : 0} aria-disabled={disabled} className={`office-text-run${fill ? ' office-text-run-fill' : ''}`} data-docx-run={run.id} data-docx-empty={!text?true:undefined} data-hyperlink={run.hyperlink?true:undefined} style={style} title={run.hyperlink?`Link: ${run.hyperlink.url} · Click to edit text`:"Click to edit text"} onClick={event => {
     if (disabled) return
     const selection=window.getSelection()
     if(selection?.rangeCount&&!selection.isCollapsed&&selection.getRangeAt(0).intersectsNode(event.currentTarget))return
     point.current = { x: event.clientX, y: event.clientY }; activate()
   }} onKeyDown={event => { if (!disabled && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); point.current = undefined; activate() } }}>{text || <span className="office-empty-run" />}</span>
-  return <><span ref={element} className="office-inline-input" data-docx-run={run.id} data-hyperlink={run.hyperlink?true:undefined} title={run.hyperlink?.url} contentEditable={disabled ? false : 'plaintext-only'} suppressContentEditableWarning role="textbox" aria-label="Edit document text" aria-multiline="false" style={style} spellCheck onInput={event => updateDraft(event.currentTarget.textContent ?? '')}
+  return <><span ref={element} className={`office-inline-input${fill ? ' office-inline-input-fill' : ''}`} data-docx-run={run.id} data-hyperlink={run.hyperlink?true:undefined} title={run.hyperlink?.url} contentEditable={disabled ? false : 'plaintext-only'} suppressContentEditableWarning role="textbox" aria-label="Edit document text" aria-multiline="false" style={style} spellCheck onInput={event => updateDraft(event.currentTarget.textContent ?? '')}
     onBlur={event => {
       // Focus moving to another control (a run, the ribbon) is committed by that control's own
       // path; a click on nothing in particular has no other owner, so commit it here. Switching

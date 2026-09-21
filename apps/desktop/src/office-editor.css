@@ -43,7 +43,7 @@
 .office-document-canvas { flex: 1; min-width: 0; overflow: auto; padding: 0 32px 56px; background: var(--canvas); }
 .office-document-note { font-size: 11px; line-height: 1.5; color: var(--text-muted); margin: 15px auto; width: max-content; max-width: 100%; }
 .office-document-zoom { width: max-content; min-width: 100%; }
-.office-paper { width: 816px; min-height: 1056px; background: var(--document-surface); border: 1px solid var(--document-border); box-shadow: 0 2px 6px var(--shadow-soft); padding: 80px 84px 96px; margin: 0 auto; font-family: Calibri, Arial, sans-serif; font-size: 11pt; line-height: 1.5; color: var(--document-text); overflow-wrap: break-word; }
+.office-paper { cursor: text; width: 816px; min-height: 1056px; background: var(--document-surface); border: 1px solid var(--document-border); box-shadow: 0 2px 6px var(--shadow-soft); padding: 80px 84px 96px; margin: 0 auto; font-family: Calibri, Arial, sans-serif; font-size: 11pt; line-height: 1.5; color: var(--document-text); overflow-wrap: break-word; }
 .office-paragraph { margin: 0 0 10pt; white-space: pre-wrap; min-height: 1em; scroll-margin-top: 32px; outline: none; }
 .office-paragraph:focus-visible { outline: 1px solid var(--document-focus); outline-offset: 5px; }
 .office-heading { color: var(--document-heading); font-weight: 600; margin: 22pt 0 8pt; }
@@ -57,6 +57,8 @@
 .office-text-run[aria-disabled=true] { cursor: default; }
 .office-inline-input { display: inline; outline: none; background: none; caret-color: var(--document-text); }
 .office-inline-input:empty { display: inline-block; min-width: 2px; }
+/* An empty paragraph is a whole line you can click anywhere on, the way Word shows one. */
+.office-text-run.office-text-run-fill, .office-inline-input.office-inline-input-fill { display: inline-block; min-width: 100%; min-height: 1.5em; vertical-align: top; }
 .office-inline-input[contenteditable=false] { opacity: .65; }
 /* Caret-side, self-dismissing notice. The anchor takes no space in the line. */
 .office-hint-anchor { position: relative; display: inline-block; width: 0; height: 0; }
@@ -68,7 +70,7 @@
 .office-preserved-content { font-size: 11px; color: var(--document-muted); }
 .office-story { width: 816px; margin: 28px auto 0; }
 .office-story > h2 { font: 500 12px/1.5 'Segoe UI', Arial, sans-serif; color: var(--text-muted); margin: 0 0 9px; }
-.office-story-content { background: var(--document-surface); border: 1px solid var(--document-border); padding: 28px 84px; font-family: Calibri, Arial, sans-serif; font-size: 11pt; line-height: 1.5; color: var(--document-text); }
+.office-story-content { cursor: text; background: var(--document-surface); border: 1px solid var(--document-border); padding: 28px 84px; font-family: Calibri, Arial, sans-serif; font-size: 11pt; line-height: 1.5; color: var(--document-text); }
 .office-doc-table { border-collapse: collapse; width: 100%; margin: 15px 0; }
 .office-doc-table td { border: 1px solid var(--document-border); padding: 8px; vertical-align: top; }
 .office-doc-table p { margin: 0; }
@@ -89,6 +91,7 @@
 .document-insert-table input {width:64px;padding:6px;border:1px solid var(--border);border-radius:4px;}
 
 .office-document-status{display:flex;align-items:center;gap:10px;flex-shrink:0;padding:6px 18px;border-top:1px solid var(--border);background:var(--surface-muted);color:var(--text-secondary);font-size:11px}.office-document-status span:last-child{margin-left:auto;}
+.office-status-alert{display:inline-flex;flex-shrink:0;align-items:center;gap:6px;padding:1px 8px;border:1px solid var(--warning);border-radius:10px;color:var(--warning-text);background:var(--warning-soft);font-weight:600}
 .office-status-info{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;border:1px solid var(--border-strong);border-radius:50%;font:italic 600 9px/1 'Segoe UI',Arial,sans-serif;color:var(--text-muted);cursor:default}
 .office-status-info:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
