@@ -25,33 +25,59 @@ async function load() {
   }
 }
 
-test('mini toolbar renders the ribbon FormattingToolbar above the selection and drives the same patch path', async () => {
-  assert.equal(fs.existsSync(path.resolve(__dirname, '../src/selection-toolbar.css')), true);
-  const { default: SelectionToolbar } = await load();
+test('mini toolbar is Office\'s floating card of icon buttons, fixed widths, driving the same patch path', async () => {
+  const css = fs.readFileSync(path.resolve(__dirname, '../src/selection-toolbar.css'), 'utf8');
+  // Fixed control widths: the chevron never eats the value, as it did with the old auto-sized selects.
+  assert.match(css, /\.selection-toolbar \.ribbon-combo-font \{ width: \d+px; \}/);
+  assert.match(css, /\.selection-toolbar \.ribbon-combo-size \{ width: \d+px; \}/);
+  const { default: SelectionToolbar, SELECTION_UNSUPPORTED } = await load();
   const patches = [];
+  const anchor = { left: 120, top: 300, bottom: 318, width: 80 };
+  const values = { font: 'Calibri', size: 11, bold: false, italic: true, underline: false, color: '#2459AD', alignment: 'left', characterEditable: true };
   let view;
   await act(async () => {
-    view = create(React.createElement(SelectionToolbar, { anchor: { left: 120, top: 300, bottom: 318, width: 80 }, disabled: false, values: { font: 'Calibri', size: 11, bold: false, italic: true, underline: false, color: '#2459AD', alignment: 'left', characterEditable: true }, onChange: patch => patches.push(patch) }));
+    view = create(React.createElement(SelectionToolbar, { anchor, disabled: false, values, onChange: patch => patches.push(patch) }));
   });
   const toolbar = view.root.findByProps({ role: 'toolbar' });
   assert.equal(toolbar.props['aria-label'], 'Selection formatting');
   assert.equal(toolbar.props['data-placement'], 'above');
+  assert.equal(toolbar.props.className, 'selection-toolbar');
   // Without a DOM the toolbar keeps the anchor coordinates and stays hidden until it can be measured.
   assert.equal(toolbar.props.style.left, 120);
   assert.equal(toolbar.props.style.top, 300);
   assert.equal(toolbar.props.style.visibility, 'hidden');
-  const inner = view.root.findByProps({ 'aria-label': 'Formatting' });
-  assert.equal(inner.props.className, 'formatting-toolbar');
-  for (const label of ['Font family', 'Font size', 'Bold', 'Italic', 'Underline', 'Text color', 'Align left', 'Center', 'Align right']) assert.equal(view.root.findAllByProps({ 'aria-label': label }).length, 1, label);
+  // Office's mini toolbar set: font, size, grow/shrink, B/I/U, highlight, colour, bullets, alignment.
+  for (const label of ['Font family', 'Font size', 'Grow font', 'Shrink font', 'Bold', 'Italic', 'Underline', 'Highlight', 'Text color', 'Bullets', 'Align left', 'Center', 'Align right', 'Justify', 'Distribute']) {
+    assert.equal(view.root.findAllByProps({ 'aria-label': label }).length, 1, label);
+  }
+  // Only the two combos carry text; every other control is an icon button, so nothing can be truncated.
+  const labelled = view.root.findAllByType('button').filter(button => button.props.className?.includes('ribbon-button') && !button.props.className.includes('ribbon-color-button'));
+  for (const button of labelled) assert.equal(button.findAllByType('span').filter(span => span.props.className === 'ribbon-button-label').length, 0, `${button.props['aria-label']} is icon-only`);
   await act(async () => view.root.findByProps({ 'aria-label': 'Bold' }).props.onClick());
   await act(async () => view.root.findByProps({ 'aria-label': 'Italic' }).props.onClick());
   await act(async () => view.root.findByProps({ 'aria-label': 'Font size' }).props.onChange({ target: { value: '14' } }));
+  await act(async () => view.root.findByProps({ 'aria-label': 'Grow font' }).props.onClick());
+  await act(async () => view.root.findByProps({ 'aria-label': 'Shrink font' }).props.onClick());
   await act(async () => view.root.findByProps({ 'aria-label': 'Center' }).props.onClick());
-  assert.deepEqual(patches, [{ bold: true }, { italic: false }, { size: 14 }, { alignment: 'center' }]);
+  assert.deepEqual(patches, [{ bold: true }, { italic: false }, { size: 14 }, { size: 12 }, { size: 10 }, { alignment: 'center' }]);
   assert.equal(view.root.findByProps({ 'aria-label': 'Italic' }).props['aria-pressed'], true);
+  assert.equal(view.root.findByProps({ 'aria-label': 'Align left' }).props['aria-pressed'], true);
+  // Commands the document transaction does not take are disabled with their reason, never wired to a no-op.
+  assert.equal(view.root.findByProps({ 'aria-label': 'Highlight' }).props.disabled, true);
+  assert.equal(view.root.findByProps({ 'aria-label': 'Highlight' }).props.title, SELECTION_UNSUPPORTED.highlight);
+  assert.equal(view.root.findByProps({ 'aria-label': 'Bullets' }).props.disabled, true);
+  // An editor that passes a bullets handler gets a live button.
+  const bulleted = [];
+  await act(async () => view.update(React.createElement(SelectionToolbar, { anchor, disabled: false, values, onChange: () => {}, onBullets: () => bulleted.push(true), bullets: true })));
+  const bullets = view.root.findByProps({ 'aria-label': 'Bullets' });
+  assert.equal(bullets.props.disabled, false);
+  assert.equal(bullets.props['aria-pressed'], true);
+  await act(async () => bullets.props.onClick());
+  assert.deepEqual(bulleted, [true]);
   // Busy editors disable every control, exactly like the ribbon.
-  await act(async () => view.update(React.createElement(SelectionToolbar, { anchor: { left: 120, top: 300, bottom: 318, width: 80 }, disabled: true, values: { bold: false }, onChange: patch => patches.push(patch) })));
+  await act(async () => view.update(React.createElement(SelectionToolbar, { anchor, disabled: true, values: { bold: false }, onChange: patch => patches.push(patch) })));
   assert.equal(view.root.findByProps({ 'aria-label': 'Bold' }).props.disabled, true);
+  assert.equal(view.root.findByProps({ 'aria-label': 'Font family' }).props.disabled, true);
   await act(async () => view.unmount());
 });
 

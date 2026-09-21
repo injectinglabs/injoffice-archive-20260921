@@ -1,10 +1,17 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import FormattingToolbar, { type FormattingPatch, type FormattingValues } from './FormattingToolbar'
+import { FONT_SIZES, TEXT_COLORS, alignmentOptions, stepFontSize, type FormattingPatch, type FormattingValues } from './FormattingToolbar'
+import { ColorButton, RibbonButton, RibbonCombo } from './Ribbon'
 import './selection-toolbar.css'
 
 /** Screen box of the selected text's first line; the mini toolbar hangs above it. */
 export type SelectionAnchor = { left: number; top: number; bottom: number; width: number }
 const GAP = 8, MARGIN = 8
+
+/** Commands Office's mini toolbar carries that the document transaction does not take yet; shown disabled with the reason, never wired to a no-op. */
+export const SELECTION_UNSUPPORTED = {
+  highlight: 'Highlighting is not wired to the document transaction yet',
+  bullets: 'Bullets are applied from the Paragraph group; the mini toolbar does not carry them yet',
+} as const
 
 /** The selection's first line box when it is a non-empty text selection inside `within`; otherwise undefined. */
 export function selectionAnchorRect(selection: Selection | null | undefined, within: string): SelectionAnchor | undefined {
@@ -36,13 +43,19 @@ export interface SelectionToolbarProps {
   within?: string
   /** Test hook: use this anchor instead of the live DOM selection. */
   anchor?: SelectionAnchor
+  /** Apply the paragraph's bullet list. Without it the button is shown disabled with its reason, as Office's greyed commands are. */
+  onBullets?(): void
+  /** Whether the selected paragraph already carries a bullet list. */
+  bullets?: boolean
 }
 
 /**
- * Office's mini toolbar for the document editor. It renders the same FormattingToolbar as the ribbon, so every
- * control drives the same `onChange` patch path (and the staged Apply / Cancel model behind it); nothing here formats.
+ * Office's mini toolbar: a small floating card of icon buttons over the selection —
+ * font, size, grow/shrink, B/I/U, highlight, font colour, bullets and alignment.
+ * Every control has a fixed width, so no value is ever truncated by a chevron, and
+ * each one drives the same `onChange` patch path as the ribbon; nothing here formats.
  */
-export default function SelectionToolbar({ values, disabled, onChange, within = '.office-document-canvas', anchor: fixedAnchor }: SelectionToolbarProps) {
+export default function SelectionToolbar({ values, disabled, onChange, within = '.office-document-canvas', anchor: fixedAnchor, onBullets, bullets }: SelectionToolbarProps) {
   const [anchor, setAnchor] = useState<SelectionAnchor | undefined>(fixedAnchor)
   const [dismissed, setDismissed] = useState(false)
   const [position, setPosition] = useState<{ x: number; y: number; placement: 'above' | 'below' }>()
@@ -69,7 +82,24 @@ export default function SelectionToolbar({ values, disabled, onChange, within = 
     setPosition(toolbarPosition(anchor, { width: rect.width, height: rect.height }, { width: window.innerWidth, height: window.innerHeight }))
   }, [anchor])
   if (!anchor || dismissed) return null
+  const inactive = disabled || !values
+  const characterInactive = inactive || values?.characterEditable === false
+  const fonts = [...new Set([values?.font || 'Arial', 'Arial', 'Calibri', 'Cambria', 'Georgia', 'Times New Roman', 'Verdana', 'DejaVu Sans'])]
+  const sizes = [...new Set([values?.size || 11, ...FONT_SIZES])].sort((a, b) => a - b)
+  const grow = stepFontSize(values?.size, 1), shrink = stepFontSize(values?.size, -1)
   return <div ref={toolbar} className="selection-toolbar" role="toolbar" aria-label="Selection formatting" data-placement={position?.placement ?? 'above'} style={{ left: position?.x ?? anchor.left, top: position?.y ?? anchor.top, visibility: position ? undefined : 'hidden' }}>
-    <FormattingToolbar kind="docx" scopeLabel="Selected text" values={values} disabled={disabled} onChange={onChange} />
+    <RibbonCombo className="ribbon-combo-font" label="Font family" disabled={characterInactive} value={values?.font ?? ''} options={fonts.map(font => ({ value: font, label: font }))} onChange={font => onChange({ font })} />
+    <RibbonCombo className="ribbon-combo-size" label="Font size" disabled={characterInactive} value={values?.size === undefined ? '' : String(values.size)} options={sizes.map(size => ({ value: String(size), label: String(size) }))} onChange={size => onChange({ size: Number(size) })} />
+    <RibbonButton icon="growFont" label="Grow font" labelHidden disabled={characterInactive || grow === undefined} onClick={() => grow !== undefined && onChange({ size: grow })} />
+    <RibbonButton icon="shrinkFont" label="Shrink font" labelHidden disabled={characterInactive || shrink === undefined} onClick={() => shrink !== undefined && onChange({ size: shrink })} />
+    <span className="selection-toolbar-separator" aria-hidden="true" />
+    <RibbonButton icon="bold" label="Bold" shortcut="bold" labelHidden aria-pressed={values?.bold ?? 'mixed'} disabled={characterInactive} onClick={() => onChange({ bold: !values?.bold })} />
+    <RibbonButton icon="italic" label="Italic" shortcut="italic" labelHidden aria-pressed={values?.italic ?? 'mixed'} disabled={characterInactive} onClick={() => onChange({ italic: !values?.italic })} />
+    <RibbonButton icon="underline" label="Underline" shortcut="underline" labelHidden aria-pressed={values?.underline ?? 'mixed'} disabled={characterInactive} onClick={() => onChange({ underline: !values?.underline })} />
+    <RibbonButton icon="highlight" label="Highlight" labelHidden title={SELECTION_UNSUPPORTED.highlight} disabled aria-pressed={false} />
+    <ColorButton label="Text color" icon="fontColor" disabled={characterInactive} value={values?.color?.toUpperCase()} colors={TEXT_COLORS} onChange={color => onChange({ color })} />
+    <span className="selection-toolbar-separator" aria-hidden="true" />
+    <RibbonButton icon="list" label="Bullets" labelHidden title={onBullets ? 'Bullets' : SELECTION_UNSUPPORTED.bullets} disabled={inactive || !onBullets} aria-pressed={bullets ?? false} onClick={() => onBullets?.()} />
+    {alignmentOptions('docx').map(option => <RibbonButton key={option.value} icon={option.icon} label={option.label} labelHidden aria-pressed={values?.alignment === option.value} disabled={inactive} onClick={() => onChange({ alignment: option.value })} />)}
   </div>
 }
