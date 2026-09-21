@@ -454,3 +454,41 @@ test('status slot routes only the active session and removes its content on clos
     assert.equal(view.root.findAllByType('test-portal').length, 0);
   } finally { if (view) await act(async () => view.unmount()); await bundle.close(); }
 });
+
+test('deep parser failures close only the failed session and show engine details for every format', async () => {
+  const App = await loadApp(); const closed = []; let renderer; let sequence = 0;
+  global.window = { localStorage: { getItem: () => null, setItem() {} }, document: { title: '' }, addEventListener() {}, removeEventListener() {}, injDesktop: {
+    recent: async () => [], recovery: async () => [], nextExternal: async () => null, setDirty() {}, setBusy() {}, onMenuAction() { return () => {}; }, checkpoint: async () => {},
+    create: async format => ({ id: `session-${++sequence}`, name: `Untitled.${format}`, bytes: new Uint8Array([1]), untitled: true }),
+    close: async id => closed.push(id),
+  } };
+  try {
+    await act(async () => { renderer = create(React.createElement(App)); });
+    for (const format of ['docx', 'xlsx', 'pptx', 'pdf']) {
+      await act(async () => renderer.root.findByType('test-start').props.onCreate(format));
+      const editor = renderer.root.findByType('test-editor');
+      const report = editor.props.onInitialLoadError;
+      await act(async () => report('Engine parser: invalid XML in word/document.xml'));
+      assert.equal(renderer.root.findAllByType('test-editor').length, 0);
+      assert.equal(closed.at(-1), `session-${sequence}`);
+      assert.match(renderer.root.findByProps({ className: 'open-error-details' }).findByType('p').children.join(''), /invalid XML/);
+      await act(async () => report('late duplicate failure'));
+      assert.equal(closed.length, sequence, 'stale callbacks cannot close another session');
+      await act(async () => renderer.root.findAllByType('button').find(button => button.props.children === 'Go to start page').props.onClick());
+    }
+  } finally { if (renderer) await act(async () => renderer.unmount()); delete global.window; }
+});
+
+test('external queue draining cannot erase a deep parser failure', async () => {
+  const App = await loadApp(); let renderer, finishDrain, count = 0;
+  global.window = { localStorage: { getItem: () => null, setItem() {} }, document: { title: '' }, addEventListener() {}, removeEventListener() {}, injDesktop: {
+    recent: async () => [], recovery: async () => [], setDirty() {}, setBusy() {}, onMenuAction() { return () => {}; }, checkpoint: async () => {}, close: async () => {},
+    nextExternal: async () => ++count === 1 ? { id: 'broken', name: 'Corrupt.docx', bytes: new Uint8Array([80,75,3,4]) } : new Promise(resolve => { finishDrain = resolve; }),
+  } };
+  try {
+    await act(async () => { renderer = create(React.createElement(App)); });
+    await act(async () => renderer.root.findByType('test-editor').props.onInitialLoadError('invalid document XML'));
+    if (finishDrain) await act(async () => finishDrain(null));
+    assert.match(renderer.root.findByProps({ className: 'open-error-details' }).findByType('p').children.join(''), /invalid document XML/);
+  } finally { if (renderer) await act(async () => renderer.unmount()); delete global.window; }
+});
