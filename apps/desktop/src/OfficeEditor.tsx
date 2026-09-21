@@ -287,7 +287,7 @@ export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDr
     hiddenApplyRef.current?.cancel()
     if (!snapshot) return
     if (busy || textInFlight.current || composingRef.current) { queuedChoice.current = { key, range }; return }
-    if (key === selected) return
+    if (key === selected) { if (range) setTextRange(range); return }
     if (draftPending.current && rejectedDrafts.current.get(selected) !== draft) {
       queuedChoice.current = { key, range }
       await apply(true)
@@ -363,7 +363,10 @@ export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDr
       }
     } catch (reason) {
       rejectedDrafts.current.set(selected, draft)
-      if (mounted.current) setError(errorMessage(reason))
+      if (mounted.current) {
+        if (draftsRef.current[selected] === target.value) rememberDraft(selected, undefined)
+        setError(errorMessage(reason))
+      }
     } finally {
       textInFlight.current = false
       if (mounted.current) { setBusy(false); setTextSettled(value => value + 1) }

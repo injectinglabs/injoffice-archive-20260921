@@ -558,3 +558,24 @@ test('a successful edit in another paragraph retains failed-draft recovery', asy
     assert.equal(documentPreview(restored.view).props.hasDraft, true);
   } finally { await act(async () => restored.view.unmount()); }
 });
+
+test('reverting to saved text while a commit rejects clears the pending draft', async t => {
+  mockWindow();
+  let reject, commit;
+  const client = mockClient(twoParagraphDocument());
+  client.apply = () => new Promise((_, fail) => { reject = fail; });
+  const { view } = await mountEditor(client, { registerCommit: fn => { commit = fn; } });
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  try {
+    await act(async () => clickRun(view, 'r1'));
+    await act(async () => typeDraft(view, 'First draft'));
+    await act(async () => documentPreview(view).props.commit());
+    await act(async () => typeDraft(view, 'First'));
+    await act(async () => reject(new Error('Run is read-only')));
+    assert.equal(documentPreview(view).props.draft, 'First');
+    assert.equal(documentPreview(view).props.hasDraft, false);
+    let saved;
+    await act(async () => { saved = await commit(); });
+    assert.equal(saved, true);
+  } finally { await act(async () => view.unmount()); }
+});
