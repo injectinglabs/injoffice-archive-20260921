@@ -1,3 +1,4 @@
+import { EditorStatus } from './EditorStatus';
 import SlideArrangePanel from './SlideArrangePanel';
 import ContextMenu, { presentationContextMenu, selectObjectAt, useContextMenu } from './ContextMenu';
 import { arrangeCommand, arrangeTargets, toggleArrangeSelection, type ArrangeAction } from './presentationArrange';
@@ -61,7 +62,7 @@ export default function PresentationEditor({ name, bytes, onChange, onBusyChange
   const [undo, setUndo] = useState<Snapshot[]>([]); const [redo, setRedo] = useState<Snapshot[]>([]);
   const undoRef = useRef<Snapshot[]>([]); const redoRef = useRef<Snapshot[]>([]);
   const mounted = useRef(false);
-  const workspace = useRef<HTMLDivElement>(null); const [workspaceWidth, setWorkspaceWidth] = useState(740);
+  const workspace = useRef<HTMLDivElement>(null); const [workspaceWidth, setWorkspaceWidth] = useState(740); const [workspaceHeight, setWorkspaceHeight] = useState(600);
   const menu = useContextMenu();
   function markBusy(value: boolean) { busyRef.current = value; setBusy(value); callbacks.current.onBusyChange?.(value); }
   function updateDraft(value: Draft | undefined) { if (!value) setCellTextEdit(undefined); draftRef.current = value; setDraft(value); callbacks.current.onDraftChange?.(!!value); callbacks.current.onBusyChange?.(busyRef.current);
@@ -85,7 +86,7 @@ export default function PresentationEditor({ name, bytes, onChange, onBusyChange
   }, []);
   useEffect(() => {
     if (!workspace.current) return;
-    const observer = new ResizeObserver(entries => setWorkspaceWidth(entries[0]?.contentRect.width ?? 740)); observer.observe(workspace.current);
+    const observer = new ResizeObserver(entries => { setWorkspaceWidth(entries[0]?.contentRect.width ?? 740); setWorkspaceHeight(entries[0]?.contentRect.height ?? 600); }); observer.observe(workspace.current);
     return () => observer.disconnect();
   }, [!!snapshot, viewOptions?.focus]);
   // Keep the floating text toolbar over the shape that holds the caret.
@@ -307,7 +308,7 @@ export default function PresentationEditor({ name, bytes, onChange, onBusyChange
     setUndo(undoRef.current); setRedo(redoRef.current); install(next); setIndex(Math.min(index, next.deck.slides.length - 1)); setSelected(''); setArrangeKeys([]); setError('');
   }
   historyRef.current = travel;
-  const scale = snapshot ? Math.max(.1, Math.min(1, (workspaceWidth - 64) / (snapshot.deck.size.cx / EMU_PER_PIXEL))) * Math.max(.5, Math.min(2, (viewOptions?.zoom ?? 100) / 100)) : 1;
+  const scale = snapshot ? Math.max(.1, Math.min(1, (workspaceWidth - 64) / (snapshot.deck.size.cx / EMU_PER_PIXEL), (workspaceHeight - 34) / (snapshot.deck.size.cy / EMU_PER_PIXEL))) * Math.max(.5, Math.min(2, (viewOptions?.zoom ?? 100) / 100)) : 1;
   // PowerPoint's ribbon, applied to the controls this editor already has.
   const ribbonTabs: RibbonTabSpec[] = [
     { id: 'File', label: 'File', groups: [{ id: 'export', label: 'Export', children: <RibbonButton icon="svg" label="Export slide SVG" title="Export the current supported slide. Text and unsupported objects require the original PPTX." disabled={blocked || !snapshot} onClick={() => void exportSvg()} /> }] },
@@ -409,11 +410,11 @@ export default function PresentationEditor({ name, bytes, onChange, onBusyChange
         {arrangeable.length > 1 && <SlideArrangePanel elements={arrangeable} keys={arrangeKeys} disabled={blocked} onToggle={key => choose(key,true)} onArrange={arrange} />}
       </aside>}
     </div>}
-    {snapshot && <footer className="presentation-status" aria-label="Presentation status">
+    {snapshot && <EditorStatus label="Presentation status">
       <span className="presentation-status-slide">Slide {index + 1} of {snapshot.deck.slides.length}</span>
       <span>{editing ? 'Editing text · Enter applies, Esc cancels' : selectedItem ? `Selected: ${selectedItem.element.name || selectedItem.element.kind}` : ''}</span>
       <span className="presentation-status-note" tabIndex={0} role="note" aria-label="Preview note" title={previewNote}>&#9432;</span>
-    </footer>}
+    </EditorStatus>}
     {menu.anchor && snapshot && <ContextMenu anchor={menu.anchor} label="Slide" onClose={menu.close} items={presentationContextMenu({ object: !!selectedItem && !selectedItem.grouped && (!!text || !!shape || !!geometryTarget(snapshot.deck, selected)), slide: !!slide, disabled: blocked, canDeleteSlide: snapshot.deck.slides.length > 1, onDeleteObject: deleteObject, onNewSlide: () => insert('slide'), onDuplicateSlide: () => structure('duplicate'), onDeleteSlide: () => setConfirmDelete(true) })} />}
     {confirmDelete &&<div className="presentation-modal"><section role="alertdialog" aria-modal="true" aria-labelledby="presentation-delete-title" onKeyDown={event => {
       if (event.key === 'Escape') { event.preventDefault(); setConfirmDelete(false); deleteTrigger.current?.focus(); }
