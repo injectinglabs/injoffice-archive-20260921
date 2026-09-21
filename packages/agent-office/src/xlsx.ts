@@ -112,6 +112,10 @@ function operationPassed(workbook: XlsxNativeWorkbook, operation: SupportedWorkb
       const expectedCount = (operation.range.end_row - operation.range.row + 1) * (operation.range.end_column - operation.range.column + 1)
       return cells.length === expectedCount && cells.every((cell) => { const style = workbook.styles.find((item) => item.id === cell.style_id)?.effective; return !!style && Object.entries(operation.style).every(([key, value]) => style[key as keyof typeof style] === value) })
     }
+    case 'chart.insert':
+    case 'chart.update':
+    case 'chart.delete':
+      return false
   }
   // New native mutation families require their own readback proof.
   return false
