@@ -268,7 +268,7 @@ describe('DOCX WASM package client', () => {
     const client = createDocxWasmClient({workerFactory: () => worker})
     const document = structuredClone(fixtureDocument)
     const paragraph = document.body.blocks.find(block => block.paragraph)!.paragraph!
-    paragraph.edit_policy.allowed_operations.push('block.insert_after')
+    if (!paragraph.edit_policy.allowed_operations.includes('block.insert_after')) paragraph.edit_policy.allowed_operations.push('block.insert_after')
     const mutation = {target_kind: 'paragraph' as const, target_id: paragraph.id, expected_xml_sha256: paragraph.anchor.xml_sha256, operation: 'block.insert_after' as const, text: '' as const}
     const request = {...envelope(document), payload: {mutations: [mutation]}}
     await client.apply(new Uint8Array([1]), document, request)
