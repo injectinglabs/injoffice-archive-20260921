@@ -328,6 +328,7 @@ export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDr
   }
   applyHiddenRef.current = () => apply(true)
   async function changeFormatting(patch: FormattingPatch) {
+    if (patch.alignment === undefined && toolbarValues?.characterEditable === false) return
     if (!snapshot || !engine.current?.format || !target || busy || composing) return
     hiddenApplyRef.current?.cancel()
     setBusy(true); callbacks.current.onBusyChange?.(true); setError('')
