@@ -369,7 +369,7 @@ test('the save state is spelled once, in the title bar, in Office wording', asyn
 test('Focus mode strips the chrome and Esc leaves it unless a draft is being edited', async () => {
   const App = await loadApp();
   const listeners = new Map();
-  const press = key => { for (const listener of [...(listeners.get('keydown') ?? [])]) listener({ key, defaultPrevented: false, preventDefault() { this.defaultPrevented = true; }, metaKey: false, ctrlKey: false, altKey: false }); };
+  const press = (key, extra = {}) => { for (const listener of [...(listeners.get('keydown') ?? [])]) listener({ key, defaultPrevented: false, preventDefault() { this.defaultPrevented = true; }, stopPropagation() {}, metaKey: false, ctrlKey: false, altKey: false, ...extra }); };
   global.window = {
     localStorage: { getItem: () => null, setItem() {} },
     document: { title: '', querySelector: () => null, activeElement: null },
@@ -400,9 +400,21 @@ test('Focus mode strips the chrome and Esc leaves it unless a draft is being edi
     await act(async () => press('Escape'));
     assert.equal(focused(), false, 'Esc leaves focus mode once nothing is being edited');
     assert.equal(renderer.root.findByType('test-editor').props.viewOptions.focus, false);
-    // The toggle brings it back, and no listener leaks when the workspace unmounts.
+    // The toggle brings it back. Esc closes the command palette and leaves focus mode in place.
     await act(async () => toggle().props.onClick());
     assert.ok(focused());
+    await act(async () => editor.props.onDraftChange(true));
+    await act(async () => renderer.root.findByProps({ className: 'titlebar-search' }).props.onClick());
+    assert.equal(renderer.root.findAllByType('dialog').length, 1);
+    await act(async () => press('Escape', { defaultPrevented: true }));
+    assert.equal(renderer.root.findAllByType('dialog').length, 1, 'a draft that already handled Escape keeps the palette open');
+    assert.ok(focused(), 'that Escape does not leave focus mode either');
+    await act(async () => press('Escape'));
+    assert.equal(renderer.root.findAllByType('dialog').length, 0, 'Esc closes the command palette');
+    assert.ok(focused(), 'closing the palette does not leave focus mode');
+    await act(async () => editor.props.onDraftChange(false));
+    await act(async () => press('Escape'));
+    assert.equal(focused(), false, 'Esc leaves focus mode once the palette and the draft are gone');
   } finally { if (renderer) await act(async () => renderer.unmount()); delete global.window; }
 });
 

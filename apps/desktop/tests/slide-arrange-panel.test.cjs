@@ -41,6 +41,9 @@ test('arrange panel toggles objects and disables align until two are selected', 
     }));
   });
   assert.equal(view.root.findAllByType('section')[0].props['aria-label'], 'Arrange objects', 'a labelled pane group, not a disclosure');
+  const help = view.root.findAllByType('p')[0].children.join('');
+  assert.match(help, /^(⌘-click|Ctrl\+click) objects on the slide/);
+  assert.equal(help.includes('Ctrl / '), false);
   assert.equal(view.root.findAllByType('details').length, 0);
   assert.equal(view.root.findAllByType('button').find(button => button.props.children === 'Align left').props.disabled, true);
   await act(async () => view.root.findAllByType('input')[0].props.onChange());
