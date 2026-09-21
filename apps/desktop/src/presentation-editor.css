@@ -22,9 +22,6 @@
 .presentation-thumbnail[aria-current="page"] .presentation-thumb-stage { outline: 2px solid var(--accent); outline-offset: 2px; }
 .presentation-thumbnail[aria-current="page"] .presentation-slide-number { color: var(--accent); font-weight: bold; }
 .presentation-workspace { flex: 1; min-width: 0; overflow: auto; padding: 0 0 28px; }
-.presentation-canvas-label { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 18px 26px; color: var(--text-muted); font-size: 11px; }
-.presentation-canvas-label strong { font-weight: 500; white-space: nowrap; color: var(--text-secondary); }
-.presentation-canvas-label > span { text-align: right; }
 .presentation-canvas-scroll { min-width: 100%; width: max-content; padding: 10px 32px 24px; display: flex; justify-content: center; }
 .presentation-slide-frame { position: relative; flex-shrink: 0; background: var(--document-surface); }
 .presentation-canvas-scroll > .presentation-slide-frame { box-shadow: 0 2px 9px var(--shadow-soft); }
@@ -44,10 +41,6 @@
 .presentation-object-placeholder { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; padding: 10px; color: var(--document-muted); border: 1px dashed var(--document-muted); background: var(--document-edit-surface); font-size: 14px; overflow: hidden; }
 .presentation-table { border-collapse: collapse; width: 100%; height: 100%; font-size: 14px; }
 .presentation-table td { border: 1px solid var(--document-border); padding: 5px; }
-.presentation-fidelity { color: var(--text-muted); margin: 0 28px; font-size: 11px; line-height: 1.6; max-width: 680px; }
-.presentation-fidelity summary { cursor: pointer; }
-.presentation-fidelity p { margin: 10px 0; }
-.presentation-fidelity ul { padding-left: 17px; }
 .presentation-inspector { flex: 0 0 244px; overflow: auto; border-left: 1px solid var(--border); background: var(--surface); padding: 19px 16px; }
 .presentation-inspector-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; margin: 0 0 16px; }
 .presentation-inspector h2 { margin: 0; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
@@ -82,7 +75,7 @@
 .presentation-modal p { font-size: 13px; line-height: 1.6; color: var(--text-muted); }
 .presentation-modal section > div { display: flex; justify-content: flex-end; gap: 8px; margin-top: 22px; }
 .presentation-editor .presentation-danger { background: var(--danger-fill); border-color: var(--danger-fill); color: var(--accent-text); }
-@media (max-width: 1050px) { .presentation-thumbnails { flex-basis: 172px; padding-inline: 5px; } .presentation-inspector { flex-basis: 224px; padding-inline: 12px; } .presentation-toolbar { gap: 6px; padding-inline: 10px; } .presentation-toolbar button { padding-inline: 7px; } .presentation-canvas-label { padding-inline: 18px; } }
+@media (max-width: 1050px) { .presentation-thumbnails { flex-basis: 172px; padding-inline: 5px; } .presentation-inspector { flex-basis: 224px; padding-inline: 12px; } .presentation-toolbar { gap: 6px; padding-inline: 10px; } .presentation-toolbar button { padding-inline: 7px; } }
 .presentation-object.is-selected { touch-action: none; cursor: move; }
 .presentation-resize-handle { position: absolute; z-index: 5; right: -7px; bottom: -7px; width: 14px; height: 14px; background: var(--document-surface); border: 2px solid var(--accent); border-radius: 2px; cursor: nwse-resize; }
 .presentation-table-options { display: flex; align-items: center; gap: 10px; }
@@ -123,5 +116,7 @@
 /* The mini toolbar is already anchored to the selection; it needs no scope caption. */
 .presentation-floating-toolbar .formatting-scope { display: none; }
 .presentation-floating-toolbar select { border: 1px solid var(--border); border-radius: 4px; padding: 4px 6px; background: var(--surface); color: var(--text); font-size: 12px; }
-.presentation-status { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-shrink: 0; min-height: 24px; padding: 2px 16px; border-top: 1px solid var(--border); background: var(--surface); color: var(--text-muted); font-size: 11px; }
+.presentation-status { display: flex; align-items: center; gap: 14px; flex-shrink: 0; min-height: 24px; padding: 2px 16px; border-top: 1px solid var(--border); background: var(--surface); color: var(--text-muted); font-size: 11px; }
 .presentation-status-note { cursor: help; font-size: 13px; }
+.presentation-status-slide { color: var(--text-secondary); }
+.presentation-status > span:not(.presentation-status-slide, .presentation-status-note) { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

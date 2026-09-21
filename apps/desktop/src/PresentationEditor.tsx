@@ -105,6 +105,10 @@ export default function PresentationEditor({ name, bytes, onChange, onBusyChange
   const canUndo = !blocked && undo.length > 0, canRedo = !blocked && redo.length > 0;
   useEffect(() => { registerHistory?.({ undo: () => historyRef.current('undo'), redo: () => historyRef.current('redo'), canUndo, canRedo }); }, [registerHistory, canUndo, canRedo]);
   const slide = snapshot?.deck.slides[index];
+  // What the canvas used to caption and hide behind a disclosure, in one tooltip.
+  const previewNote = ['Positioned preview: text wrapping may differ in PowerPoint.',
+    'Exact text and supported shapes can be edited. Images use embedded previews when available. Unsupported content stays in the file and appears as a placeholder. Slide commands can be refused for notes, comments, links, sections or other relationships that cannot be changed safely.',
+    ...(slide?.compatibility.diagnostics ?? []).slice(0, 5).map(diagnostic => diagnostic.message)].join('\n');
   const selectedItem = slide && positionElements(slide.elements).find(item => elementKey(item.element) === selected);
   const text = snapshot && textTarget(snapshot.deck, selected);
   const shape = snapshot && shapeTarget(snapshot.deck, selected);
@@ -312,7 +316,7 @@ export default function PresentationEditor({ name, bytes, onChange, onBusyChange
       { id: 'font', label: 'Font', children: <PresentationTextToolbar section="font" run={run} align={selectedParagraph?.align} disabled={busy || confirmDelete || !text || (!!draft && draft.kind !== 'text')} onRunChange={patch => textPatch(patch)} onAlignChange={align => textPatch({}, align)} /> },
       { id: 'paragraph', label: 'Paragraph', children: <PresentationTextToolbar section="paragraph" run={run} align={selectedParagraph?.align} disabled={busy || confirmDelete || !text || (!!draft && draft.kind !== 'text')} onRunChange={patch => textPatch(patch)} onAlignChange={align => textPatch({}, align)} /> },
       { id: 'drawing', label: 'Drawing', children: <>
-        <RibbonButton icon="align" label="Arrange objects" title="Align or space the objects selected on this slide" disabled={blocked || arrangeable.length < 2} aria-expanded={paneOpen} onClick={() => setPaneOpen(true)} />
+        <RibbonButton icon="align" label="Arrange" title="Align or space the objects selected on this slide" disabled={blocked || arrangeable.length < 2} aria-expanded={paneOpen} onClick={() => setPaneOpen(true)} />
         <RibbonButton icon="sidebar" label="Format" title="Show or hide the Format pane for the selected object" disabled={!snapshot} aria-pressed={paneOpen} onClick={() => setPaneOpen(!paneOpen)} />
         <RibbonButton icon="deleteObject" label="Delete object" disabled={blocked || !selectedItem || selectedItem.grouped || (!text && !shape && !geometryTarget(snapshot!.deck, selected))} onClick={deleteObject} />
       </> },
@@ -345,12 +349,10 @@ export default function PresentationEditor({ name, bytes, onChange, onBusyChange
     {!snapshot ? <div className="presentation-loading" role="status">{busy ? 'Opening presentation…' : 'This presentation could not be opened.'}</div> : <div className="presentation-layout">
       {!viewOptions?.focus && <nav className="presentation-thumbnails" aria-label="Slides"><div className="presentation-rail-title">Slides <span>{snapshot.deck.slides.length}</span></div>{snapshot.deck.slides.map((item, i) => <SlideThumbnail key={item.id} deck={snapshot.deck} slide={item} number={i + 1} current={index === i} disabled={blocked} onSelect={() => selectSlide(i)} />)}</nav>}
       <div className="presentation-workspace" ref={workspace} onContextMenu={event => { selectObjectAt(event); menu.open(event); }}>
-        <div className="presentation-canvas-label"><strong>Slide {index + 1}</strong></div>
         <div className="presentation-canvas-scroll">{slide && <SlideCanvas deck={snapshot.deck} slide={slide} scale={scale} selected={selected} selectedKeys={arrangeKeys} onSelect={(key, additive, at) => void selectFromCanvas(key, !!additive, at)} disabled={busy || confirmDelete} editing={editing} onTextInput={editText} onTextCommit={() => void commitEdit()} onTextCancel={cancelEdit} onTextBlur={keepEditing => { if (closingEdit.current) { closingEdit.current = false; return; } if (!keepEditing) void commitEdit(); }} draft={draft} onGeometry={geometryPatch} selectedCell={cellSelection} onCellSelect={chooseCell} onGestureChange={value => { dragging.current = value; }} />}</div>
         {editing && text && caretAnchor && <div className="presentation-floating-toolbar" style={{ left: caretAnchor.left, top: caretAnchor.top, transform: caretAnchor.below ? undefined : 'translateY(-100%)' }}>
           <PresentationTextToolbar run={run} align={selectedParagraph?.align} disabled={busy || confirmDelete} onRunChange={patch => textPatch(patch)} onAlignChange={align => textPatch({}, align)} />
         </div>}
-        {slide && <details className="presentation-fidelity"><summary>Preview and editing limits</summary><p>Exact text and supported shapes can be edited. Images use embedded previews when available. Unsupported content stays in the file and appears as a placeholder. Slide commands can be refused for notes, comments, links, sections, or other relationships that cannot be changed safely.</p>{slide.compatibility.diagnostics.length > 0 && <ul>{slide.compatibility.diagnostics.slice(0, 10).map((diagnostic, i) => <li key={i}>{diagnostic.message}</li>)}</ul>}</details>}
       </div>
       {paneOpen && <aside className="presentation-inspector" aria-label="Format">
         <div className="presentation-inspector-header">
@@ -397,8 +399,9 @@ export default function PresentationEditor({ name, bytes, onChange, onBusyChange
       </aside>}
     </div>}
     {snapshot && <footer className="presentation-status" aria-label="Presentation status">
+      <span className="presentation-status-slide">Slide {index + 1} of {snapshot.deck.slides.length}</span>
       <span>{editing ? 'Editing text · Enter applies, Esc cancels' : selectedItem ? `Selected: ${selectedItem.element.name || selectedItem.element.kind}` : ''}</span>
-      <span className="presentation-status-note" tabIndex={0} role="note" aria-label="Preview note" title="Positioned preview: text wrapping may differ in PowerPoint.">&#9432;</span>
+      <span className="presentation-status-note" tabIndex={0} role="note" aria-label="Preview note" title={previewNote}>&#9432;</span>
     </footer>}
     {menu.anchor && snapshot && <ContextMenu anchor={menu.anchor} label="Slide" onClose={menu.close} items={presentationContextMenu({ object: !!selectedItem && !selectedItem.grouped && (!!text || !!shape || !!geometryTarget(snapshot.deck, selected)), slide: !!slide, disabled: blocked, canDeleteSlide: snapshot.deck.slides.length > 1, onDeleteObject: deleteObject, onNewSlide: () => insert('slide'), onDuplicateSlide: () => structure('duplicate'), onDeleteSlide: () => setConfirmDelete(true) })} />}
     {confirmDelete &&<div className="presentation-modal"><section role="alertdialog" aria-modal="true" aria-labelledby="presentation-delete-title" onKeyDown={event => {
