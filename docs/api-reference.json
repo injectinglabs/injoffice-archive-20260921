@@ -1419,7 +1419,7 @@
     },
     {
       "name": "@injoffice/collab",
-      "description": "Real-time collaboration for Univer OSS sheets: presence (who has the file open, coloured remote selections) and live followers, over a host-supplied transport.",
+      "description": "Client-side document collaboration: presence, ordered-operation synchronization, and live followers over a host-supplied transport, with a compatible sheet-editor adapter.",
       "exports": [
         {
           "subpath": ".",
@@ -1999,6 +1999,21 @@
               "name": "SET_RANGE_VALUES",
               "kind": "const",
               "signature": "export declare const SET_RANGE_VALUES = \"sheet.mutation.set-range-values\""
+            },
+            {
+              "name": "SheetPresenceCoordinates",
+              "kind": "type",
+              "signature": "export interface SheetPresenceCoordinates"
+            },
+            {
+              "name": "SheetPresenceDisposable",
+              "kind": "type",
+              "signature": "export interface SheetPresenceDisposable"
+            },
+            {
+              "name": "SheetPresenceHost",
+              "kind": "type",
+              "signature": "export interface SheetPresenceHost"
             },
             {
               "name": "SheetPresenceLabel",

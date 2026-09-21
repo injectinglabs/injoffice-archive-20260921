@@ -14,6 +14,21 @@ root `package.json`, then run `npm install` and `npm audit`. This mitigates
 GHSA-28wg-ghj8-5hjv in the Univer peer's dependency; the InjOffice monorepo's
 override is not inherited by npm consumers.
 
+## Unreleased consumer dependency change
+
+The next release removes the automatic Univer peer installation. Collaboration
+runtime code and declarations use the InjOffice-owned `SheetPresenceHost`
+interface. Existing configured Univer facades satisfy it without a wrapper;
+hosts using `PresenceManager` still install and configure their sheet editor and
+its plugins. Document/PDF presence, synchronization, journals, and permission
+helpers need no Univer installation.
+
+This source change does not alter published `0.1.0` tarballs. Keep the mitigation
+above for those packages, and for hosts that independently use affected Univer
+versions. `npm run check:collab-consumer` verifies a freshly packed collaboration
+package in an isolated consumer without workspace overrides, including strict
+TypeScript declarations and absence of Univer/NanoID in its dependency tree.
+
 ```ts
 import { COLLAB_EVENTS, type CollabTransport } from '@injoffice/collab'
 

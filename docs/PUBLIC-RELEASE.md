@@ -31,10 +31,10 @@ with `"private": true`. The in-repo `injoffice-server` is optional. Browser WASM
 
 ## Release status and remaining account setup
 
-As of 2026-09-08, 25 of 26 packages are published at 0.1.0 under the controlled
-`@injoffice` scope. Only `@injoffice/xlsx-wasm@0.1.0` remains unpublished.
-Resume its bootstrap using the original validated CI artifact, not rebuilt
-tarballs for versions already published. Existing npm versions are immutable.
+Registry verification on 2026-09-21 confirms all 26 packages are published at
+0.1.0 under the controlled `@injoffice` scope, including `@injoffice/xlsx-wasm`.
+Existing npm versions are immutable. Source fixes after that release, including
+the collaboration peer removal, require a new reviewed package version.
 
 - Preserve the attribution in NOTICE, LICENSE, LICENSE-UNICODE.txt, and package-specific legal assets.
 - Apply the [consumer dependency mitigation](DEPENDENCY-TRANSPARENCY.md#security-advisory-snapshot) for Univer 0.25.1. A clean root audit alone does not establish a clean consumer install.
@@ -68,7 +68,7 @@ The tag workflow then builds and validates packages in a job without OIDC permis
 
 This source repository is public. Eligible trusted-publishing releases can generate npm provenance; verify provenance on each newly published version. Making source public does not add provenance retroactively to existing package versions.
 
-The playground is not an npm package: `apps/playground` is marked `"private": true`, and the release script only enumerates publishable manifests under `packages/`. Package allowlists contain compiled ESM, declarations, source maps, package documentation, and explicitly declared runtime/legal assets. Source maps embed library TypeScript sources, so they include the library implementation as part of the public distribution. CI rejects individual tarballs over 3 MiB compressed or 10 MiB unpacked, except `@injoffice/xlsx-wasm`, whose separate, lazily loaded read-only rich-source WASM module raises its package budget to 3.5 MiB compressed and 12 MiB + 192 KiB unpacked. The native XLSX WASM module has a 7.75 MiB binary ceiling read from `go/xlsxpatch/cmd/xlsxnativewasm/max-bytes.txt` by CI and the local build; the read-only rich-source module retains a 7 MiB bound. CI also rejects a lockstep release set over 15 MiB compressed.
+The playground is not an npm package: `apps/playground` is marked `"private": true`, and the release script only enumerates publishable manifests under `packages/`. Package allowlists contain compiled ESM, declarations, source maps, package documentation, and explicitly declared runtime/legal assets. Source maps embed library TypeScript sources, so they include the library implementation as part of the public distribution. CI rejects individual tarballs over 3 MiB compressed or 10 MiB unpacked, except `@injoffice/xlsx-wasm`, whose separate, lazily loaded read-only rich-source WASM module raises its package budget to 3.5 MiB compressed and 12 MiB + 704 KiB unpacked. The native XLSX WASM module has a 7.75 MiB binary ceiling read from `go/xlsxpatch/cmd/xlsxnativewasm/max-bytes.txt` by CI and the local build; the read-only rich-source module retains a 7 MiB bound. CI also rejects a lockstep release set over 15 MiB compressed.
 
 ## Release validation
 
