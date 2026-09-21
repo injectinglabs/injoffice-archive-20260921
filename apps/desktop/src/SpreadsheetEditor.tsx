@@ -18,7 +18,7 @@ import './ribbon.css';
 import './spreadsheet.css';
 
 function definedNameCaseKey(value: string): string { return value.toLowerCase(); }
-const STRUCTURE_UNSUPPORTED = 'Row and column insert/delete are not supported by the native XLSX transaction';
+
 
 /** Excel's dark mode paints automatic (black) cell text in the theme's colour and keeps an
     authored colour as it is; text over an authored fill stays dark so the fill keeps working. */
@@ -126,6 +126,11 @@ export function SpreadsheetEditor(props: OfficeEditorProps & { initialRecoveryDr
     try{const next=parseSelection(name.ref);setSheetId(name.target_sheet_id);setSelection(next);setLocation(name.ref);setView(viewAt(next.anchor));scrollTarget.current=address(next.anchor);}catch(reason){setError(String(reason));}
   }
   const disabled = busy || draft !== null || !sheet?.editable;
+  const structureUnsupported = workbook?.unsupported.find(item => item.capability !== 'styles' && item.code !== 'RICH_SHARED_STRING' && !['WORKSHEET_DIMENSION_METADATA','WORKBOOK_VIEW_METADATA','MERGED_CELLS','UNMODELED_WORKBOOK_FEATURE'].includes(item.code));
+  const structureReason = structureUnsupported ? `Row and column changes cannot preserve ${structureUnsupported.code.toLowerCase().replaceAll('_', ' ')} references.`
+    : workbook?.sheets.some(value => !value.editable || value.cells.some(cell => cell.formula && (!cell.editable || cell.formula.type !== 'normal'))) ? 'Row and column changes require editable sheets and ordinary formulas.'
+    : undefined;
+
   const addSheetReason=sheetLifecycleReason(workbook,sheetId,'add'), deleteSheetReason=sheetLifecycleReason(workbook,sheetId,'delete');
   /** Keep the rendered window over the position and scroll it into view after the next paint. */
   function reveal(position: Position) {
@@ -369,8 +374,8 @@ export function SpreadsheetEditor(props: OfficeEditorProps & { initialRecoveryDr
       </RibbonRows> },
       { id: 'number', label: 'Number', children: <SpreadsheetNumberFormat numberFormat={style?.number_format} disabled={disabled} onChange={value => format({ number_format: value })} /> },
       { id: 'cells', label: 'Cells', children: <>
-        <SheetMenuButton icon="cellsInsert" label="Insert cells" reason={STRUCTURE_UNSUPPORTED}>{(['row.insert','column.insert'] as const).map(action => <RibbonButton key={action} icon={action.startsWith('row.') ? 'rowInsert' : 'columnInsert'} label={action === 'row.insert' ? 'Insert sheet rows' : 'Insert sheet columns'} disabled={disabled} onClick={() => setStructureAction(action)} />)}</SheetMenuButton>
-        <SheetMenuButton icon="cellsDelete" label="Delete cells" reason={STRUCTURE_UNSUPPORTED}>{(['row.delete','column.delete'] as const).map(action => <RibbonButton key={action} icon={action.startsWith('row.') ? 'rowDelete' : 'columnDelete'} label={action === 'row.delete' ? 'Delete sheet rows' : 'Delete sheet columns'} disabled={disabled} onClick={() => setStructureAction(action)} />)}</SheetMenuButton>
+        <SheetMenuButton icon="cellsInsert" label="Insert cells" disabled={disabled} reason={structureReason}>{(['row.insert','column.insert'] as const).map(action => <RibbonButton key={action} icon={action.startsWith('row.') ? 'rowInsert' : 'columnInsert'} label={action === 'row.insert' ? 'Insert sheet rows' : 'Insert sheet columns'} disabled={disabled} onClick={() => setStructureAction(action)} />)}</SheetMenuButton>
+        <SheetMenuButton icon="cellsDelete" label="Delete cells" disabled={disabled} reason={structureReason}>{(['row.delete','column.delete'] as const).map(action => <RibbonButton key={action} icon={action.startsWith('row.') ? 'rowDelete' : 'columnDelete'} label={action === 'row.delete' ? 'Delete sheet rows' : 'Delete sheet columns'} disabled={disabled} onClick={() => setStructureAction(action)} />)}</SheetMenuButton>
         <SheetMenuButton icon="cellsFormat" label="Format cells" disabled={disabled}><label>Row height (pt)<input aria-label="Row height in points" type="number" min="1" max="409.5" step="0.5" value={rowHeight} onChange={event => setRowHeight(event.target.value)}/></label><RibbonButton icon="rows" label="Set height" disabled={disabled} onClick={() => resize('row')} /><label>Column width (characters)<input aria-label="Column width in characters" type="number" min="1" max="255" step="0.5" value={columnWidth} onChange={event => setColumnWidth(event.target.value)}/></label><RibbonButton icon="columns" label="Set width" disabled={disabled} onClick={() => resize('column')} /></SheetMenuButton>
       </> },
     ] },
@@ -434,7 +439,7 @@ Blue"/></label><label><input type="checkbox" checked={filterBlank} onChange={eve
         </td>;
       })}</tr>)}</tbody></table>}
     </div>
-    {menu.anchor && <ContextMenu anchor={menu.anchor} label="Worksheet" onClose={menu.close} items={spreadsheetContextMenu({ anchor: menu.anchor, disabled, onClear: () => { try { void execute(clearOperations(selection), 'Selection cleared'); } catch (reason) { setError(String(reason)); } } })} />}
+    {menu.anchor && <ContextMenu anchor={menu.anchor} label="Worksheet" onClose={menu.close} items={[...spreadsheetContextMenu({ anchor: menu.anchor, disabled, onClear: () => { try { void execute(clearOperations(selection), 'Selection cleared'); } catch (reason) { setError(String(reason)); } } }), { separator: true }, ...(['row.insert','row.delete','column.insert','column.delete'] as const).map(action => ({ id: action, label: `${action.endsWith('.insert') ? 'Insert' : 'Delete'} ${action.startsWith('row.') ? 'rows' : 'columns'}…`, disabled: disabled || Boolean(structureReason), title: structureReason, run: () => setStructureAction(action) }))]} />}
     </div>
     <div className="sheet-bottom"><div className="sheet-tab-tools"><button aria-label="Add worksheet" title={addSheetReason} disabled={disabled || Boolean(addSheetReason)} onClick={() => { let number = 1; while (workbook?.sheets.some(value => value.name.toLowerCase() === `sheet${number}`)) number++; setSheetName(`Sheet${number}`); setSheetAction('add'); }}>+</button><button disabled={disabled} onClick={() => { setSheetName(sheet?.name ?? ''); setSheetAction('rename'); }}>Rename</button><button title={deleteSheetReason} disabled={disabled || Boolean(deleteSheetReason)} onClick={() => setSheetAction('delete')}>Delete</button></div><nav aria-label="Worksheets">{workbook?.sheets.filter(value => value.state === 'visible').map(value => <button key={value.id} aria-current={value.id === sheetId ? 'page' : undefined} disabled={busy || draft !== null} onClick={() => { setSheetId(value.id); setSelection(initialSelection); setLocation('A1'); resetView(); }}>{value.name}{!value.editable ? ' · read-only' : ''}</button>)}</nav></div>
     <EditorStatus label="Spreadsheet status"><span className="sheet-mode">{busy ? 'Applying native change…' : activeStatus}</span><span role="status">{notice}</span>{sheetNotes.map(item => <span key={item.label} className="sheet-note" title={item.note}>{item.label}</span>)}<span className={`sheet-calculation${snapshot?.calculation ? ' is-calculated' : ''}`} role="img" aria-label={calculationStatus} title={calculationStatus}>ƒx</span></EditorStatus>

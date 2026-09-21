@@ -129,7 +129,15 @@ export interface RangeUnmergeMutation extends MutationBase {
   range: RangeRef
 }
 
+export interface AxisMutation extends MutationBase {
+  kind: 'row.insert' | 'row.delete' | 'column.insert' | 'column.delete'
+  /** Zero-based first whole row/column; insert before this index. */
+  index: number
+  count: number
+}
+
 export type SupportedWorkbookMutation =
+  | AxisMutation
   | CellSetValueMutation
   | CellClearValueMutation
   | CellSetFormulaMutation
@@ -146,11 +154,7 @@ export const UNSUPPORTED_STRUCTURAL_MUTATION_KINDS = [
   'sheet.delete',
   'sheet.rename',
   'sheet.reorder',
-  'row.insert',
-  'row.delete',
   'row.move',
-  'column.insert',
-  'column.delete',
   'column.move',
   'range.move',
 ] as const
@@ -212,6 +216,7 @@ export class WorkbookMutationValidationError extends Error {
 type JsonObject = Record<string, unknown>
 
 const supportedKinds = new Set<string>([
+  'row.insert', 'row.delete', 'column.insert', 'column.delete',
   'cell.set_value',
   'cell.clear_value',
   'cell.set_formula',
@@ -534,6 +539,17 @@ function parseOperation(value: unknown, index: number, issues: WorkbookMutationI
       const range = parseRangeRef(value.range, `${path}/range`, issues, index, operationId)
       const style = parseStyleDelta(value.style, `${path}/style`, issues, index, operationId)
       return base && range && style ? { ...base, kind, range, style } : null
+    }
+    case 'row.insert':
+    case 'row.delete':
+    case 'column.insert':
+    case 'column.delete': {
+      rejectUnknownFields(value, ['operation_id', 'kind', 'sheet_id', 'index', 'count'], path, issues, index, operationId)
+      const limit = kind.startsWith('row.') ? EXCEL_MAX_ROWS : EXCEL_MAX_COLUMNS
+      const start = boundedNumber(value.index, `${path}/index`, 0, limit - 1, true, issues, index, operationId)
+      const count = boundedNumber(value.count, `${path}/count`, 1, limit, true, issues, index, operationId)
+      if (start !== null && count !== null && start + count > limit) issue(issues, 'OUT_OF_RANGE', path, 'whole-row/column range exceeds worksheet limits', index, operationId)
+      return base && start !== null && count !== null ? { ...base, kind, index: start, count } : null
     }
     case 'row.set_height': {
       rejectUnknownFields(value, ['operation_id', 'kind', 'sheet_id', 'row', 'height_points'], path, issues, index, operationId)

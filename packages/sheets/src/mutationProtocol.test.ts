@@ -112,11 +112,7 @@ describe('workbook mutation protocol v1', () => {
     'sheet.delete',
     'sheet.rename',
     'sheet.reorder',
-    'row.insert',
-    'row.delete',
     'row.move',
-    'column.insert',
-    'column.delete',
     'column.move',
     'range.move',
   ])('refuses recognized structural operation %s', (kind) => {
@@ -210,7 +206,7 @@ describe('workbook mutation protocol v1', () => {
   })
 
   it('throws the structured validation error when encoding an invalid typed value', () => {
-    const invalid = base([op('row.insert')]) as unknown as WorkbookMutationBatchV1
+    const invalid = base([op('row.move')]) as unknown as WorkbookMutationBatchV1
     expect(() => encodeWorkbookMutationBatch(invalid)).toThrow(WorkbookMutationValidationError)
     try {
       encodeWorkbookMutationBatch(invalid)
@@ -228,5 +224,15 @@ it('round-trips border edges and refuses malformed edges', () => {
  for (const edge of [{style:'thin'}, {style:'thin',color:'#abcdef'}, {style:'invalid',color:'#000000'}, {style:'thin',color:'#000000',extra:1}, null]) {
    if (edge === null) continue
    expect(decodeWorkbookMutationBatch(base([op('style.patch', {range,style:{border_top:edge}})])).ok).toBe(false)
+ }
+})
+
+it('validates whole row and column structural edits', () => {
+ for (const kind of ['row.insert','row.delete','column.insert','column.delete']) {
+  expect(decodeWorkbookMutationBatch(base([op(kind,{index:0,count:2})])).ok).toBe(true)
+  for (const extra of [{index:-1,count:1},{index:0,count:0},{index:0.5,count:1},{index:16383,count:2}]) {
+   if (kind.startsWith('row.') && extra.index===16383) continue
+   expect(decodeWorkbookMutationBatch(base([op(kind,extra)])).ok).toBe(false)
+  }
  }
 })
