@@ -217,3 +217,33 @@ test('docx: packaged worker round-trips paragraph spacing and indentation on emp
     assert.ok(result.edit_policy.allowed_operations.includes('properties.patch'));
   }
 });
+
+test('docx: packaged worker applies margins, orientation and paper size to a section', async () => {
+  const files = engineFiles('docx'), worker = startWorker(files);
+  const envelope = { protocol: PROTOCOL, version: 1, format: 'docx' };
+  assert.equal((await worker.send({ ...envelope, id: 'init', op: 'init', assets: { wasmUrl: files.wasm, goRuntimeUrl: files.goRuntime } })).ok, true);
+  const source = await createBlankDocument('docx');
+  let bytes = source.buffer.slice(source.byteOffset, source.byteOffset + source.byteLength);
+  let page = { width_twips: 12240, height_twips: 15840, orientation: 'portrait', margin_top_twips: 720, margin_right_twips: 720, margin_bottom_twips: 720, margin_left_twips: 720 };
+  for (const change of [{}, { width_twips: 15840, height_twips: 12240, orientation: 'landscape' }, { width_twips: 16838, height_twips: 11906 }]) {
+    page = { ...page, ...change };
+    const extract = await worker.send({ ...envelope, id: 'extract', op: 'extract', bytes });
+    assert.equal(extract.ok, true, JSON.stringify(extract.error));
+    const document = JSON.parse(extract.result.contractJson), section = document.sections[0];
+    assert.ok(section.edit_policy.allowed_operations.includes('section.page.patch'));
+    const payload = JSON.stringify({ mutations: [{ target_kind: 'section', target_id: section.id, expected_xml_sha256: section.anchor.xml_sha256, operation: 'section.page.patch', page }] });
+    const applied = await worker.send({ ...envelope, id: 'apply', op: 'apply', original: bytes, expectedRevision: document.source.package_sha256, payload });
+    assert.equal(applied.ok, true, JSON.stringify(applied.error));
+    bytes = applied.result.bytes;
+    const reread = await worker.send({ ...envelope, id: 'reread', op: 'extract', bytes });
+    assert.equal(reread.ok, true, JSON.stringify(reread.error));
+    const geometry = JSON.parse(reread.result.contractJson).sections[0].page;
+    assert.equal(geometry.width_twips, page.width_twips);
+    assert.equal(geometry.height_twips, page.height_twips);
+    assert.equal(geometry.orientation, page.orientation);
+    for (const side of ['top', 'right', 'bottom', 'left']) assert.equal(geometry.margins[`${side}_twips`], page[`margin_${side}_twips`]);
+    assert.equal(geometry.margins.header_twips, section.page.margins.header_twips);
+    assert.equal(geometry.margins.footer_twips, section.page.margins.footer_twips);
+    assert.equal(geometry.margins.gutter_twips, section.page.margins.gutter_twips);
+  }
+});

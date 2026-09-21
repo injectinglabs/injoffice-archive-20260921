@@ -1,4 +1,5 @@
 import { validateInsert, type DocxInsertPayload } from './insert.js'
+import { validateSectionPageMutation } from './sectionPage.js'
 import {decodeNativeDocxTextboxGeometryV1,type NativeDocxTextboxGeometryEvidenceV1} from '@injoffice/docs/native-docx'
 import {
   NativeWasmError,
@@ -217,6 +218,7 @@ function validateEnvelope(document: NativeDocxDocumentV1, value: NativeDocxOffic
       if (!text.length) throw new TypeError('Select nonempty text to link.')
       return {mutations: [{target_kind: run ? 'run' : 'paragraph', target_id: target.id, expected_xml_sha256: target.anchor.xml_sha256, operation: 'hyperlink.set', hyperlink: {url: link.url as string | null, ...(run?.hyperlink ? {expected_xml_sha256: run.hyperlink.anchor.xml_sha256} : {})}, ...(range ? {range} : {})}]}
     }
+    if (mutation.operation === 'section.page.patch') return validateSectionPageMutation(document, mutation)
     const split = mutation.operation === 'paragraph.split'
     exactKeys(mutation, ['target_kind', 'target_id', 'expected_xml_sha256', 'operation', split ? 'split' : 'text'], 'DOCX structural mutation')
     if (mutation.target_kind !== 'paragraph' || (!split && (mutation.operation !== 'block.insert_after' || mutation.text !== ''))) throw new TypeError('Unsupported DOCX structural operation.')

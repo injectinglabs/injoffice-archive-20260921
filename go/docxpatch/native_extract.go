@@ -259,6 +259,7 @@ func ExtractNativeDocumentV1WithOptions(data []byte, options NativeExtractionOpt
 		NoteNumbering: extractor.nativeNoteNumberingRecords(),
 	}
 	advertiseNativeInsert(doc)
+	nativeSetSectionPolicies(doc, extractor.bodyNode, mainXML, nativeDOCXPackageHasDigitalSignature(pkg))
 	if issues := ValidateNativeDocumentV1(doc); len(issues) > 0 {
 		return nil, fmt.Errorf("docxpatch: native extract produced invalid contract: %w", &NativeValidationError{Issues: issues})
 	}

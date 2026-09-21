@@ -4506,7 +4506,7 @@
             {
               "name": "NativeDocxEditOperation",
               "kind": "type",
-              "signature": "export type NativeDocxEditOperation = 'text.replace' | 'properties.patch' | 'hyperlink.set' | 'page_break.insert' | 'paragraph.split' | 'block.insert_after' | 'block.delete' | 'drawing.replace'"
+              "signature": "export type NativeDocxEditOperation = 'text.replace' | 'properties.patch' | 'hyperlink.set' | 'page_break.insert' | 'paragraph.split' | 'section.page.patch' | 'block.insert_after' | 'block.delete' | 'drawing.replace'"
             },
             {
               "name": "NativeDocxEditPolicyV1",
@@ -5297,6 +5297,16 @@
               "name": "NativeDocxScriptTransformV1",
               "kind": "type",
               "signature": "export interface NativeDocxScriptTransformV1"
+            },
+            {
+              "name": "NativeDocxSectionPagePatchV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxSectionPagePatchV1"
+            },
+            {
+              "name": "NativeDocxSectionPagePayloadV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxSectionPagePayloadV1"
             },
             {
               "name": "nativeDocxSectionsShareExactPageV1",
@@ -6147,7 +6157,7 @@
             {
               "name": "NativeDocxEditOperation",
               "kind": "type",
-              "signature": "export type NativeDocxEditOperation = 'text.replace' | 'properties.patch' | 'hyperlink.set' | 'page_break.insert' | 'paragraph.split' | 'block.insert_after' | 'block.delete' | 'drawing.replace'"
+              "signature": "export type NativeDocxEditOperation = 'text.replace' | 'properties.patch' | 'hyperlink.set' | 'page_break.insert' | 'paragraph.split' | 'section.page.patch' | 'block.insert_after' | 'block.delete' | 'drawing.replace'"
             },
             {
               "name": "NativeDocxEditPolicyV1",
@@ -6378,6 +6388,16 @@
               "name": "NativeDocxRunV1",
               "kind": "interface",
               "signature": "export interface NativeDocxRunV1"
+            },
+            {
+              "name": "NativeDocxSectionPagePatchV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxSectionPagePatchV1"
+            },
+            {
+              "name": "NativeDocxSectionPagePayloadV1",
+              "kind": "interface",
+              "signature": "export interface NativeDocxSectionPagePayloadV1"
             },
             {
               "name": "NativeDocxSectionV1",

@@ -635,6 +635,12 @@
           "xml_sha256": "sha256:d00f39944c52cc87058ddc9d16f46a8f017c48ff57ce31ab721bbe4973bae3bf"
         },
         "break_type": "next-page",
+        "edit_policy": {
+          "allowed_operations": [
+            "section.page.patch"
+          ],
+          "mode": "read-write"
+        },
         "footer_refs": [
           {
             "kind": "default",

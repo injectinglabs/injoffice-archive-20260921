@@ -174,6 +174,12 @@
           "xml_sha256": "sha256:5068faca7e6c305022afb49256eb704a8d29092fe9e67d473eda90f6cd80b4a2"
         },
         "break_type": "next-page",
+        "edit_policy": {
+          "allowed_operations": [
+            "section.page.patch"
+          ],
+          "mode": "read-write"
+        },
         "footer_refs": [],
         "header_refs": [],
         "id": "section:02592db3a1be1e94b1dac711",
