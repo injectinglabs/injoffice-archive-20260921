@@ -4506,7 +4506,7 @@
             {
               "name": "NativeDocxEditOperation",
               "kind": "type",
-              "signature": "export type NativeDocxEditOperation = 'text.replace' | 'properties.patch' | 'hyperlink.set' | 'paragraph.split' | 'block.insert_after' | 'block.delete' | 'drawing.replace'"
+              "signature": "export type NativeDocxEditOperation = 'text.replace' | 'properties.patch' | 'hyperlink.set' | 'page_break.insert' | 'paragraph.split' | 'block.insert_after' | 'block.delete' | 'drawing.replace'"
             },
             {
               "name": "NativeDocxEditPolicyV1",
@@ -6147,7 +6147,7 @@
             {
               "name": "NativeDocxEditOperation",
               "kind": "type",
-              "signature": "export type NativeDocxEditOperation = 'text.replace' | 'properties.patch' | 'hyperlink.set' | 'paragraph.split' | 'block.insert_after' | 'block.delete' | 'drawing.replace'"
+              "signature": "export type NativeDocxEditOperation = 'text.replace' | 'properties.patch' | 'hyperlink.set' | 'page_break.insert' | 'paragraph.split' | 'block.insert_after' | 'block.delete' | 'drawing.replace'"
             },
             {
               "name": "NativeDocxEditPolicyV1",
@@ -12848,17 +12848,7 @@
             {
               "name": "PptxNativeMutationV1",
               "kind": "type",
-              "signature": "export type PptxNativeMutationV1 = PptxNativeTextReplaceMutationV1 | PptxNativeAutoShapeUpdateMutationV1 | PptxNativeSlideInsertMutationV1 | PptxNativeSlideBackgroundMutationV1"
-            },
-            {
-              "name": "PptxNativeSlideBackgroundMutationV1",
-              "kind": "interface",
-              "signature": "export interface PptxNativeSlideBackgroundMutationV1"
-            },
-            {
-              "name": "PptxNativeSlideInsertMutationV1",
-              "kind": "interface",
-              "signature": "export interface PptxNativeSlideInsertMutationV1"
+              "signature": "export type PptxNativeMutationV1 = PptxNativeTextReplaceMutationV1 | PptxNativeAutoShapeUpdateMutationV1"
             },
             {
               "name": "PptxNativeTextReplaceMutationV1",
