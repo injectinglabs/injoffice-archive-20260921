@@ -264,6 +264,23 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKey);
   }, [runAction, commandSearch, settingsOpen, updatesOpen]);
 
+  // Esc leaves Focus mode, as it does in Word. A draft being edited owns Esc first (the editor
+  // cancels it), and so do dialogs, the command palette, a context menu and the search fields.
+  useEffect(() => {
+    if (!viewOptions.focus) return;
+    const leaveFocus = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.repeat) return;
+      if (draftDirtyRef.current || editorBusyRef.current || operation.current || closingRef.current) return;
+      if (commandSearch || settingsOpen || updatesOpen || replacePrompt) return;
+      if (window.document.querySelector('.context-menu, dialog[open]')) return;
+      if (window.document.activeElement?.closest('.document-search, .pdf-search')) return;
+      event.preventDefault();
+      setViewOptions(value => ({ ...value, focus: false }));
+    };
+    window.addEventListener('keydown', leaveFocus);
+    return () => window.removeEventListener('keydown', leaveFocus);
+  }, [viewOptions.focus, commandSearch, settingsOpen, updatesOpen, replacePrompt]);
+
   useEffect(() => {
     window.document.title = document ? `${document.dirty || draftDirty ? '• ' : ''}${document.name} — InjOffice` : 'InjOffice';
   }, [document?.name, document?.dirty, draftDirty]);
