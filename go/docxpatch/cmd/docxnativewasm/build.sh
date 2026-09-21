@@ -89,6 +89,8 @@ size=$(wc -c < "$output_dir/docxnative.wasm" | tr -d ' ')
 # not available to a change of this shape: the step falls inside the smallest
 # useful version of it. The gate moves two 64 KiB steps rather than one so the
 # result is not 8 KiB from the gate once the CI toolchain adds its own ~5.4 KiB.
+# Paragraph alignment (w:jc merged into w:pPr) measured +16,924 on top of that:
+# 7,293,805 -> 7,310,729, inside the same gate.
 max_size=$((13 * 1024 * 1024 / 2 + 544 * 1024))
 if (( size > max_size )); then
   echo "docxnative.wasm $size bytes exceeds the 6.5 MiB + 544 KiB size ceiling ($max_size bytes)" >&2

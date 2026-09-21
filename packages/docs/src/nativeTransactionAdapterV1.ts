@@ -104,6 +104,14 @@ export interface NativeDocxRunPropertyPatchV1 {
   highlight?: string
 }
 
+/**
+ * The bounded paragraph-level formatting the native engine writes back. It is
+ * patched on its own, never in the same mutation as run properties.
+ */
+export interface NativeDocxParagraphPropertyPatchV1 {
+  alignment?: 'left' | 'center' | 'right' | 'both' | 'distribute'
+}
+
 /** Part of the target's own text, in UTF-16 code units, as the selection has it. */
 export interface NativeDocxTextRangeV1 {
   start_utf16: number
@@ -116,7 +124,8 @@ export interface NativeDocxRunFormatPayloadV1 {
     target_kind: 'paragraph' | 'run'
     target_id: string
     expected_xml_sha256: string
-    properties: NativeDocxRunPropertyPatchV1
+    properties: NativeDocxRunPropertyPatchV1 | NativeDocxParagraphPropertyPatchV1
+    /** Only run properties take a range; paragraph properties apply to the whole paragraph. */
     range?: NativeDocxTextRangeV1
   }>
 }

@@ -31,6 +31,7 @@ import {
   type NativeDocxDocumentV1,
   type NativeDocxOfficeMutationEnvelopeV1,
   type NativeDocxRunFormatPayloadV1,
+  type NativeDocxParagraphPropertyPatchV1,
   type NativeDocxRunPropertyPatchV1,
   type NativeDocxTextMutationPayloadV1,
 } from '@injoffice/docs/native-docx'
@@ -220,6 +221,7 @@ function validateEnvelope(document: NativeDocxDocumentV1, value: NativeDocxOffic
   return { mutations }
 }
 
+const DOCX_ALIGNMENT_VALUES = ['left', 'center', 'right', 'both', 'distribute']
 const DOCX_UNDERLINE_VALUES = ['none', 'single', 'double', 'words']
 const DOCX_HIGHLIGHT_VALUES = ['none', 'black', 'blue', 'cyan', 'darkBlue', 'darkCyan', 'darkGray', 'darkGreen', 'darkMagenta', 'darkRed', 'darkYellow', 'green', 'lightGray', 'magenta', 'red', 'white', 'yellow']
 
@@ -245,7 +247,15 @@ function validateFormatMutation(document: NativeDocxDocumentV1, targets: Map<str
   if (seenTargets.has(targetKey)) throw new NativeWasmError('DUPLICATE_TARGET', `DOCX mutation ${index} repeats the same native target.`)
   seenTargets.add(targetKey)
   const properties = plainObject(mutation.properties, `DOCX mutation ${index} properties`)
-  allowedKeys(properties, ['bold', 'italic', 'underline', 'font_family', 'font_size_half_points', 'color', 'highlight'], `DOCX mutation ${index} properties`)
+  allowedKeys(properties, ['bold', 'italic', 'underline', 'font_family', 'font_size_half_points', 'color', 'highlight', 'alignment'], `DOCX mutation ${index} properties`)
+  if (properties.alignment !== undefined) {
+    if (Object.getOwnPropertyNames(properties).length !== 1) throw new TypeError(`DOCX mutation ${index} must patch paragraph alignment on its own.`)
+    if (targetKind !== 'paragraph') throw new TypeError(`DOCX mutation ${index} alignment is a paragraph property and needs a paragraph target.`)
+    if (mutation.range !== undefined) throw new TypeError(`DOCX mutation ${index} alignment applies to the whole paragraph and takes no range.`)
+    if (!DOCX_ALIGNMENT_VALUES.includes(properties.alignment as string)) throw new TypeError(`DOCX mutation ${index} alignment is outside the written subset.`)
+    const paragraph: NativeDocxParagraphPropertyPatchV1 = { alignment: properties.alignment as NativeDocxParagraphPropertyPatchV1['alignment'] }
+    return { target_kind: targetKind, target_id: mutation.target_id, expected_xml_sha256: mutation.expected_xml_sha256, properties: paragraph }
+  }
   const patch: NativeDocxRunPropertyPatchV1 = {}
   for (const name of ['bold', 'italic'] as const) {
     if (properties[name] === undefined) continue

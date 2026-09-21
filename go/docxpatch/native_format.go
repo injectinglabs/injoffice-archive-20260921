@@ -29,6 +29,13 @@ type NativeDOCXRunPropertyPatchV1 struct {
 	Highlight          *string
 }
 
+// NativeDOCXParagraphPropertyPatchV1 is the bounded paragraph-level
+// formatting this tier can write back. An absent field is left as the source
+// has it.
+type NativeDOCXParagraphPropertyPatchV1 struct {
+	Alignment *string
+}
+
 // NativeDOCXTextRangeV1 selects part of the target's text in UTF-16 code
 // units, the same unit the renderer's selection uses.
 type NativeDOCXTextRangeV1 struct {
@@ -40,11 +47,12 @@ type NativeDOCXTextRangeV1 struct {
 // target. ExpectedXMLSHA256 is mandatory and fails the mutation closed when
 // the anchored XML moved.
 type NativeDOCXFormatMutationV1 struct {
-	TargetKind        string
-	TargetID          string
-	ExpectedXMLSHA256 string
-	Properties        NativeDOCXRunPropertyPatchV1
-	Range             *NativeDOCXTextRangeV1
+	TargetKind          string
+	TargetID            string
+	ExpectedXMLSHA256   string
+	Properties          NativeDOCXRunPropertyPatchV1
+	ParagraphProperties *NativeDOCXParagraphPropertyPatchV1
+	Range               *NativeDOCXTextRangeV1
 }
 
 var (
@@ -54,7 +62,10 @@ var (
 	// The underline subset native extraction reads back. Writing a value it
 	// refuses would make the paragraph read-only on the next extraction.
 	nativeUnderlineValues = map[string]bool{"none": true, "single": true, "double": true, "words": true}
-	nativeHighlightValues = map[string]bool{"none": true, "black": true, "blue": true, "cyan": true, "darkBlue": true, "darkCyan": true, "darkGray": true, "darkGreen": true, "darkMagenta": true, "darkRed": true, "darkYellow": true, "green": true, "lightGray": true, "magenta": true, "red": true, "white": true, "yellow": true}
+	// ECMA-376 17.3.1.26 CT_PPr child order, to the depth this tier writes.
+	nativeParagraphPropertyOrder = []string{"pStyle", "keepNext", "keepLines", "pageBreakBefore", "framePr", "widowControl", "numPr", "suppressLineNumbers", "pBdr", "shd", "tabs", "suppressAutoHyphens", "kinsoku", "wordWrap", "overflowPunct", "topLinePunct", "autoSpaceDE", "autoSpaceDN", "bidi", "adjustRightInd", "snapToGrid", "spacing", "ind", "contextualSpacing", "mirrorIndents", "suppressOverlap", "jc", "textDirection", "textAlignment", "textboxTightWrap", "outlineLvl", "divId", "cnfStyle", "rPr", "sectPr", "pPrChange"}
+	nativeAlignmentValues        = map[string]bool{"left": true, "center": true, "right": true, "both": true, "distribute": true}
+	nativeHighlightValues        = map[string]bool{"none": true, "black": true, "blue": true, "cyan": true, "darkBlue": true, "darkCyan": true, "darkGray": true, "darkGreen": true, "darkMagenta": true, "darkRed": true, "darkYellow": true, "green": true, "lightGray": true, "magenta": true, "red": true, "white": true, "yellow": true}
 )
 
 // ApplyNativeMutationPayloadV1 is the renderer-neutral Office mutation
@@ -69,12 +80,12 @@ func ApplyNativeMutationPayloadV1(packageBytes, payload []byte, outerExpectedRev
 	}
 	formatting := 0
 	for _, mutation := range decoded {
-		if mutation.Properties != nil {
+		if mutation.Properties != nil || mutation.ParagraphProperties != nil {
 			formatting++
 		}
 	}
 	if formatting != 0 && formatting != len(decoded) {
-		return nil, nativeMutationError("INVALID_PAYLOAD", "", "a transaction may not mix text replacements with run-property patches")
+		return nil, nativeMutationError("INVALID_PAYLOAD", "", "a transaction may not mix text replacements with property patches")
 	}
 	if formatting == 0 {
 		return ApplyNativeTextMutationPayloadV1(packageBytes, payload, outerExpectedRevision)
@@ -94,60 +105,74 @@ func ApplyNativeMutationPayloadV1(packageBytes, payload []byte, outerExpectedRev
 // mutation fields the envelope carries beside its string fields. It walks
 // JSON tokens, like every other native payload boundary, and refuses an
 // unknown or repeated member outright.
-func decodeNativeDOCXStructuredMutationField(field string, raw []byte) (*NativeDOCXRunPropertyPatchV1, *NativeDOCXTextRangeV1, error) {
+type nativeDOCXStructuredFieldV1 struct {
+	runs      *NativeDOCXRunPropertyPatchV1
+	paragraph *NativeDOCXParagraphPropertyPatchV1
+	span      *NativeDOCXTextRangeV1
+}
+
+func decodeNativeDOCXStructuredMutationField(field string, raw []byte) (nativeDOCXStructuredFieldV1, error) {
+	decoded := nativeDOCXStructuredFieldV1{}
 	members, err := nativeFlatJSONObject(raw)
 	if err != nil {
-		return nil, nil, err
+		return decoded, err
 	}
 	if field == "range" {
-		span := &NativeDOCXTextRangeV1{}
 		start, startOK := nativeJSONInt(members["start_utf16"])
 		end, endOK := nativeJSONInt(members["end_utf16"])
 		if len(members) != 2 || !startOK || !endOK {
-			return nil, nil, fmt.Errorf("must carry whole start_utf16 and end_utf16 numbers")
+			return decoded, fmt.Errorf("must carry whole start_utf16 and end_utf16 numbers")
 		}
-		span.StartUTF16, span.EndUTF16 = start, end
-		return nil, span, nil
+		decoded.span = &NativeDOCXTextRangeV1{StartUTF16: start, EndUTF16: end}
+		return decoded, nil
 	}
 	patch := &NativeDOCXRunPropertyPatchV1{}
 	for member, value := range members {
 		switch member {
 		case "bold", "italic":
-			decoded, ok := nativeJSONBool(value)
+			flag, ok := nativeJSONBool(value)
 			if !ok {
-				return nil, nil, fmt.Errorf("member %q must be a JSON boolean", member)
+				return decoded, fmt.Errorf("member %q must be a JSON boolean", member)
 			}
 			if member == "bold" {
-				patch.Bold = &decoded
+				patch.Bold = &flag
 			} else {
-				patch.Italic = &decoded
+				patch.Italic = &flag
 			}
-		case "underline", "font_family", "color", "highlight":
-			decoded, decodeErr := decodeNativeMutationJSONString(value)
+		case "underline", "font_family", "color", "highlight", "alignment":
+			text, decodeErr := decodeNativeMutationJSONString(value)
 			if decodeErr != nil {
-				return nil, nil, fmt.Errorf("member %q must be a JSON string", member)
+				return decoded, fmt.Errorf("member %q must be a JSON string", member)
 			}
 			switch member {
 			case "underline":
-				patch.Underline = &decoded
+				patch.Underline = &text
 			case "font_family":
-				patch.FontFamily = &decoded
+				patch.FontFamily = &text
 			case "color":
-				patch.Color = &decoded
+				patch.Color = &text
+			case "highlight":
+				patch.Highlight = &text
 			default:
-				patch.Highlight = &decoded
+				decoded.paragraph = &NativeDOCXParagraphPropertyPatchV1{Alignment: &text}
 			}
 		case "font_size_half_points":
-			decoded, ok := nativeJSONInt(value)
+			size, ok := nativeJSONInt(value)
 			if !ok {
-				return nil, nil, fmt.Errorf("member %q must be a whole JSON number", member)
+				return decoded, fmt.Errorf("member %q must be a whole JSON number", member)
 			}
-			patch.FontSizeHalfPoints = &decoded
+			patch.FontSizeHalfPoints = &size
 		default:
-			return nil, nil, fmt.Errorf("carries unknown member %q", member)
+			return decoded, fmt.Errorf("carries unknown member %q", member)
 		}
 	}
-	return patch, nil, nil
+	if decoded.paragraph != nil && len(members) != 1 {
+		return decoded, fmt.Errorf("must patch paragraph alignment on its own")
+	}
+	if decoded.paragraph == nil {
+		decoded.runs = patch
+	}
+	return decoded, nil
 }
 
 // nativeFlatJSONObject reads one JSON object of scalar members, refusing a
@@ -206,6 +231,18 @@ func validateNativeDOCXFormatMutation(mutation *NativeDOCXFormatMutationV1) erro
 	if !nativeSHA256.MatchString(mutation.ExpectedXMLSHA256) {
 		return fmt.Errorf("expected_xml_sha256 must contain a full lowercase SHA-256")
 	}
+	if mutation.ParagraphProperties != nil {
+		if mutation.TargetKind != "paragraph" {
+			return fmt.Errorf("alignment is a paragraph property and needs a paragraph target")
+		}
+		if mutation.Range != nil {
+			return fmt.Errorf("alignment applies to the whole paragraph and takes no range")
+		}
+		if mutation.ParagraphProperties.Alignment == nil || !nativeAlignmentValues[*mutation.ParagraphProperties.Alignment] {
+			return fmt.Errorf("alignment must be left, center, right, both or distribute")
+		}
+		return nil
+	}
 	patch := &mutation.Properties
 	if patch.Bold == nil && patch.Italic == nil && patch.Underline == nil && patch.FontFamily == nil && patch.FontSizeHalfPoints == nil && patch.Color == nil && patch.Highlight == nil {
 		return fmt.Errorf("properties must set at least one run property")
@@ -254,6 +291,7 @@ type nativeFormatRequest struct {
 	start     int
 	end       int
 	patch     NativeDOCXRunPropertyPatchV1
+	alignment *string
 	text      string
 }
 
@@ -355,6 +393,12 @@ func resolveNativeFormatRequest(mutation NativeDOCXFormatMutationV1, paragraphs 
 		}
 		return refuse("UNSUPPORTED_CONSTRUCT", message)
 	}
+	if mutation.ParagraphProperties != nil {
+		if mutation.ExpectedXMLSHA256 != paragraph.Anchor.XMLSHA256 {
+			return refuse("STALE_TARGET", fmt.Sprintf("expected XML fingerprint %q, current fingerprint is %q", mutation.ExpectedXMLSHA256, paragraph.Anchor.XMLSHA256))
+		}
+		return nativeFormatRequest{paragraph: paragraph, alignment: mutation.ParagraphProperties.Alignment}, nil
+	}
 	anchor := paragraph.Anchor
 	text := strings.Builder{}
 	total, runStart, runLength := 0, -1, 0
@@ -408,6 +452,13 @@ func nativeFormatParagraphSplices(part []byte, root *nativeXMLNode, request nati
 		paragraph.Start != *request.paragraph.Anchor.StartByte || paragraph.End != *request.paragraph.Anchor.EndByte ||
 		nativeSHA(part[paragraph.Start:paragraph.End]) != request.paragraph.Anchor.XMLSHA256 {
 		return refuse("STALE_TARGET", "paragraph source bytes no longer match the issued anchor")
+	}
+	if request.alignment != nil {
+		splice, alignErr := nativeFormatParagraphProperties(part, paragraph, *request.alignment)
+		if alignErr != nil {
+			return refuse("UNSUPPORTED_LEXICAL_FORM", alignErr.Error())
+		}
+		return []nativeTextSplice{splice}, nil
 	}
 	splices := []nativeTextSplice{}
 	offset := 0
@@ -497,6 +548,59 @@ func nativeFormatRunElement(part []byte, owner, properties, textNode *nativeXMLN
 		return nil, fmt.Errorf("run formatting produced no run")
 	}
 	return output, nil
+}
+
+// nativeFormatParagraphProperties merges w:jc into the paragraph's own
+// w:pPr, creating the element when the source has none. Every other child of
+// w:pPr keeps its bytes and its position.
+func nativeFormatParagraphProperties(part []byte, paragraph *nativeXMLNode, alignment string) (nativeTextSplice, error) {
+	prefix := ""
+	if name := nativeFormatQName(part, paragraph); strings.Contains(name, ":") {
+		prefix = name[:strings.Index(name, ":")+1]
+	}
+	written := []byte(`<` + prefix + `jc ` + prefix + `val="` + nativeMutationEscapeAttribute(alignment) + `"/>`)
+	properties := firstDirectNativeChild(paragraph, paragraph.Name.Space, "pPr")
+	if properties != nil && paragraph.Children[0] != properties {
+		return nativeTextSplice{}, fmt.Errorf("paragraph properties must be the paragraph's first child")
+	}
+	if properties == nil {
+		tagEnd := nativeStartTagEnd(part[paragraph.Start:paragraph.End])
+		if tagEnd <= 0 {
+			return nativeTextSplice{}, fmt.Errorf("paragraph element has an unterminated start tag")
+		}
+		at := paragraph.Start + int64(tagEnd)
+		return nativeTextSplice{start: at, end: at, text: []byte(`<` + prefix + `pPr>` + string(written) + `</` + prefix + `pPr>`)}, nil
+	}
+	output := []byte(`<` + prefix + `pPr>`)
+	placed := false
+	for _, child := range properties.Children {
+		local := child.Name.Local
+		if child.Name.Space != paragraph.Name.Space {
+			local = ""
+		}
+		if local == "jc" {
+			output, placed = append(output, written...), true
+			continue
+		}
+		if !placed && nativeParagraphPropertyRank(local) > nativeParagraphPropertyRank("jc") {
+			output, placed = append(output, written...), true
+		}
+		output = append(output, part[child.Start:child.End]...)
+	}
+	if !placed {
+		output = append(output, written...)
+	}
+	output = append(output, []byte(`</`+prefix+`pPr>`)...)
+	return nativeTextSplice{start: properties.Start, end: properties.End, text: output}, nil
+}
+
+func nativeParagraphPropertyRank(local string) int {
+	for rank, name := range nativeParagraphPropertyOrder {
+		if name == local {
+			return rank
+		}
+	}
+	return len(nativeParagraphPropertyOrder)
 }
 
 // nativeFormatRunProperties merges the patch into the source w:rPr, keeping
@@ -743,6 +847,12 @@ func validateNativeFormatResults(after *NativeDocumentV1, requests []nativeForma
 		paragraph := byPath[request.paragraph.Anchor.PartName+"\x00"+request.paragraph.Anchor.Path]
 		if paragraph == nil {
 			return nativeMutationError("POST_WRITE_MISMATCH", request.paragraph.ID, "the formatted paragraph is absent from the re-extracted contract")
+		}
+		if request.alignment != nil {
+			if paragraph.Properties == nil || paragraph.Properties.Alignment == nil || *paragraph.Properties.Alignment != *request.alignment {
+				return nativeMutationError("POST_WRITE_MISMATCH", request.paragraph.ID, "the formatted paragraph does not carry the requested alignment")
+			}
+			continue
 		}
 		text, offset := strings.Builder{}, 0
 		for _, run := range paragraph.Runs {
