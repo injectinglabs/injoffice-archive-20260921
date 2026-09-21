@@ -35,7 +35,10 @@
 .presentation-object:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
 .presentation-object img { width: 100%; height: 100%; object-fit: fill; display: block; }
 .presentation-shape-art { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
-.presentation-object-text { width: 100%; height: 100%; position: relative; display: flex; flex-direction: column; overflow: visible; overflow-wrap: break-word; pointer-events: none; line-height: 1.16; }
+.presentation-object-text { width: 100%; height: 100%; position: relative; display: flex; flex-direction: column; overflow: visible; overflow-wrap: break-word; line-height: 1.16; }
+/* Text is clickable so the caret can land in the run that was clicked; drags still start on the object. */
+.presentation-object-text > p { pointer-events: auto; }
+.presentation-editor .presentation-text-edit { outline: none; cursor: text; user-select: text; white-space: pre-wrap; }
 .presentation-object-text p { margin: 0; flex-shrink: 0; }
 .presentation-empty-text { font-style: normal; opacity: .42; }
 .presentation-object-placeholder { display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; padding: 10px; color: var(--document-muted); border: 1px dashed var(--document-muted); background: var(--document-edit-surface); font-size: 14px; overflow: hidden; }
@@ -113,3 +116,12 @@
 .presentation-editor .ribbon-button:hover:not(:disabled) { background: var(--pptx-soft); border-color: var(--border); }
 .presentation-editor .ribbon .presentation-background-control { flex-direction: row; align-items: center; gap: 6px; font-size: 12px; color: var(--text); }
 .presentation-editor .ribbon .presentation-background-control .ribbon-icon { width: 17px; height: 17px; }
+
+/* Office's mini toolbar: it appears over the shape only while the caret is in its text. */
+.presentation-floating-toolbar { position: fixed; z-index: 30; display: flex; align-items: center; gap: 8px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-raised); box-shadow: 0 6px 20px var(--shadow); }
+.presentation-floating-toolbar .formatting-toolbar { display: flex; align-items: center; gap: 8px; }
+/* The mini toolbar is already anchored to the selection; it needs no scope caption. */
+.presentation-floating-toolbar .formatting-scope { display: none; }
+.presentation-floating-toolbar select { border: 1px solid var(--border); border-radius: 4px; padding: 4px 6px; background: var(--surface); color: var(--text); font-size: 12px; }
+.presentation-status { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-shrink: 0; min-height: 24px; padding: 2px 16px; border-top: 1px solid var(--border); background: var(--surface); color: var(--text-muted); font-size: 11px; }
+.presentation-status-note { cursor: help; font-size: 13px; }
