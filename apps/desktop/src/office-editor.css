@@ -1,14 +1,10 @@
 .office-editor { display: flex; flex-direction: column; min-height: 0; height: 100%; color: var(--text); font-family: inherit; }
-.office-toolbar, .office-editbar, .office-paging, .office-sheet-tabs { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.office-toolbar, .office-editbar { padding: 8px 20px; border-bottom: 1px solid var(--border); background: var(--surface); flex-shrink: 0; }
-.office-toolbar span { font-size: 11px; color: var(--text-muted); margin-left: auto; }
-.office-toolbar:empty { display: none; }
+.office-editbar, .office-paging, .office-sheet-tabs { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.office-editbar { padding: 8px 20px; border-bottom: 1px solid var(--border); background: var(--surface); flex-shrink: 0; }
 .office-editor button:not(.ribbon-button, [role="tab"]) { font: inherit; font-size: 12px; cursor: pointer; padding: 6px 11px; border: 1px solid var(--border); border-radius: 4px; background: var(--surface); color: inherit; }
 .office-editor button:not(.ribbon-button, [role="tab"]):hover:not(:disabled) { background: var(--hover); }
 .office-editor button:not(.ribbon-button, [role="tab"]):disabled { opacity: .45; cursor: default; }
 .office-editor button:focus-visible, .office-editor select:focus-visible, .office-editor textarea:focus-visible, .office-text-run:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-.office-editor button.office-apply { background: var(--accent-fill); color: var(--accent-text); border-color: var(--accent-fill); }
-.office-editor button.office-apply:hover:not(:disabled) { background: var(--accent-hover); }
 .office-editbar label { display: flex; flex-direction: column; gap: 4px; font-size: 11px; font-weight: 600; }
 .office-editbar select, .office-editbar textarea { font: inherit; font-size: 13px; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 7px; max-width: 450px; color: inherit; }
 .office-editbar select { width: 280px; }
@@ -58,15 +54,15 @@
 .office-doc-title { font-size: 28pt; line-height: 1.2; margin: 0 0 18pt; }
 .office-text-run, .office-inline-input { font-family: inherit; font-size: inherit; line-height: inherit; font-weight: inherit; border: 0; padding: 0; border-radius: 1px; background: none; white-space: pre-wrap; text-align: inherit; }
 .office-text-run { cursor: text; }
-.office-text-run:hover:not([aria-disabled=true]) { background: var(--document-selection); box-shadow: 0 1px 0 var(--document-focus); }
 .office-text-run[aria-disabled=true] { cursor: default; }
-.office-inline-input { display: inline; outline: 1px solid var(--document-focus); background: var(--document-edit-surface); caret-color: var(--document-link); box-shadow: 0 0 0 2px var(--document-edit-surface); }
-.office-inline-input:focus { outline: 1px solid var(--document-link); }
-.office-inline-input:empty { display: inline-block; min-width: 130px; }
-.office-inline-input:empty::before { content: attr(data-placeholder); color: var(--document-muted); pointer-events: none; }
+.office-inline-input { display: inline; outline: none; background: none; caret-color: var(--document-text); }
+.office-inline-input:empty { display: inline-block; min-width: 2px; }
 .office-inline-input[contenteditable=false] { opacity: .65; }
-.office-inline-hint { display: block; font: 11px/1.5 'Segoe UI', Arial, sans-serif; background: var(--warning-soft); color: var(--warning-text); border-radius: 3px; padding: 5px 8px; margin: 5px 0; }
-.office-empty-run { font-size: 10px; color: var(--document-muted); font-family: 'Segoe UI', Arial, sans-serif; border-bottom: 1px dotted var(--document-muted); }
+/* Caret-side, self-dismissing notice. The anchor takes no space in the line. */
+.office-hint-anchor { position: relative; display: inline-block; width: 0; height: 0; }
+.office-inline-hint { position: absolute; top: 6px; left: 0; z-index: 20; max-width: 280px; font: 11px/1.5 'Segoe UI', Arial, sans-serif; background: var(--surface-raised); color: var(--text); border: 1px solid var(--border); border-radius: 4px; padding: 5px 9px; box-shadow: 0 6px 18px var(--shadow); pointer-events: none; }
+/* An empty run keeps a click target on the line without printing anything. */
+.office-empty-run { display: inline-block; min-width: 6em; }
 .office-empty-slide-text { color: var(--document-muted); font: 13px/1.6 'Segoe UI', Arial, sans-serif; }
 .office-preserved-image { display: inline-block; padding: 4px 12px; font: 11px/1.5 'Segoe UI', Arial, sans-serif; color: var(--document-muted); border: 1px dashed var(--document-border); background: var(--document-surface); }
 .office-preserved-content { font-size: 11px; color: var(--document-muted); }
@@ -79,7 +75,7 @@
 .office-slide { background: var(--document-surface); box-shadow: 0 2px 6px var(--shadow-soft); padding: 48px 64px; margin: 20px auto 0; max-width: 800px; min-height: 380px; font-family: Calibri, Arial, sans-serif; line-height: 1.6; }
 .office-slide h2 { font: 500 12px 'Segoe UI', Arial, sans-serif; color: var(--document-muted); border-bottom: 1px solid var(--document-border); padding-bottom: 18px; margin-bottom: 28px; }
 .office-pdf canvas { display: block; max-width: 100%; height: auto; margin: 0 auto; background: var(--document-surface); box-shadow: 0 2px 12px var(--shadow-soft); }
-@media (max-width: 900px) { .office-navigation { width: 185px; min-width: 185px; padding: 20px 12px; } .office-document-canvas { padding-left: 20px; padding-right: 20px; } .office-toolbar span { width: 100%; margin: 0; } .office-editbar select { width: 220px; } }
+@media (max-width: 900px) { .office-navigation { width: 185px; min-width: 185px; padding: 20px 12px; } .office-document-canvas { padding-left: 20px; padding-right: 20px; } .office-editbar select { width: 220px; } }
 .formatting-toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 20px; background: var(--surface-muted); border-bottom: 1px solid var(--border); flex-shrink: 0; }
 .formatting-group { display: flex; align-items: center; gap: 4px; }
 .formatting-group + .formatting-group { padding-left: 12px; border-left: 1px solid var(--border); }
