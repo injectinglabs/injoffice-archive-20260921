@@ -13,7 +13,11 @@ import { applyTheme } from './theme';
 import CommandPalette, { type WorkspaceCommand } from './CommandPalette';
 import { RibbonButton, RibbonRows, WorkspaceFileGroupsContext, type WorkspaceFileGroups } from './Ribbon';
 import RibbonIcon from './RibbonIcons';
-import { shortcutLabel, shortcutTooltip } from './shortcuts';
+import { shortcutLabel, shortcutPlatform, shortcutTooltip } from './shortcuts';
+
+// macOS hides the system title bar (main.cjs uses titleBarStyle 'hiddenInset'), so the app title bar
+// is the window's only title row: it drags the window and leaves room for the inset traffic lights.
+const macChrome = shortcutPlatform() === 'mac';
 
 type DocumentSession = { key: number; id: string; name: string; initialName: string; initialBytes: Uint8Array; bytes: Uint8Array; dirty: boolean; untitled?: boolean; editorBusy?: boolean; draftDirty?: boolean; recoveryDraft?: unknown };
 type ReplaceChoice = 'save' | 'discard' | 'cancel';
@@ -368,7 +372,7 @@ export default function App() {
   };
 
   return (
-    <div ref={rootElement} inert={closing ? true : undefined} className={`desktop-app${viewOptions.focus ? ' is-focused' : ''}`} onDragOver={event => { if (event.dataTransfer.types.includes('Files')) event.preventDefault(); }} onDrop={event => { if (event.defaultPrevented || !event.dataTransfer.files.length) return; event.preventDefault(); void importFiles(Array.from(event.dataTransfer.files)); }}>
+    <div ref={rootElement} inert={closing ? true : undefined} className={`desktop-app${macChrome ? ' platform-mac' : ''}${viewOptions.focus ? ' is-focused' : ''}`} onDragOver={event => { if (event.dataTransfer.types.includes('Files')) event.preventDefault(); }} onDrop={event => { if (event.defaultPrevented || !event.dataTransfer.files.length) return; event.preventDefault(); void importFiles(Array.from(event.dataTransfer.files)); }}>
       {!showHome && document && <header className="app-titlebar">
         {/* Office's title bar: Quick Access (Save, Undo, Redo) · document name and state · Search · view tools. File, New, Open and Save as… live in the ribbon's File tab. */}
         <div className="titlebar-quick-access" role="toolbar" aria-label="Quick access">

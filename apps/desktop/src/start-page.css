@@ -4,6 +4,10 @@
 .start-page button:disabled { cursor: default; opacity: .45; }
 .start-page button:focus-visible, .start-page input:focus-visible, .start-page select:focus-visible { outline: 2px solid var(--start-blue); outline-offset: 3px; }
 .start-sidebar { flex: 0 0 196px; display: flex; flex-direction: column; padding: 30px 14px 21px; background: var(--surface); border-right: 1px solid var(--border-subtle); }
+/* macOS: the start page carries no title bar, so the sidebar's top strip holds the inset traffic
+   lights and drags the window (the app title bar does that on the document screens). */
+.platform-mac .start-sidebar { padding-top: 52px; -webkit-app-region: drag; }
+.platform-mac .start-sidebar button, .platform-mac .start-sidebar .start-nav-home { -webkit-app-region: no-drag; }
 .start-brand { display: flex; align-items: center; gap: 10px; margin: 0 13px 39px; font-size: 21px; font-weight: 600; letter-spacing: -.65px; }
 .start-brand img { display: block; width: 32px; height: 32px; object-fit: contain; image-rendering: pixelated; }
 .start-nav { display: flex; flex-direction: column; gap: 5px; }
