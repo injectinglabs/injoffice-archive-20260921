@@ -9,6 +9,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { defaultReleaseDir, findPackagedApps, readAsar } = require('../scripts/packaged-app.cjs');
 const { nativeEngineAssets, missingRendererAssets, rendererAssetPatterns } = require('../scripts/native-assets.cjs');
+const { PDF_FONT, pdfResourceFiles } = require('../scripts/pdf-assets.cjs');
 
 const releaseDir = process.env.INJOFFICE_RELEASE_DIR ? path.resolve(process.env.INJOFFICE_RELEASE_DIR) : defaultReleaseDir;
 const sha256 = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
@@ -34,6 +35,13 @@ for (const app of apps) {
       const [, entry] = /src="\.\/(assets\/index-[\w-]+\.js)"/.exec(html) ?? [];
       assert.ok(entry, `renderer/index.html references a hashed ./assets/index-*.js: ${html}`);
       assert.ok(asar.has(`renderer/${entry}`), `renderer/${entry}`);
+
+      // These runtime fetches are invisible to Vite's import graph. A renderer
+      // can otherwise build and package successfully with Add text broken.
+      assert.ok(asar.has(`renderer/${PDF_FONT}`), 'Add text requires bundled Liberation Sans');
+      for (const [file, bytes] of pdfResourceFiles()) {
+        assert.equal(sha256(asar.read(`renderer/${file}`)), sha256(bytes), `${file} is packaged byte-for-byte, including licenses`);
+      }
 
       const rendererAssets = entries.filter(name => name.startsWith('renderer/assets/'));
       assert.deepEqual(missingRendererAssets(rendererAssets), [], `engine assets missing from ${app.asar}`);

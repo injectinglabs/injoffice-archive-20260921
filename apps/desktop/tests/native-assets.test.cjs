@@ -4,9 +4,23 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { ENGINE_PACKAGES, nativeEngineAssets, missingNativeEngineAssets, missingRendererAssets } = require('../scripts/native-assets.cjs');
 const { STUB_ENV, nativeRendererModules } = require('../scripts/renderer-modules.cjs');
+const { PDF_FONT, pdfResourceFiles, pdfAssets } = require('../scripts/pdf-assets.cjs');
 
 const root = path.resolve(__dirname, '..');
 const wasm = /\.wasm$/;
+
+test('desktop Vite emits the PDF font and support resources into the packaged renderer', () => {
+  const files = pdfResourceFiles();
+  assert.equal(files.get(PDF_FONT).readUInt32BE(0), 0x00010000, 'valid TrueType font');
+  assert.ok(files.has('pdf-assets/standard_fonts/LICENSE_LIBERATION'));
+  const emitted = new Map();
+  pdfAssets().generateBundle.call({ emitFile: asset => emitted.set(asset.fileName, asset.source) });
+  assert.deepEqual(emitted, files);
+  const config = fs.readFileSync(path.join(root, 'vite.config.ts'), 'utf8');
+  assert.match(config, /plugins:.*pdfAssets\(\)/);
+  const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+  assert.ok(pkg.build.files.includes('renderer/**/*'), 'electron-builder includes renderer/pdf-assets');
+});
 
 test('every engine package declares its wasm, wasm_exec.js and worker assets', () => {
   const engines = nativeEngineAssets();
