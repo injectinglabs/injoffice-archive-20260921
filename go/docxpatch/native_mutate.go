@@ -75,6 +75,7 @@ func DecodeNativeDOCXFormatMutationPayloadV1(data []byte) ([]NativeDOCXFormatMut
 // envelope carries: an exact text replacement, or a run-property patch.
 type nativeDOCXMutationV1 struct {
 	NativeDOCXTextMutationV1
+	Hyperlink           *nativeHyperlinkPatch
 	Operation           string
 	SplitRunID          string
 	SplitOffset         int
@@ -180,7 +181,7 @@ func decodeNativeDOCXTextMutationV1(decoder *json.Decoder, index int) (nativeDOC
 	}
 	seen := map[string]bool{}
 	values := map[string]string{}
-	allowed := map[string]bool{"target_kind": true, "target_id": true, "expected_xml_sha256": true, "text": true, "properties": true, "range": true, "operation": true, "split": true}
+	allowed := map[string]bool{"target_kind": true, "target_id": true, "expected_xml_sha256": true, "text": true, "properties": true, "range": true, "operation": true, "split": true, "hyperlink": true}
 	for decoder.More() {
 		fieldToken, tokenErr := decoder.Token()
 		if tokenErr != nil {
@@ -197,6 +198,39 @@ func decodeNativeDOCXTextMutationV1(decoder *json.Decoder, index int) (nativeDOC
 		var rawValue json.RawMessage
 		if valueErr := decoder.Decode(&rawValue); valueErr != nil {
 			return invalid(fmt.Sprintf("field %q contains invalid JSON", field))
+		}
+		if field == "hyperlink" {
+			members, err := nativeFlatJSONObject(rawValue)
+			if err != nil || len(members) < 1 || len(members) > 2 {
+				return invalid("invalid hyperlink object")
+			}
+			patch := &nativeHyperlinkPatch{}
+			for name, raw := range members {
+				switch name {
+				case "url":
+					patch.HasURL = true
+					if string(raw) != "null" {
+						value, err := decodeNativeMutationJSONString(raw)
+						if err != nil || !nativeHyperlinkURL(value) {
+							return invalid("hyperlink URL must be a bounded web or email address")
+						}
+						patch.URL = &value
+					}
+				case "expected_xml_sha256":
+					value, err := decodeNativeMutationJSONString(raw)
+					if err != nil || !nativeSHA256.MatchString(value) {
+						return invalid("invalid hyperlink anchor")
+					}
+					patch.Expected = value
+				default:
+					return invalid("unknown hyperlink member")
+				}
+			}
+			if !patch.HasURL {
+				return invalid("hyperlink URL is required")
+			}
+			mutation.Hyperlink = patch
+			continue
 		}
 		if field == "split" {
 			members, err := nativeFlatJSONObject(rawValue)
@@ -245,21 +279,25 @@ func decodeNativeDOCXTextMutationV1(decoder *json.Decoder, index int) (nativeDOC
 			return invalid(fmt.Sprintf("field %q is required", field))
 		}
 	}
-	if seen["range"] && mutation.Properties == nil {
+	if seen["range"] && mutation.Properties == nil && mutation.Hyperlink == nil {
 		return invalid("field \"range\" is only meaningful beside run properties")
 	}
 	mutation.Operation = values["operation"]
-	if seen["operation"] || seen["split"] {
-		if mutation.Properties != nil || mutation.ParagraphProperties != nil || mutation.Range != nil {
+	if seen["operation"] || seen["split"] || seen["hyperlink"] {
+		if mutation.Properties != nil || mutation.ParagraphProperties != nil || (mutation.Range != nil && mutation.Operation != "hyperlink.set") {
 			return invalid("structural operations cannot carry properties or range")
 		}
 		switch mutation.Operation {
+		case "hyperlink.set":
+			if mutation.Hyperlink == nil || seen["text"] || seen["split"] {
+				return invalid("hyperlink.set requires only hyperlink and optional range")
+			}
 		case "block.insert_after":
-			if !seen["text"] || values["text"] != "" || seen["split"] {
+			if !seen["text"] || values["text"] != "" || seen["split"] || seen["hyperlink"] {
 				return invalid("insert_after requires only empty text")
 			}
 		case "paragraph.split":
-			if !seen["split"] || seen["text"] {
+			if !seen["split"] || seen["text"] || seen["hyperlink"] {
 				return invalid("paragraph.split requires only split")
 			}
 		default:
@@ -524,7 +562,15 @@ func writeNativeMutationSplices(packageBytes []byte, pkg *nativePackage, doc *Na
 	if len(replacements) == 0 {
 		return nil, nativeMutationError("SEMANTIC_NO_OP", "", "mutation batch produced no native part payload change")
 	}
-	produced, err := ApplyPatch(packageBytes, Patch{Replace: replacements})
+	existing, added := map[string][]byte{}, map[string][]byte{}
+	for name, data := range replacements {
+		if _, ok := pkg.files[name]; ok {
+			existing[name] = data
+		} else {
+			added[name] = data
+		}
+	}
+	produced, err := ApplyPatch(packageBytes, Patch{Replace: existing, Add: added})
 	if err != nil {
 		return nil, fmt.Errorf("docxpatch: native mutation write verification: %w", err)
 	}
@@ -551,7 +597,7 @@ func writeNativeMutationSplices(packageBytes []byte, pkg *nativePackage, doc *Na
 	if after.Source.PackageSHA256 != resultRevision {
 		return nil, nativeMutationError("POST_WRITE_MISMATCH", "", "reopened source fingerprint does not match the produced package bytes")
 	}
-	return &NativeDOCXMutationResultV1{Package: produced, Document: after, Evidence: NativeDOCXMutationEvidenceV1{SourceRevision: exactRevision, ResultRevision: resultRevision, ChangedParts: changed, UntouchedPartsVerified: len(pkg.files) - len(changed)}}, nil
+	return &NativeDOCXMutationResultV1{Package: produced, Document: after, Evidence: NativeDOCXMutationEvidenceV1{SourceRevision: exactRevision, ResultRevision: resultRevision, ChangedParts: changed, UntouchedPartsVerified: len(pkg.files) - len(existing)}}, nil
 }
 
 func validateNativeDOCXTextMutationSelector(mutation NativeDOCXTextMutationV1) error {

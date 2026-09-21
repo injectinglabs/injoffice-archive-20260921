@@ -294,7 +294,7 @@ describe('native DOCX contract v1', () => {
 
     const tooManyOperations = structuredClone(fixture) as unknown as Record<string, any>
     tooManyOperations.body.blocks[0].paragraph.edit_policy.allowed_operations = [
-      'text.replace', 'properties.patch', 'block.insert_after', 'block.delete', 'drawing.replace', 'text.replace', 'paragraph.split',
+      'text.replace', 'properties.patch', 'block.insert_after', 'block.delete', 'drawing.replace', 'text.replace', 'paragraph.split', 'hyperlink.set',
     ]
     const operationsResult = decodeNativeDocxDocument(tooManyOperations)
     expect(operationsResult.ok).toBe(false)

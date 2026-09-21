@@ -32,7 +32,7 @@ export function formattingValues(preview: FormattingPreview, key: string): Forma
     const properties = runAppearance(preview.document, selected.paragraph, selected.run);
     const ownerPath = selected.run.anchor.path.slice(0, selected.run.anchor.path.lastIndexOf('/'));
     const siblings = selected.paragraph.runs.filter(run => run.anchor.path.slice(0, run.anchor.path.lastIndexOf('/')) === ownerPath);
-    return { font: properties.font_family, size: properties.font_size_half_points ? properties.font_size_half_points / 2 : undefined, bold: properties.bold, italic: properties.italic, underline: properties.underline === undefined ? undefined : properties.underline !== 'none', color: properties.color && /^[A-Fa-f0-9]{6}$/.test(properties.color) ? `#${properties.color.toUpperCase()}` : undefined, alignment: paragraphAppearance(preview.document, selected.paragraph).paragraph.alignment, characterEditable: siblings.length === 1 && selected.run.kind === 'text' };
+    return { font: properties.font_family, size: properties.font_size_half_points ? properties.font_size_half_points / 2 : undefined, bold: properties.bold, italic: properties.italic, underline: properties.underline === undefined ? undefined : properties.underline !== 'none', color: properties.color && /^[A-Fa-f0-9]{6}$/.test(properties.color) ? `#${properties.color.toUpperCase()}` : undefined, alignment: paragraphAppearance(preview.document, selected.paragraph).paragraph.alignment, characterEditable: siblings.length === 1 && selected.run.kind === 'text' && !selected.run.hyperlink };
   }
   if (preview.kind === 'xlsx') {
     const cell = editableTargets(preview.workbook).find(value => targetKey(value) === key);
