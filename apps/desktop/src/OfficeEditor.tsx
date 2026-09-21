@@ -5,7 +5,7 @@ import { buildDocxRunMutation, editableDocxRuns, verifyDocxRoundTrip } from '../
 import DocumentPreview from './DocumentPreview'
 import {loadDocumentImages,type DocumentImageCache} from './document-media'
 import { replaceParagraphLines, insertDocumentImage, deleteDocumentImage, replaceDocumentImage, replaceEditableDocumentText, mergeWithPreviousParagraph, insertDocumentTable, changeDocumentTable, changeDocumentTableGrid, type TableGridOperation } from './document-authoring'
-import {runAppearance} from './document-style'
+import {paragraphStyleName, runAppearance} from './document-style'
 import {paragraphTextOffset, type DocumentTextRange} from './document-range'
 import {createHiddenApplyScheduler} from './hidden-apply'
 import HyperlinkControl from './HyperlinkControl'
@@ -189,6 +189,7 @@ export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDr
   const [busy, setBusy] = useState(true)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [pageMetrics, setPageMetrics] = useState({ page: 1, pages: 1 })
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   useEffect(() => () => { if (noticeTimer.current) clearTimeout(noticeTimer.current) }, [])
   const [selected, setSelected] = useState('')
@@ -566,13 +567,17 @@ export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDr
     {snapshot && <>
       <div className={`office-preview ${isDocument ? 'office-document-preview' : ''}`} onContextMenu={event=>{activateRunAt(event);menu.open(event)}}>
         <div className="office-preview-scale" style={isDocument ? undefined : { zoom }}>
-        {snapshot.preview.kind === 'docx' && <DocumentPreview replaceImage={typeof window!=='undefined'&&window.injDesktop?.pickAsset?id=>void replaceImage(id):undefined} deleteImage={id=>void deleteImage(id)} images={(engine.current?.media(snapshot) ?? EMPTY_MEDIA).images} imageNotice={(engine.current?.media(snapshot) ?? EMPTY_MEDIA).notice} document={snapshot.preview.document} choose={choose} selected={selected} draft={draft} textRange={textRange} onTextRangeChange={setTextRange} caretOffset={caretOffset} joinPrevious={() => void joinPrevious()} insertLines={(text, caret) => void insertLines(text, caret)} updateDraft={updateDraft} commit={releaseDraft} notice={notice} busy={busy} hasDraft={hasDraft} onCompositionChange={value=>{composingRef.current=value;setComposing(value);callbacks.current.onBusyChange?.(busy||value);if(!value&&draftPending.current)hiddenApplyRef.current?.schedule()}} zoom={zoom} navigation={(viewOptions?.navigation ?? true) && !viewOptions?.focus} />}
+        {snapshot.preview.kind === 'docx' && <DocumentPreview replaceImage={typeof window!=='undefined'&&window.injDesktop?.pickAsset?id=>void replaceImage(id):undefined} deleteImage={id=>void deleteImage(id)} images={(engine.current?.media(snapshot) ?? EMPTY_MEDIA).images} imageNotice={(engine.current?.media(snapshot) ?? EMPTY_MEDIA).notice} document={snapshot.preview.document} choose={choose} selected={selected} draft={draft} textRange={textRange} onTextRangeChange={setTextRange} caretOffset={caretOffset} joinPrevious={() => void joinPrevious()} insertLines={(text, caret) => void insertLines(text, caret)} updateDraft={updateDraft} commit={releaseDraft} notice={notice} busy={busy} hasDraft={hasDraft} onPageMetrics={setPageMetrics} onCompositionChange={value=>{composingRef.current=value;setComposing(value);callbacks.current.onBusyChange?.(busy||value);if(!value&&draftPending.current)hiddenApplyRef.current?.schedule()}} zoom={zoom} navigation={(viewOptions?.navigation ?? true) && !viewOptions?.focus} />}
         </div>
       </div>
       <SelectionToolbar values={toolbarValues} disabled={busy||composing} onChange={patch=>void changeFormatting(patch)} />
       {menu.anchor&&<ContextMenu anchor={menu.anchor} label="Document" onClose={menu.close} items={documentContextMenu({anchor:menu.anchor,target:!!target,values:toolbarValues,disabled:busy||composing,link:!!docxSelection(snapshot.preview.document,selected)?.run.can_edit_hyperlink&&!textRange?.unsupported&&!(textRange&&textRange.start_utf16!==textRange.end_utf16),table:paragraphOperations(snapshot.preview.document,selected).includes('block.insert_after'),onFormat:patch=>void changeFormatting(patch),onFind:()=>{setSearchOpen(true);requestAnimationFrame(()=>searchInput.current?.focus())},onRibbonTab:setRibbonTab})} />}
     </>}
-    {statistics&&<footer className="office-document-status" aria-label="Document statistics" title="Body text including tables and pending edits. Headers, footers, notes and hidden text are excluded."><span>{statistics.words.toLocaleString()} words</span><span>{statistics.characters.toLocaleString()} characters</span><span>Body text{hasDraft?' · includes pending edits':''}</span></footer>}
+    {statistics&&snapshot&&<footer className="office-document-status" aria-label="Document status">
+      <span>Page {pageMetrics.page.toLocaleString()} of {pageMetrics.pages.toLocaleString()} · {statistics.words.toLocaleString()} {statistics.words===1?'word':'words'}</span>
+      <span className="office-status-info" tabIndex={0} role="note" aria-label="About these counts" title={`${statistics.characters.toLocaleString()} characters. Counts cover body text including tables; headers, footers, notes and hidden text are excluded. Pages are measured from the flowing preview — the original page layout is preserved in the file.`}>i</span>
+      <span>{paragraphStyleName(snapshot.preview.document, selection?.paragraph ?? snapshot.preview.document.body.blocks.find(block=>block.paragraph)?.paragraph)}</span>
+    </footer>}
     {!snapshot && !busy && <div className="office-empty">This file could not be opened. Choose another file to continue.</div>}
   </div>
 }
