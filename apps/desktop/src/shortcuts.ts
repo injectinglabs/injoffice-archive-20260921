@@ -1,13 +1,16 @@
 // Single source of truth for the keyboard shortcuts the desktop editors honour.
 // Ribbon tooltips, command hints and aria-keyshortcuts all read from here so the
 // same binding is never spelled twice.
-export type ShortcutId = 'undo' | 'redo' | 'bold' | 'italic' | 'underline' | 'find' | 'save' | 'saveAs' | 'open' | 'new' | 'commands' | 'apply' | 'confirm' | 'cancel'
+export type ShortcutId = 'undo' | 'redo' | 'cut' | 'copy' | 'paste' | 'bold' | 'italic' | 'underline' | 'find' | 'save' | 'saveAs' | 'open' | 'new' | 'commands' | 'apply' | 'confirm' | 'cancel'
 
 interface Binding { key: string; mod?: boolean; shift?: boolean; other?: Partial<Binding> }
 
 // `mod` is ⌘ on macOS and Ctrl elsewhere. `other` overrides the binding on non-mac platforms.
 const bindings: Record<ShortcutId, Binding> = {
   undo: { key: 'Z', mod: true },
+  cut: { key: 'X', mod: true },
+  copy: { key: 'C', mod: true },
+  paste: { key: 'V', mod: true },
   redo: { key: 'Z', mod: true, shift: true, other: { key: 'Y', shift: false } },
   bold: { key: 'B', mod: true },
   italic: { key: 'I', mod: true },
