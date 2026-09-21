@@ -207,7 +207,7 @@ test('workspace freezes during close preparation, waits for late drafts, and res
     const editor=renderer.root.findByType('test-editor');let ready=false,result;
     await act(async()=>{result=prepare().then(value=>{ready=value});});
     assert.equal(ready,false);
-    assert.equal(renderer.root.findByProps({className:'desktop-app'}).props.inert,true);
+    assert.equal(renderer.toJSON().props.inert,true);
     await act(async()=>menu('new'));
     assert.equal(renderer.root.findAllByType('test-start').length,0,'menu must not change frozen workspace');
     await act(async()=>{editor.props.onRecoveryDraftChange({text:'late draft'});pending[0]();});
@@ -215,7 +215,7 @@ test('workspace freezes during close preparation, waits for late drafts, and res
     await act(async()=>{finish();await result});
     assert.equal(ready,true);
     await act(async()=>cancel());
-    assert.equal(renderer.root.findByProps({className:'desktop-app'}).props.inert,undefined);
+    assert.equal(renderer.toJSON().props.inert,undefined);
     await act(async()=>editor.props.onBusyChange(true));
     assert.equal(await prepare(),false,'native operation refuses close');
     await act(async()=>editor.props.onBusyChange(false));
@@ -277,4 +277,28 @@ test('the File tab backstage carries Home, New, Open, Save, Save as, Close and a
     const labels = renderer.root.findAllByProps({ role: 'option' }).map(option => option.props.id);
     for (const id of ['command-home', 'command-new-docx', 'command-open', 'command-save', 'command-save-as', 'command-close', 'command-updates', 'command-preferences']) assert.ok(labels.includes(id), id);
   } finally { if (renderer) await act(async () => renderer.unmount()); delete global.window; }
+});
+
+// macOS hides the system title bar and insets its traffic lights into the app title bar, so the
+// renderer marks that platform and the stylesheet keeps the row draggable and the lights clear.
+test('the workspace marks the macOS window chrome only on macOS', async t => {
+  const original = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  t.after(() => { if (original) Object.defineProperty(globalThis, 'navigator', original); else delete globalThis.navigator; });
+  const host = { localStorage: { getItem: () => null, setItem() {} }, document: { title: '' }, addEventListener() {}, removeEventListener() {}, injDesktop: {
+    recent: async () => [], recovery: async () => [], nextExternal: async () => null, setDirty() {}, setBusy() {}, onMenuAction() { return () => {}; }, checkpoint: async () => {},
+    create: async format => ({ id: `id-${format}`, name: `Untitled.${format}`, bytes: new Uint8Array([1]), untitled: true }),
+  } };
+  for (const [platform, expected] of [['MacIntel', true], ['Win32', false]]) {
+    Object.defineProperty(globalThis, 'navigator', { value: { platform, userAgent: platform }, configurable: true });
+    const App = await loadApp();
+    global.window = host;
+    let renderer;
+    try {
+      await act(async () => { renderer = create(React.createElement(App)); });
+      const className = renderer.toJSON().props.className;
+      assert.equal(/\bplatform-mac\b/.test(className), expected, `${platform}: ${className}`);
+      await act(async () => renderer.root.findByType('test-start').props.onCreate('docx'));
+      assert.equal(/\bplatform-mac\b/.test(renderer.toJSON().props.className), expected, 'the class survives opening a document');
+    } finally { if (renderer) await act(async () => renderer.unmount()); delete global.window; }
+  }
 });

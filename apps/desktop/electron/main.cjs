@@ -89,11 +89,17 @@ function installMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
+// macOS: Office keeps one title row. The system title bar is hidden and its traffic lights are
+// inset into the renderer's own 40px .app-titlebar (see styles.css), which is a drag region.
+// Windows and Linux keep the standard frame, where the app title bar sits below it.
+const macTitleBar = process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 13, y: 12 } } : {};
+
 function createWindow() {
   dirty = false;
   editorBusy = false;
   window = new BrowserWindow({
     width: 1440, height: 960, minWidth: 900, minHeight: 640, title: 'InjOffice', icon: path.join(__dirname, 'icon.png'), backgroundColor: canvasColor(),
+    ...macTitleBar,
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true, spellcheck: false },
   });
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
