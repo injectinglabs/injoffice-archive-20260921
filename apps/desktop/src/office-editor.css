@@ -100,3 +100,19 @@
 .office-link-control form{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px;background:var(--surface-muted);border:1px solid var(--border);border-radius:8px}.office-link-control label{display:grid;gap:4px;font-size:12px}.office-link-control input{min-width:260px;padding:6px;border:1px solid var(--border-strong);border-radius:4px}.office-link-control small{max-width:220px;color:var(--text-muted)}
 
 .office-text-run[data-hyperlink],.office-inline-input[data-hyperlink]{text-decoration-line:underline;text-decoration-style:dotted;text-decoration-color:var(--document-link);text-underline-offset:3px}
+
+/* Layout tab: Word's Page Setup galleries and the Indent/Spacing spinners. */
+.document-layout-menu{position:relative;display:inline-flex}
+.document-layout-value{color:var(--text-muted)}
+.document-layout-caret{color:var(--text-muted);font-size:9px}
+.document-layout-list{position:absolute;z-index:20;top:calc(100% + 4px);left:0;min-width:210px;display:flex;flex-direction:column;padding:4px;background:var(--surface-raised);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px var(--shadow)}
+.document-layout-list button{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;padding:6px 9px;border:0;border-radius:5px;background:transparent;color:var(--text);font:inherit;font-size:12px;text-align:left;cursor:pointer}
+.document-layout-list button:hover{background:var(--hover)}
+.document-layout-list button[aria-checked=true]{color:var(--accent);background:var(--accent-soft)}
+.document-layout-list small{color:var(--text-muted);font-size:10.5px}
+.document-layout-paragraph{position:relative;display:flex;align-items:center;gap:10px}
+.document-layout-paragraph>div{display:flex;flex-direction:column;gap:4px}
+.ribbon .document-layout-field{flex-direction:row;align-items:center;gap:6px;white-space:nowrap;color:var(--text)}
+.document-layout-field input{width:66px}
+.document-layout-panel{position:absolute;z-index:20;top:calc(100% + 6px);right:0;display:grid;gap:8px;padding:12px;background:var(--surface-raised);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px var(--shadow)}
+.ribbon .document-layout-panel label{flex-direction:row;align-items:center;justify-content:space-between;gap:10px;color:var(--text)}

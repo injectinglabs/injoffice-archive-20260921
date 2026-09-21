@@ -9,7 +9,8 @@ import {paragraphStyleName, runAppearance} from './document-style'
 import {paragraphTextOffset, type DocumentTextRange} from './document-range'
 import {createHiddenApplyScheduler} from './hidden-apply'
 import HyperlinkControl from './HyperlinkControl'
-import PageLayoutControl,{type PagePatch} from './PageLayoutControl'
+import {type PagePatch} from './PageLayoutControl'
+import {DocumentPageSetup, DocumentParagraphLayout} from './document-layout'
 import InsertTableControl from './InsertTableControl'
 import ParagraphToolbar, { type ParagraphPatch } from './ParagraphToolbar'
 import FormattingToolbar, { type FormattingPatch } from './FormattingToolbar'
@@ -547,8 +548,9 @@ export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDr
       </> },
     ] },
     { id: 'Layout', label: 'Layout', groups: [
-      { id: 'page', label: 'Page Setup', children: snapshot.preview.document.sections.length === 1 && <PageLayoutControl section={snapshot.preview.document.sections[0]} disabled={blocked} onChange={patch => void changePage(patch)} /> },
-      { id: 'paragraph', label: 'Paragraph', children: paragraphToolbar('layout') },
+      // Values are shown for any section structure; only a single patchable section can be changed.
+      { id: 'page', label: 'Page Setup', children: snapshot.preview.document.sections[0] && <DocumentPageSetup section={snapshot.preview.document.sections[0]} disabled={blocked || snapshot.preview.document.sections.length !== 1} onChange={patch => void changePage(patch)} /> },
+      { id: 'paragraph', label: 'Paragraph', children: snapshot && <DocumentParagraphLayout properties={selection?.paragraph.properties} disabled={blocked || !selection?.paragraph.edit_policy.allowed_operations.includes('properties.patch')} onChange={patch => void changeParagraphFormatting(patch)} /> },
     ] },
     { id: 'Table', label: 'Table', groups: [
       { id: 'table', label: 'Table', children: tableOps.map(operation => <RibbonButton key={operation} icon={operation === 'block.insert_after' ? 'tableContinue' : 'tableDelete'} label={operation === 'block.insert_after' ? 'Continue after table' : 'Delete table'} disabled={blocked} onClick={() => void changeTable(operation)} />) },
