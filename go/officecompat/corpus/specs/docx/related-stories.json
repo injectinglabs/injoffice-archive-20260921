@@ -36,7 +36,8 @@
               },
               "edit_policy": {
                 "allowed_operations": [
-                  "text.replace"
+                  "text.replace",
+                  "properties.patch"
                 ],
                 "mode": "read-write"
               },
@@ -183,7 +184,8 @@
                 },
                 "edit_policy": {
                   "allowed_operations": [
-                    "text.replace"
+                    "text.replace",
+                    "properties.patch"
                   ],
                   "mode": "read-write"
                 },
@@ -253,7 +255,8 @@
                 },
                 "edit_policy": {
                   "allowed_operations": [
-                    "text.replace"
+                    "text.replace",
+                    "properties.patch"
                   ],
                   "mode": "read-write"
                 },
@@ -304,7 +307,8 @@
                 },
                 "edit_policy": {
                   "allowed_operations": [
-                    "text.replace"
+                    "text.replace",
+                    "properties.patch"
                   ],
                   "mode": "read-write"
                 },
@@ -439,7 +443,8 @@
                 },
                 "edit_policy": {
                   "allowed_operations": [
-                    "text.replace"
+                    "text.replace",
+                    "properties.patch"
                   ],
                   "mode": "read-write"
                 },
@@ -575,7 +580,8 @@
                 },
                 "edit_policy": {
                   "allowed_operations": [
-                    "text.replace"
+                    "text.replace",
+                    "properties.patch"
                   ],
                   "mode": "read-write"
                 },
