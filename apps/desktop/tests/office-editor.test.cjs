@@ -580,3 +580,14 @@ test('reverting to saved text while a commit rejects clears the pending draft', 
     assert.equal(saved, true);
   } finally { await act(async () => view.unmount()); }
 });
+
+test('initial engine parse rejection is reported to the workspace', async () => {
+  const errors = [];
+  const Editor = await loadEditor({ extract: async () => { throw new Error('invalid XML in word/document.xml'); }, terminate() {} });
+  mockWindow(); let renderer;
+  try {
+    await act(async () => { renderer = create(React.createElement(Editor, { name: 'Corrupt.docx', bytes: new Uint8Array([80, 75, 3, 4]), onChange() {}, onInitialLoadError: reason => errors.push(reason) })); });
+    await until(() => errors.length > 0);
+    assert.match(errors[0], /invalid XML in word\/document.xml/);
+  } finally { if (renderer) await act(async () => renderer.unmount()); delete global.window; }
+});

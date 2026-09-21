@@ -27,8 +27,9 @@ type ReplaceChoice = 'save' | 'discard' | 'cancel';
 
 type HistoryCommands = { undo(): void; redo(): void; canUndo?: boolean; canRedo?: boolean };
 
-function SessionEditor({ session, onSessionChange, viewOptions, registerSessionCommit, registerSessionHistory }: { registerSessionHistory(key: number, commands: HistoryCommands): void; session: DocumentSession; registerSessionCommit(key: number, commit: () => Promise<boolean>): void; onSessionChange(key: number, patch: Partial<DocumentSession>): void; viewOptions: { zoom: number; navigation: boolean; focus: boolean } }) {
+function SessionEditor({ session, onSessionChange, viewOptions, registerSessionCommit, registerSessionHistory, onInitialLoadError }: { onInitialLoadError(key: number, reason: string): void; registerSessionHistory(key: number, commands: HistoryCommands): void; session: DocumentSession; registerSessionCommit(key: number, commit: () => Promise<boolean>): void; onSessionChange(key: number, patch: Partial<DocumentSession>): void; viewOptions: { zoom: number; navigation: boolean; focus: boolean } }) {
   const key = session.key;
+  const onLoadError = useCallback((reason: string) => onInitialLoadError(key, reason), [key, onInitialLoadError]);
   const onChange = useCallback((bytes: Uint8Array) => onSessionChange(key, { bytes: new Uint8Array(bytes), dirty: true, recoveryDraft: null }), [key, onSessionChange]);
   const onBusyChange = useCallback((editorBusy: boolean) => onSessionChange(key, { editorBusy }), [key, onSessionChange]);
   const onDraftChange = useCallback((draftDirty: boolean) => onSessionChange(key, { draftDirty }), [key, onSessionChange]);
@@ -37,7 +38,7 @@ function SessionEditor({ session, onSessionChange, viewOptions, registerSessionC
   const onRecoveryDraftChange = useCallback((recoveryDraft: unknown | null) => onSessionChange(key, { recoveryDraft }), [key, onSessionChange]);
   const format = session.initialName.split('.').pop()?.toLowerCase();
   const Editor = format === 'pdf' ? PdfEditor : format === 'pptx' ? PresentationEditor : format === 'xlsx' ? SpreadsheetEditor : OfficeEditor;
-  return <Suspense fallback={<div className="office-empty" role="status">Opening editor…</div>}><Editor registerHistory={registerHistory} registerCommit={registerCommit} initialRecoveryDraft={session.recoveryDraft} onRecoveryDraftChange={onRecoveryDraftChange} name={session.initialName} bytes={session.initialBytes} onChange={onChange} onBusyChange={onBusyChange} onDraftChange={onDraftChange} viewOptions={viewOptions} /></Suspense>;
+  return <Suspense fallback={<div className="office-empty" role="status">Opening editor…</div>}><Editor onInitialLoadError={onLoadError} registerHistory={registerHistory} registerCommit={registerCommit} initialRecoveryDraft={session.recoveryDraft} onRecoveryDraftChange={onRecoveryDraftChange} name={session.initialName} bytes={session.initialBytes} onChange={onChange} onBusyChange={onBusyChange} onDraftChange={onDraftChange} viewOptions={viewOptions} /></Suspense>;
 }
 
 export default function App() {
@@ -121,6 +122,18 @@ export default function App() {
     window.injDesktop?.setDirty(next.some(item => item.dirty || item.draftDirty));
     window.injDesktop?.setBusy?.(next.some(item => item.editorBusy));
   }, []);
+  const failInitialLoad = useCallback((key: number, detail: string) => {
+    const failed = sessionsRef.current.find(item => item.key === key);
+    if (!failed) return;
+    externalPending.current = false;
+    checkpointSources.current.delete(failed.id);
+    historyHandlers.current.delete(key); commitHandlers.current.delete(key); sessionViews.current.delete(key);
+    setHistoryState(({ [key]: _failed, ...rest }) => rest);
+    publishSessions(sessionsRef.current.filter(item => item.key !== key));
+    setOpenFailure({ name: failed.name, detail, kind: classifyOpenError(detail) ?? 'extract' });
+    setShowHome(true);
+    void window.injDesktop?.close(failed.id).catch(() => setError('The failed file could not be released. Try opening it again.'));
+  }, [publishSessions]);
   const updateDocument = useCallback((next: DocumentSession | null) => {
     if (!next) { publishSessions([]); return; }
     const existing = sessionsRef.current;
@@ -183,7 +196,7 @@ export default function App() {
     operation.current = true;
     setWorking(true);
     setError('');
-    setOpenFailure(null);
+    if (action !== 'externalOpen') setOpenFailure(null);
     setNotice('');
     try {
       if (action === 'save' || action === 'saveAs') {
@@ -207,6 +220,7 @@ export default function App() {
       }
       if (action === 'externalOpen' && !opened) externalPending.current = false;
       if (opened) {
+        setOpenFailure(null);
         const bytes = new Uint8Array(opened.bytes);
         // A file from disk that is not even the right kind of container never gets a tab, a ribbon
         // and a "Saved" status around an editor that can only show the engine's raw complaint.
@@ -447,7 +461,7 @@ export default function App() {
       </nav>}
       {sessions.map(item => <WorkspaceFileGroupsContext key={item.key} value={{ ...fileGroups, backstage: { ...fileGroups.backstage!, render: item.key === document?.key ? fileGroups.backstage!.render : () => null } }}><main key={item.key} className="editor-workspace" hidden={showHome || item.key !== document?.key} aria-label={item.name} aria-busy={item.editorBusy}>
         <div className="editor-content" inert={working || item.key !== document?.key ? true : undefined}>
-          <EditorStatusContext value={item.key === document?.key && !showHome ? statusTarget : null}><SessionEditor session={item} registerSessionHistory={registerSessionHistory} registerSessionCommit={registerSessionCommit} onSessionChange={changeSession} viewOptions={sessionViews.current.get(item.key) ?? viewOptions} /></EditorStatusContext>
+          <EditorStatusContext value={item.key === document?.key && !showHome ? statusTarget : null}><SessionEditor onInitialLoadError={failInitialLoad} session={item} registerSessionHistory={registerSessionHistory} registerSessionCommit={registerSessionCommit} onSessionChange={changeSession} viewOptions={sessionViews.current.get(item.key) ?? viewOptions} /></EditorStatusContext>
         </div>
       </main></WorkspaceFileGroupsContext>)}
 
