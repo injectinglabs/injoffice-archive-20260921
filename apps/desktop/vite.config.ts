@@ -2,11 +2,12 @@ import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { nativeRendererModules } from './scripts/renderer-modules.cjs'
+import { pdfAssets } from './scripts/pdf-assets.cjs'
 
 const source = (name: string, file = 'index.ts') => fileURLToPath(new URL(`../../packages/${name}/src/${file}`, import.meta.url))
 
 export default defineConfig({
-  plugins: [react(), nativeRendererModules()],
+  plugins: [react(), nativeRendererModules(), pdfAssets()],
   base: './',
   // electron/main.cjs on this branch serves injoffice://app from ../renderer.
   build: { outDir: 'renderer', assetsInlineLimit: 0 },
