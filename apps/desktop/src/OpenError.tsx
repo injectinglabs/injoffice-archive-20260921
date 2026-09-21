@@ -5,6 +5,8 @@ export type OpenErrorKind = 'unsupported' | 'encrypted' | 'extract';
 export function classifyOpenError(message: string): OpenErrorKind | undefined {
   const text = message.toLowerCase();
   if (/encrypt|password/.test(text)) return 'encrypted';
+  // A parser can reject an internal XML root as unsupported inside a supported file format.
+  if (/native extract/.test(text)) return 'extract';
   if (/choose a docx|drop a supported|not a supported|\.xlsb|\.ods|open.?document/.test(text)) return 'unsupported';
   if (/extract|could not be opened|invalid zip|damaged/.test(text)) return 'extract';
 }
