@@ -170,3 +170,24 @@ test('docx: packaged worker inserts, updates and removes a selected hyperlink', 
     assert.equal(document.body.blocks[0].paragraph.runs.map(run => run.text).join(''), 'Visit example today');
   }
 });
+
+test('docx: packaged worker replaces inline-image text with edge spaces and empty text', async () => {
+  const files = engineFiles('docx'), worker = startWorker(files);
+  const envelope = { protocol: PROTOCOL, version: 1, format: 'docx' };
+  assert.equal((await worker.send({ ...envelope, id: 'init', op: 'init', assets: { wasmUrl: files.wasm, goRuntimeUrl: files.goRuntime } })).ok, true);
+  const source = fs.readFileSync(path.join(__dirname, '../../../go/officecompat/corpus/generated/packages/docx-inline-png-page-paint.docx'));
+  for (const text of [' After edited', 'After edited ', ' After edited ', '']) {
+    const bytes = source.buffer.slice(source.byteOffset, source.byteOffset + source.byteLength);
+    const extracted = await worker.send({ ...envelope, id: 'extract', op: 'extract', bytes });
+    assert.equal(extracted.ok, true);
+    const doc = JSON.parse(extracted.result.contractJson);
+    const run = doc.body.blocks.flatMap(block => block.paragraph?.runs ?? []).find(run => run.text === ' After');
+    assert.ok(run, 'fixture contains the failing leading-space run');
+    const applied = await worker.send({ ...envelope, id: 'apply', op: 'apply', original: bytes, expectedRevision: doc.source.package_sha256, payload: JSON.stringify({ mutations: [{ target_kind: 'run', target_id: run.id, expected_xml_sha256: run.anchor.xml_sha256, text }] }) });
+    assert.equal(applied.ok, true, JSON.stringify(applied.error));
+    const reopened = await worker.send({ ...envelope, id: 'reopen', op: 'extract', bytes: applied.result.bytes });
+    assert.equal(reopened.ok, true);
+    const next = JSON.parse(reopened.result.contractJson).body.blocks.flatMap(block => block.paragraph?.runs ?? []).find(candidate => candidate.anchor.path === run.anchor.path);
+    assert.equal(next.text, text);
+  }
+});

@@ -727,7 +727,15 @@ func replaceNativeTextElement(raw []byte, text string) ([]byte, error) {
 		return nil, fmt.Errorf("text anchor has an unterminated start tag")
 	}
 	if nativeMutationNeedsPreservedSpace(text) && !nativeMutationHasSpacePreserve(raw[:openEnd], nameEnd) {
-		return nil, fmt.Errorf("leading or trailing XML whitespace requires an existing xml:space=preserve attribute")
+		insert := openEnd - 1
+		if raw[insert-1] == '/' {
+			insert--
+		}
+		attribute := []byte(` xml:space="preserve"`)
+		spaced := append([]byte(nil), raw[:insert]...)
+		spaced = append(spaced, attribute...)
+		raw = append(spaced, raw[insert:]...)
+		openEnd += len(attribute)
 	}
 	beforeClose := openEnd - 2
 	for beforeClose >= 0 && (raw[beforeClose] == ' ' || raw[beforeClose] == '\t' || raw[beforeClose] == '\r' || raw[beforeClose] == '\n') {

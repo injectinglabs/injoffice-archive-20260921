@@ -289,16 +289,7 @@ func TestApplyNativeTextMutationsV1RefusesStaleUnsupportedAndOverlapping(t *test
 		})
 		assertNativeMutationCode(t, err, "OVERLAPPING_TARGETS")
 	})
-	t.Run("whitespace semantics", func(t *testing.T) {
-		source, doc, run := nativeMutationFixture(t, `<w:p><w:r><w:t>Before</w:t></w:r></w:p>`)
-		_, err := ApplyNativeTextMutationsV1(source, doc.Source.PackageSHA256, []NativeDOCXTextMutationV1{{TargetKind: "run", TargetID: run.ID, ExpectedXMLSHA256: run.Anchor.XMLSHA256, Text: " leading"}})
-		assertNativeMutationCode(t, err, "UNSUPPORTED_LEXICAL_FORM")
-	})
-	t.Run("attribute-value spoof does not grant whitespace preservation", func(t *testing.T) {
-		source, doc, run := nativeMutationFixture(t, `<w:p><w:r><w:t data-note="xml:space='preserve'">Before</w:t></w:r></w:p>`)
-		_, err := ApplyNativeTextMutationsV1(source, doc.Source.PackageSHA256, []NativeDOCXTextMutationV1{{TargetKind: "run", TargetID: run.ID, ExpectedXMLSHA256: run.Anchor.XMLSHA256, Text: " leading"}})
-		assertNativeMutationCode(t, err, "UNSUPPORTED_LEXICAL_FORM")
-	})
+
 }
 
 func TestApplyNativeTextMutationsV1RefusesCommentedTextWithoutPartialBatch(t *testing.T) {

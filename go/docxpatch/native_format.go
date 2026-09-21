@@ -755,25 +755,6 @@ func nativeRunPropertyRank(local string) int {
 // nativeFormatTextElement reuses the source w:t element for a new text value,
 // adding xml:space="preserve" when the split gave the piece edge whitespace.
 func nativeFormatTextElement(raw []byte, text string) ([]byte, error) {
-	if nativeMutationNeedsPreservedSpace(text) {
-		end := nativeStartTagEnd(raw)
-		if end <= 0 {
-			return nil, fmt.Errorf("text anchor has an unterminated start tag")
-		}
-		nameEnd := 1
-		for nameEnd < end && !nativeMutationXMLSpace(raw[nameEnd]) && raw[nameEnd] != '/' && raw[nameEnd] != '>' {
-			nameEnd++
-		}
-		if !nativeMutationHasSpacePreserve(raw[:end], nameEnd) {
-			insert := end - 1
-			if insert > 0 && raw[insert-1] == '/' {
-				insert--
-			}
-			spaced := append([]byte(nil), raw[:insert]...)
-			spaced = append(spaced, []byte(` xml:space="preserve"`)...)
-			raw = append(spaced, raw[insert:]...)
-		}
-	}
 	return replaceNativeTextElement(raw, text)
 }
 
