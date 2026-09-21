@@ -42,7 +42,7 @@ export function paragraphStyleName(document: NativeDocxDocumentV1, paragraph?: N
 
 /** Number only qualified lists, separately for each story, in authored paragraph order. */
 export function paragraphListLabels(document: NativeDocxDocumentV1, paragraphs: NativeDocxParagraphV1[]) {
-  const labels = new Map<string, {text:string;suffix:string;properties?:NativeDocxRunPropertiesV1}>();
+  const labels = new Map<string, {text:string;suffix?:string;properties?:NativeDocxRunPropertiesV1}>();
   const counters = new Map<string, Map<number,number>>();
   for (const paragraph of paragraphs) {
     const reference = paragraphAppearance(document,paragraph).paragraph.numbering;

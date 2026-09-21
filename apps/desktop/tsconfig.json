@@ -20,9 +20,10 @@
     "lib": ["ES2022", "DOM", "DOM.Iterable"]
   },
   "include": ["src"],
-  // Honest scope, not a clean bill: these renderer modules import package exports that do not exist
-  // on main (localWorkbookCalculation, NativeDocxRunPropertyPatchV1, can_format_range, ...) and fail
-  // with remaining errors; the four at the end only import them. Every other src file is type-checked,
+  // These modules still need DOCX style catalogs/structural edits, workbook calculation/sheet/name
+  // APIs, or PPTX element/slide mutation types; run formatting and paragraph/page setup now exist.
+  // The first twelve still fail the full check; the four at the end only import them.
+  // Every other src file is type-checked,
   // and tests/typecheck-scope.test.cjs refuses an exclusion that no longer fails, so the list can only
   // shrink. Remove a file here once its package APIs land.
   "exclude": [
