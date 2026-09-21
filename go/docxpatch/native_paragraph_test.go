@@ -56,7 +56,7 @@ func TestNativeParagraphLayoutRefusals(t *testing.T) {
 }
 
 func TestNativeParagraphLayoutCreatesProperties(t *testing.T) {
-	for _, body := range []string{`<w:p/>`, `<w:p><w:r><w:t>text</w:t></w:r></w:p>`, `<w:p><w:pPr/><w:r><w:t>text</w:t></w:r></w:p>`} {
+	for _, body := range []string{`<w:p><w:r><w:t>text</w:t></w:r></w:p>`, `<w:p><w:pPr/><w:r><w:t>text</w:t></w:r></w:p>`} {
 		source := buildNativeDOCX(t, nativeEntries(nativeMutationParts(nativeMutationMain(body))))
 		doc, err := ExtractNativeDocumentV1(source)
 		if err != nil {

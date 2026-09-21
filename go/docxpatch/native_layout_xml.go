@@ -29,15 +29,8 @@ func nativeMergePropertyContainer(part []byte, owner *nativeXMLNode, local strin
 		}
 		result = append(result, []byte("</"+prefix+local+">")...)
 		tagEnd := nativeStartTagEnd(part[owner.Start:owner.End])
-		if tagEnd < 1 {
+		if tagEnd < 1 || part[owner.Start+int64(tagEnd)-2] == '/' {
 			return nativeTextSplice{}, fmt.Errorf("self-closing owner requires expansion")
-		}
-		if part[owner.Start+int64(tagEnd)-2] == '/' {
-			expanded := append([]byte(nil), part[owner.Start:owner.Start+int64(tagEnd)-2]...)
-			expanded = append(expanded, '>')
-			expanded = append(expanded, result...)
-			expanded = append(expanded, []byte("</"+nativeFormatQName(part, owner)+">")...)
-			return nativeTextSplice{start: owner.Start, end: owner.End, text: expanded}, nil
 		}
 		pos := owner.Start + int64(tagEnd)
 		return nativeTextSplice{start: pos, end: pos, text: result}, nil
