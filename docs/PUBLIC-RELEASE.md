@@ -11,7 +11,7 @@ InjOffice is designed as independently consumable TypeScript packages and Go mod
 - The PDF package has a browser-safe subpath and packages required attribution/license material.
 - The seven Go modules have public module paths, README examples, and independent tests.
 - Node 24 and all Go modules run in public CI without private secrets.
-- A tag-driven npm release workflow validates versions, license metadata, tests, builds, package contents, and dependency order before handing SHA-512-bound tarballs to a separate stage-only OIDC job.
+- A tag-driven npm release workflow validates versions, license metadata, tests, builds, package contents, and dependency order before handing SHA-512-bound tarballs to a separate protected OIDC publishing job.
 - The Sheets playground has a GitHub Pages workflow.
 - Contribution, conduct, security, collaboration-protocol, roadmap, NOTICE, Apache, and Unicode license documents exist.
 - The project license is Apache-2.0 and every package ships its SPDX metadata and license text.
@@ -35,13 +35,14 @@ Registry verification on 2026-09-21 confirms all 26 packages are published at
 0.1.0 under the controlled `@injoffice` scope, including `@injoffice/xlsx-wasm`.
 Existing npm versions are immutable. Source fixes after that release, including
 the collaboration peer removal, are included in the `0.1.1` release source.
-The release procedure validates `0.1.1-rc.0` through an external consumer before
-publishing stable `0.1.1`; changing source versions alone does not publish them.
+All 26 `0.1.1-rc.0` packages were verified against the CI artifact SHA-512 hashes
+and passed the external consumer checks on 2026-09-21. Stable `0.1.1` publication
+is pending; changing source versions alone does not publish them.
 
 - Preserve the attribution in NOTICE, LICENSE, LICENSE-UNICODE.txt, and package-specific legal assets.
 - Apply the [consumer dependency mitigation](DEPENDENCY-TRANSPARENCY.md#security-advisory-snapshot) for Univer 0.25.1. A clean root audit alone does not establish a clean consumer install.
-- Configure and verify stage-only trusted publishing for every package after bootstrap; disallow traditional publishing tokens once OIDC staging is verified.
-- Protect the `npm` GitHub environment with owner approval. A solo maintainer may approve their own deployment; this is separate from npm's publishing approval.
+- Configure and verify direct trusted publishing for every package after bootstrap; disallow traditional publishing tokens once OIDC publishing is verified.
+- Protect the `npm` GitHub environment with owner approval. A solo maintainer may approve their own deployment. This is the one approval per release; direct trusted publishing does not create per-package staging approvals. Keep npm account 2FA enabled.
 - Private vulnerability reporting is enabled for this public repository. Keep the reporting link in SECURITY.md working.
 - Create and test Go submodule release tags such as `go/xlsxpatch/v0.1.0` when releasing the Go modules; npm publication does not release them.
 
@@ -64,9 +65,13 @@ After all packages exist, configure each package's trusted publisher with these 
 - Repository: `injectinglabs/injoffice`
 - Workflow file: `release-npm.yml`
 - Environment: `npm`
-- Allowed action: staged publishing only
+- Allowed actions: direct publishing (`npm publish`) and staged publishing
 
-The tag workflow then builds and validates packages in a job without OIDC permission, records each tarball's SHA-512 digest, and transfers only those tarballs to the protected `stage` job. That job has `id-token: write`, contains no install/build/test step, and runs `npm stage publish`. If a tag is pushed after its bootstrap release, the job instead verifies that every public registry integrity matches and exits successfully. A maintainer must review and approve every newly staged version with 2FA before it becomes public. Once OIDC staging is verified, set each package's publishing access to require 2FA and disallow traditional tokens.
+The tag workflow builds and validates packages in a job without OIDC permission, records each tarball's SHA-512 digest, and transfers those tarballs to the protected `publish` job. That job has `id-token: write`, contains no install/build/test step, and runs `npm publish` with lifecycle scripts disabled. It checks every artifact and public registry integrity before publishing anything. A retry skips already-published versions only when their SHA-512 integrity matches; an interrupted direct release can therefore resume safely. Re-run the failed publishing job to reuse the same validated artifacts. A full rebuild that changes tarball bytes is correctly rejected for versions already published.
+
+For an existing release tag, run the workflow from `main`, supply the tag and select the `publish` input. Leaving `publish` unchecked validates and packs only. Manual runs use release tooling from the selected `main` workflow commit, build the existing tag, require its commit to be an ancestor of `main`, and pin the publishing job's package manifests and artifact name to that resolved commit. Existing tags must never be moved. The workflow run records both its tooling revision and release source revision; inspect both when approving a manual recovery release.
+
+Configuring npm trust is a one-time owner operation protected by npm 2FA, independently for every package. A maintainer can use package settings or `npm trust github PACKAGE --file release-npm.yml --repository injectinglabs/injoffice --environment npm --allow-publish --allow-stage-publish`. Verify the resulting claims and preserve any intentionally configured publishers. Once OIDC publishing is verified, set each package's publishing access to require 2FA and disallow traditional tokens. The legacy `--stage-from` mode remains available for deliberate staged releases; those still require an npm approval for each version.
 
 This source repository is public. Eligible trusted-publishing releases can generate npm provenance; verify provenance on each newly published version. Making source public does not add provenance retroactively to existing package versions.
 

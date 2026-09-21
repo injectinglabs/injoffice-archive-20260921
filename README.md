@@ -8,7 +8,7 @@ InjOffice is a set of browser and server libraries for editing office artifacts.
 
 The repository is a monorepo with independently consumable TypeScript packages, private apps, and Go modules. The TypeScript packages target Node.js 22 or newer and modern bundlers. UI integrations use React and, where noted, Univer OSS as an optional editor shell. Univer is not the file authority. Native paint compilers are a preview mode.
 
-> Release status (2026-09-08): the source is licensed under Apache-2.0; 25 of 26 npm packages are published at 0.1.0. `@injoffice/xlsx-wasm` is not yet published. See the [release checklist](docs/PUBLIC-RELEASE.md). The scoped v3 Native Office completion matrix is complete; broader format coverage remains partial and this is not Microsoft Office parity.
+> Release status (2026-09-21): the source is licensed under Apache-2.0; all 26 npm packages are published at 0.1.0, and 0.1.1-rc.0 is available under the `next` tag. Stable 0.1.1 publication is pending. See the [release checklist](docs/PUBLIC-RELEASE.md). The scoped v3 Native Office completion matrix is complete; broader format coverage remains partial and this is not Microsoft Office parity.
 
 ## Native file API
 
@@ -92,10 +92,12 @@ Go modules under `go/` are surgical file writers, native extract/apply engines, 
 Each TypeScript package has its own README and five-minute example.
 
 For npm consumers using Univer 0.25.1 (including the collaboration package's
-peer dependency), add `"overrides": { "@univerjs/core": { "nanoid": "5.1.16" } }`
+peer dependency in 0.1.0), add `"overrides": { "@univerjs/core": { "nanoid": "5.1.16" } }`
 to your application's root `package.json`, run `npm install`, and check `npm audit`.
 The repository's override does not propagate to consumers. See the
 [dependency advisory and mitigation](docs/DEPENDENCY-TRANSPARENCY.md#security-advisory-snapshot).
+The 0.1.1 collaboration package removes that Univer peer dependency; the
+published 0.1.1-rc.0 candidate passes the isolated consumer audit without overrides.
 
 ## Development
 

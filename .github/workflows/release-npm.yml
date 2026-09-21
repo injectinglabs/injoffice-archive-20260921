@@ -7,9 +7,13 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Package version to validate without publishing (vX.Y.Z)
+        description: Existing release tag to validate (vX.Y.Z)
         required: true
         type: string
+      publish:
+        description: Publish validated tarballs after npm environment approval
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -20,14 +24,28 @@ concurrency:
 
 jobs:
   validate:
+    if: github.event_name == 'push' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
       RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+    outputs:
+      source_sha: ${{ steps.source.outputs.sha }}
+    defaults:
+      run:
+        working-directory: source
     steps:
+      - name: Check out release tooling
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          path: tooling
+          persist-credentials: false
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
+          ref: refs/tags/${{ env.RELEASE_TAG }}
+          path: source
+          persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '24'
@@ -38,12 +56,21 @@ jobs:
           go-version: '1.23'
           cache: false
       - name: Require release tags to point at main
-        if: github.event_name == 'push'
+        id: source
         run: |
-          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid release tag." >&2
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor HEAD origin/main; then
             echo "Release tag $RELEASE_TAG does not point at main." >&2
             exit 1
           fi
+          if [[ "$GITHUB_EVENT_NAME" == push && "$(git rev-parse HEAD)" != "$GITHUB_SHA" ]]; then
+            echo "Release tag moved after the triggering event." >&2
+            exit 1
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - run: npm ci
       - run: npm run build
       - run: npm run typecheck
@@ -57,19 +84,19 @@ jobs:
       - run: npm run check:packages
       - name: Validate package publication
         if: github.event_name == 'workflow_dispatch'
-        run: npm run release:packages -- "$RELEASE_TAG" --dry-run
+        run: node ../tooling/scripts/release-packages.mjs "$RELEASE_TAG" --source-root . --dry-run
       - name: Prepare immutable release tarballs
-        run: npm run release:packages -- "$RELEASE_TAG" --pack-destination release-tarballs
+        run: node ../tooling/scripts/release-packages.mjs "$RELEASE_TAG" --source-root . --pack-destination release-tarballs
       - name: Upload validated release tarballs
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: npm-release-${{ github.sha }}
-          path: release-tarballs/
+          name: npm-release-${{ steps.source.outputs.sha }}
+          path: source/release-tarballs/
           if-no-files-found: error
           retention-days: 1
 
-  stage:
-    if: github.event_name == 'push'
+  publish:
+    if: github.event_name == 'push' || inputs.publish
     needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -78,22 +105,31 @@ jobs:
       contents: read
       id-token: write
     env:
-      RELEASE_TAG: ${{ github.ref_name }}
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          path: tooling
+          persist-credentials: false
+      - name: Check out validated package manifests
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.validate.outputs.source_sha }}
+          path: source
+          persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '24'
           registry-url: 'https://registry.npmjs.org'
           package-manager-cache: false
-      - name: Require staged-publishing support
+      - name: Require trusted-publishing support
         run: |
           npm_version="$(npm --version)"
           node -e "const [major, minor] = process.argv[1].split('.').map(Number); if (major < 11 || (major === 11 && minor < 15)) throw new Error('npm 11.15.0 or newer is required')" "$npm_version"
           echo "npm $npm_version"
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: npm-release-${{ github.sha }}
-          path: release-tarballs
-      - name: Stage packages through npm trusted publishing
-        run: npm run release:packages -- "$RELEASE_TAG" --stage-from release-tarballs
+          name: npm-release-${{ needs.validate.outputs.source_sha }}
+          path: source/release-tarballs
+      - name: Publish packages through npm trusted publishing
+        run: node tooling/scripts/release-packages.mjs "$RELEASE_TAG" --source-root source --publish-from release-tarballs
