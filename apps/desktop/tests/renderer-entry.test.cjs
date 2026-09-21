@@ -95,3 +95,18 @@ test('macOS insets the traffic lights into the app title bar and keeps that row 
   assert.ok(Number(startPage.match(/\.platform-mac \.start-sidebar \{ padding-top: (\d+)px/)[1]) >= y + 16);
   assert.match(startPage, /\.platform-mac \.start-sidebar button[^{]*\{[^}]*-webkit-app-region: no-drag;/);
 });
+
+// Focus mode keeps the title bar, the document and the status bar; the command surfaces go away.
+test('focus mode hides every chrome row the editors keep', () => {
+  const styles = fs.readFileSync(path.join(root, 'src/styles.css'), 'utf8');
+  const block = styles.match(/((?:\.is-focused [^,{]+,\s*)*\.is-focused [^,{]+)\{ display: none; \}/);
+  assert.ok(block, 'styles.css hides a list of chrome rows in focus mode');
+  const hidden = block[1].split(',').map(selector => selector.trim().replace('.is-focused ', ''));
+  for (const selector of ['.document-tabs', '.ribbon', '.office-toolbar', '.office-document-status', '.sheet-status', '.presentation-inspector', '.pdf-tools', '.pdf-page-actions']) {
+    assert.ok(hidden.includes(selector), `focus mode hides ${selector}`);
+  }
+  // The title bar, the document surface and the app status bar must survive.
+  for (const selector of ['.app-titlebar', '.editor-workspace', '.app-status', '.office-paper']) {
+    assert.ok(!hidden.includes(selector), `focus mode keeps ${selector}`);
+  }
+});
