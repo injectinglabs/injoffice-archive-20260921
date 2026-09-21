@@ -113,5 +113,6 @@ test('selection geometry: only non-empty selections inside the canvas anchor the
 test('the document editor mounts the mini toolbar on the ribbon values and changeFormatting', () => {
   const office = fs.readFileSync(path.resolve(__dirname, '../src/OfficeEditor.tsx'), 'utf8');
   assert.match(office, /import SelectionToolbar from '\.\/SelectionToolbar'/);
-  assert.match(office, /<SelectionToolbar values=\{toolbarValues\} disabled=\{busy\|\|composing\} onChange=\{patch=>void changeFormatting\(patch\)\} \/>/);
+  assert.match(office, /<SelectionToolbar values=\{toolbarValues\} disabled=\{busy\|\|composing\} onChange=\{patch=>void changeFormatting\(patch\)\}/);
+  assert.match(office, /onBullets=\{selection/);
 });
