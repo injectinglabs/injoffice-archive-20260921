@@ -7,7 +7,7 @@ import type { PptxNativeMutationRequestV1 } from '@injoffice/pptx-wasm';
 import { editableTargets, targetKey } from '../../playground/src/nativeRoundTrip';
 import { editableDocxRuns } from '../../playground/src/docxRoundTrip';
 import { editablePptxTextTargets, pptxTargetKey } from '../../playground/src/pptxRoundTrip';
-import { paragraphAppearance, runAppearance } from './document-style';
+import { canFormatParagraphRange, canFormatRun, paragraphAppearance, runAppearance } from './document-style';
 import type { FormattingPatch, FormattingValues } from './FormattingToolbar';
 
 export type FormattingPreview = { kind: 'docx'; document: NativeDocxDocumentV1 } | { kind: 'xlsx'; workbook: NativeWorkbookV2 } | { kind: 'pptx'; deck: NativePptxDeck } | { kind: 'pdf' };
@@ -54,7 +54,7 @@ export function documentRangeFormattingValues(document:NativeDocxDocumentV1,key:
  let offset=0
  const runs=selected.paragraph.runs.filter(run=>{const start=offset;offset+=(run.id===selected.run.id&&draft!==undefined?draft:run.text??'').length;return start<range.end_utf16&&offset>range.start_utf16})
  const values=runs.map(run=>{const properties=runAppearance(document,selected.paragraph,run);return {font:properties.font_family,size:properties.font_size_half_points===undefined?undefined:properties.font_size_half_points/2,bold:properties.bold??false,italic:properties.italic??false,underline:properties.underline!==undefined&&properties.underline!=='none',color:properties.color&&/^[a-f0-9]{6}$/i.test(properties.color)?`#${properties.color.toUpperCase()}`:undefined}})
- const result:FormattingValues={...base,characterEditable:!!selected.paragraph.can_format_range&&!!values.length&&!range.unsupported&&!selected.paragraph.runs.some(run=>runAppearance(document,selected.paragraph,run).hidden)}
+ const result:FormattingValues={...base,characterEditable:canFormatParagraphRange(selected.paragraph)&&!!values.length&&!range.unsupported&&!selected.paragraph.runs.some(run=>runAppearance(document,selected.paragraph,run).hidden)}
  for(const field of ['font','size','bold','italic','underline','color'] as const){const value=values[0]?.[field];Object.assign(result,{[field]:values.every(item=>item[field]===value)?value:undefined})}
  return result
 }
@@ -85,8 +85,8 @@ export function documentFormatting(document: NativeDocxDocumentV1, key: string, 
   const isParagraph = patch.alignment !== undefined;
   if (isParagraph && Object.keys(patch).length !== 1) throw new Error('Apply paragraph alignment separately from text formatting.');
   const paragraphRange=!isParagraph&&!!range?.paragraph_id;
-  if(paragraphRange&&(range!.paragraph_id!==selected.paragraph.id||!selected.paragraph.can_format_range||range!.unsupported||selected.paragraph.runs.some(run=>runAppearance(document,selected.paragraph,run).hidden)))throw new Error('This paragraph selection cannot be formatted safely.');
-  if(range && !isParagraph && !paragraphRange && !selected.run.can_format_range) throw new Error('Selected-text formatting is not supported in this run.');
+  if(paragraphRange&&(range!.paragraph_id!==selected.paragraph.id||!canFormatParagraphRange(selected.paragraph)||range!.unsupported||selected.paragraph.runs.some(run=>runAppearance(document,selected.paragraph,run).hidden)))throw new Error('This paragraph selection cannot be formatted safely.');
+  if(range && !isParagraph && !paragraphRange && !canFormatRun(selected.paragraph,selected.run)) throw new Error('Selected-text formatting is not supported in this run.');
   const properties: NativeDocxRunPropertyPatchV1 = {};
   if (patch.font !== undefined) properties.font_family = patch.font;
   if (patch.size !== undefined) properties.font_size_half_points = Math.round(patch.size * 2);
