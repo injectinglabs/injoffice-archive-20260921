@@ -8,6 +8,7 @@
 .selection-toolbar .ribbon-button { min-height: 26px; height: 26px; min-width: 26px; padding: 3px 4px; }
 .selection-toolbar .ribbon-icon { width: 16px; height: 16px; }
 .selection-toolbar .ribbon-color-bar { width: 15px; }
+.selection-toolbar .ribbon-alignment-toggles, .selection-toolbar .ribbon-alignment-row { display: flex; align-items: center; gap: 2px; min-height: 0; }
 .selection-toolbar-separator { flex: 0 0 auto; width: 1px; align-self: stretch; margin: 3px 3px; background: var(--border-subtle); }
 .selection-toolbar[data-placement="above"]::after, .selection-toolbar[data-placement="below"]::before { content: ""; position: absolute; left: 18px; width: 10px; height: 10px; background: var(--surface-raised); border: 1px solid var(--border); transform: rotate(45deg); }
 .selection-toolbar[data-placement="above"]::after { bottom: -6px; border-top: 0; border-left: 0; }
