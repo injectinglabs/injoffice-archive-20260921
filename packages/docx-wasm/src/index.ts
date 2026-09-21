@@ -37,6 +37,7 @@ import {
   type NativeDocxRunPropertyPatchV1,
   type NativeDocxTextMutationPayloadV1,
 } from '@injoffice/docs/native-docx'
+import { numberingPropertyNames, validateNumberingProperties } from './numbering.js'
 
 export const DOCX_WASM_NATIVE_MAX_PACKAGE_BYTES = 128 * 1024 * 1024
 export const DOCX_WASM_NATIVE_MAX_MUTATION_PAYLOAD_BYTES = 8 * 1024 * 1024
@@ -297,7 +298,12 @@ function validateFormatMutation(document: NativeDocxDocumentV1, targets: Map<str
   if (seenTargets.has(targetKey)) throw new NativeWasmError('DUPLICATE_TARGET', `DOCX mutation ${index} repeats the same native target.`)
   seenTargets.add(targetKey)
   const properties = plainObject(mutation.properties, `DOCX mutation ${index} properties`)
-  allowedKeys(properties, ['bold', 'italic', 'underline', 'font_family', 'font_size_half_points', 'color', 'highlight', 'alignment', 'spacing_before_twips', 'spacing_after_twips', 'indent_left_twips', 'indent_right_twips', 'first_line_twips', 'hanging_twips', 'line_spacing', 'line_rule'], `DOCX mutation ${index} properties`)
+  allowedKeys(properties, ['bold', 'italic', 'underline', 'font_family', 'font_size_half_points', 'color', 'highlight', 'alignment', 'numbering_num_id', 'numbering_level', 'numbering_kind', 'spacing_before_twips', 'spacing_after_twips', 'indent_left_twips', 'indent_right_twips', 'first_line_twips', 'hanging_twips', 'line_spacing', 'line_rule'], `DOCX mutation ${index} properties`)
+  if (numberingPropertyNames(properties)) {
+    const paragraph = validateNumberingProperties(properties, targetKind, mutation.range !== undefined, index)
+    return { target_kind: targetKind, target_id: mutation.target_id, expected_xml_sha256: mutation.expected_xml_sha256, properties: paragraph }
+  }
+  // numbering is handled above and returns; these are the layout keys validated as twips/enums here
   const paragraphKeys = ['alignment', 'spacing_before_twips', 'spacing_after_twips', 'indent_left_twips', 'indent_right_twips', 'first_line_twips', 'hanging_twips', 'line_spacing', 'line_rule']
   if (Object.keys(properties).some(key => paragraphKeys.includes(key))) {
     allowedKeys(properties, paragraphKeys, `DOCX mutation ${index} paragraph properties`)

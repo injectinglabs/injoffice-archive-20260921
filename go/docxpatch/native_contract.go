@@ -387,6 +387,9 @@ type NativeDocumentV1 struct {
 	// NoteNumbering is present only for a note kind whose sections state one
 	// exact modeled w:numFmt. Labels[i] is the label for counter value i+1.
 	NoteNumbering []NativeNoteNumberingV1 `json:"note_numbering,omitempty"`
+	// NumberingDefinitions is the authored w:num catalog from the numbering
+	// part. Absent when the package has no readable numbering instances.
+	NumberingDefinitions []NativeNumberingDefinitionV1 `json:"numbering_definitions,omitempty"`
 }
 
 type NativeNoteNumberingV1 struct {
@@ -702,6 +705,7 @@ func ValidateNativeDocumentV1(doc *NativeDocumentV1) []NativeValidationIssue {
 			v.required(record.Labels[j], fmt.Sprintf("%s/labels/%d", path, j))
 		}
 	}
+	nativeValidateNumberingDefinitions(doc.NumberingDefinitions, v.add, v.collection)
 	if doc.CommentStories == nil {
 		v.add("REQUIRED", "/comment_stories", "field is required")
 	}

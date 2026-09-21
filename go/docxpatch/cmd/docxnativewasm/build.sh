@@ -94,9 +94,20 @@ size=$(wc -c < "$output_dir/docxnative.wasm" | tr -d ' ')
 # result is not 8 KiB from the gate once the CI toolchain adds its own ~5.4 KiB.
 # Paragraph alignment (w:jc merged into w:pPr) measured +16,924 on top of that:
 # 7,293,805 -> 7,310,729, inside the same gate.
-max_size=$((13 * 1024 * 1024 / 2 + 544 * 1024))
+#
+# A further 256 KiB covers guarded list numbering: create or reuse the
+# numbering part and relationship, splice w:numPr at its ECMA-376 position,
+# indent by ilvl, remove it cleanly, and catalogue authored w:num instances
+# on extract. Measured on this branch, local darwin/arm64:
+#   main (alignment)                            7,310,729
+#   + this lane, complete                       7,552,830  (+242,101)
+# The write path itself is not 242 KiB of source: this module crosses another
+# link-layout step in that range, the same class of jump the run-formatting
+# gate documented. CI builds ~5.4 KiB larger, so the gate moves four 64 KiB
+# steps (256 KiB) rather than three.
+max_size=$((13 * 1024 * 1024 / 2 + 800 * 1024))
 if (( size > max_size )); then
-  echo "docxnative.wasm $size bytes exceeds the 6.5 MiB + 544 KiB size ceiling ($max_size bytes)" >&2
+  echo "docxnative.wasm $size bytes exceeds the 6.5 MiB + 800 KiB size ceiling ($max_size bytes)" >&2
   exit 1
 fi
 echo "docxnative.wasm $size bytes" >&2
