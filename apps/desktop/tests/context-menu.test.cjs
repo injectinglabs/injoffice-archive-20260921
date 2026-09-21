@@ -25,12 +25,22 @@ async function load() {
   }
 }
 
+// Menus spell shortcuts for this platform, so the expectations come from shortcuts.ts itself.
+async function loadShortcuts() {
+  const { rolldown } = await import('rolldown');
+  const bundle = await rolldown({ input: path.resolve(__dirname, '../src/shortcuts.ts'), platform: 'node' });
+  try { const { output } = await bundle.generate({ format: 'cjs' }); const mod = { exports: {} }; new Function('require', 'module', 'exports', output[0].code)(require, mod, mod.exports); return mod.exports; } finally { await bundle.close(); }
+}
+
 const anchor = { x: 40, y: 50, source: null };
 const items = menu => menu.root.findAll(node => typeof node.type === 'string' && /^menuitem/.test(node.props.role ?? ''));
 
 test('context menu is an accessible menu with shortcut hints, disabled explanations and check marks', async () => {
   assert.equal(fs.existsSync(path.resolve(__dirname, '../src/context-menu.css')), true);
   const { default: ContextMenu, SHORTCUTS } = await load();
+  const { shortcutLabel } = await loadShortcuts();
+  assert.equal(SHORTCUTS.copy, shortcutLabel('copy'), 'menus spell the shortcut for this platform, not "Ctrl / ⌘ C"');
+  assert.match(SHORTCUTS.cut, /^(⌘X|Ctrl\+X)$/);
   const runs = [];
   const closes = [];
   let view;
@@ -48,7 +58,7 @@ test('context menu is an accessible menu with shortcut hints, disabled explanati
   const buttons = items(view);
   assert.deepEqual(buttons.map(button => button.props.role), ['menuitem', 'menuitem', 'menuitemcheckbox']);
   assert.equal(view.root.findAllByProps({ role: 'separator' }).length, 1);
-  assert.equal(buttons[0].findByType('kbd').children.join(''), 'Ctrl / ⌘ C');
+  assert.equal(buttons[0].findByType('kbd').children.join(''), SHORTCUTS.copy);
   assert.equal(buttons[1].props['aria-disabled'], true);
   assert.equal(buttons[1].props.title, 'Clipboard policy');
   assert.equal(buttons[2].props['aria-checked'], true);
@@ -83,7 +93,7 @@ test('menu geometry stays inside the viewport and arrow navigation skips separat
 });
 
 test('document menu mirrors the ribbon: formatting goes through onFormat, disabled states carry the toolbar explanation', async () => {
-  const { documentContextMenu, PASTE_UNAVAILABLE } = await load();
+  const { documentContextMenu, SHORTCUTS, PASTE_UNAVAILABLE } = await load();
   const patches = [];
   const tabs = [];
   let found = 0;
@@ -91,7 +101,8 @@ test('document menu mirrors the ribbon: formatting goes through onFormat, disabl
     onFormat: patch => patches.push(patch), onFind: () => found++, onRibbonTab: tab => tabs.push(tab) };
   const menu = documentContextMenu(context);
   const byId = id => menu.find(item => item.id === id);
-  assert.deepEqual(menu.filter(item => !('separator' in item)).map(item => item.label), ['Cut', 'Copy', 'Paste', 'Bold', 'Italic', 'Underline', 'Align left', 'Center', 'Align right', 'Justify', 'Hyperlink…', 'Insert table…', 'Find / replace']);
+  // Insert table… is hidden: this selection cannot take a table. Office hides what it cannot run.
+  assert.deepEqual(menu.filter(item => !('separator' in item)).map(item => item.label), ['Cut', 'Copy', 'Paste', 'Bold', 'Italic', 'Underline', 'Align left', 'Center', 'Align right', 'Justify', 'Hyperlink…', 'Find / replace']);
   assert.equal(byId('paste').disabled, true);
   assert.equal(byId('paste').title, PASTE_UNAVAILABLE);
   // No DOM selection exists under node: cut/copy are disabled with an explanation instead of pretending.
@@ -101,7 +112,7 @@ test('document menu mirrors the ribbon: formatting goes through onFormat, disabl
   assert.equal(byId('italic').checked, true);
   assert.equal(byId('align-center').checked, true);
   assert.equal(byId('align-left').checked, false);
-  assert.equal(byId('table').disabled, true);
+  assert.equal(byId('table'), undefined, 'an unavailable command is left out, not greyed');
   assert.equal(byId('hyperlink').disabled, false);
   byId('bold').run(); byId('italic').run(); byId('underline').run(); byId('align-both').run();
   assert.deepEqual(patches, [{ bold: true }, { italic: false }, { underline: true }, { alignment: 'both' }]);
@@ -109,17 +120,24 @@ test('document menu mirrors the ribbon: formatting goes through onFormat, disabl
   assert.equal(found, 1);
   byId('hyperlink').run();
   assert.deepEqual(tabs, ['Insert']);
-  assert.deepEqual(menu.filter(item => item.shortcut).map(item => [item.id, item.shortcut]), [['cut', 'Ctrl / ⌘ X'], ['copy', 'Ctrl / ⌘ C'], ['paste', 'Ctrl / ⌘ V'], ['bold', 'Ctrl / ⌘ B'], ['italic', 'Ctrl / ⌘ I'], ['underline', 'Ctrl / ⌘ U'], ['find', 'Ctrl / ⌘ F']]);
+  assert.deepEqual(menu.filter(item => item.shortcut).map(item => [item.id, item.shortcut]), [['cut', SHORTCUTS.cut], ['copy', SHORTCUTS.copy], ['paste', SHORTCUTS.paste], ['bold', SHORTCUTS.bold], ['italic', SHORTCUTS.italic], ['underline', SHORTCUTS.underline], ['find', SHORTCUTS.find]]);
   // Character formatting follows the toolbar's characterEditable flag; alignment stays available.
   const locked = documentContextMenu({ ...context, values: { ...context.values, characterEditable: false } });
-  assert.equal(locked.find(item => item.id === 'bold').disabled, true);
+  assert.equal(locked.find(item => item.id === 'bold'), undefined, 'text that cannot be formatted hides the formatting entries');
   assert.equal(locked.find(item => item.id === 'align-left').disabled, false);
+  // No separator is left leading, trailing or doubled once entries drop out.
+  const shape = locked.map(item => 'separator' in item ? '|' : 'x').join('');
+  assert.ok(!/^\||\|\||\|$/.test(shape), shape);
+  // Busy only means the workspace is working: Office greys those entries, it does not remove them.
   const busy = documentContextMenu({ ...context, disabled: true });
+  assert.deepEqual(busy.filter(item => !('separator' in item)).map(item => item.label), menu.filter(item => !('separator' in item)).map(item => item.label));
   assert.equal(busy.filter(item => !('separator' in item) && !item.disabled).map(item => item.id).join(), 'find');
+  // Cut/Copy/Paste always stay visible, greyed, the way Office shows them.
+  for (const id of ['cut', 'copy', 'paste']) assert.ok(busy.find(item => item.id === id), id);
 });
 
-test('worksheet menu reuses clear/copy and greys structural commands with the native-transaction explanation', async () => {
-  const { spreadsheetContextMenu, contextMenuCellKey, copyThroughGrid, XLSX_STRUCTURE_UNAVAILABLE, PASTE_UNAVAILABLE } = await load();
+test('worksheet menu reuses clear/copy and leaves out the commands the native transaction lacks', async () => {
+  const { spreadsheetContextMenu, contextMenuCellKey, copyThroughGrid, PASTE_UNAVAILABLE } = await load();
   let cleared = 0;
   const source = { focus() {}, closest: () => null };
   // Without a DOM there is no clipboard: copy reports failure instead of throwing or inventing a payload.
@@ -127,8 +145,8 @@ test('worksheet menu reuses clear/copy and greys structural commands with the na
   assert.equal(copyThroughGrid(source), false);
   const menu = spreadsheetContextMenu({ anchor: { x: 0, y: 0, source }, disabled: false, onClear: () => cleared++ });
   const byId = id => menu.find(item => item.id === id);
-  assert.deepEqual(menu.filter(item => !('separator' in item)).map(item => item.label), ['Cut', 'Copy', 'Paste', 'Clear contents', 'Insert rows', 'Delete rows', 'Insert columns', 'Delete columns', 'Row height…', 'Column width…']);
-  for (const id of ['row-insert', 'row-delete', 'column-insert', 'column-delete']) { assert.equal(byId(id).disabled, true); assert.equal(byId(id).title, XLSX_STRUCTURE_UNAVAILABLE); }
+  assert.deepEqual(menu.filter(item => !('separator' in item)).map(item => item.label), ['Cut', 'Copy', 'Paste', 'Clear contents', 'Row height…', 'Column width…']);
+  for (const id of ['row-insert', 'row-delete', 'column-insert', 'column-delete']) assert.equal(byId(id), undefined, `${id} is not in the native transaction, so it is not offered`);
   assert.equal(byId('paste').title, PASTE_UNAVAILABLE);
   byId('clear').run();
   assert.equal(cleared, 1);
@@ -155,9 +173,10 @@ test('slide menu drives the existing slide and object commands only', async () =
   for (const id of ['delete-object', 'new-slide', 'duplicate-slide', 'delete-slide']) byId(id).run();
   assert.deepEqual(calls, ['delete-object', 'new', 'duplicate', 'delete-slide']);
   const single = presentationContextMenu({ ...context, object: false, canDeleteSlide: false });
-  assert.equal(single.find(item => item.id === 'delete-object').disabled, true);
-  assert.equal(single.find(item => item.id === 'delete-slide').disabled, true);
-  assert.equal(single.find(item => item.id === 'delete-slide').title, 'A presentation keeps at least one slide');
+  assert.equal(single.find(item => item.id === 'delete-object'), undefined, 'with nothing selected the object command is left out');
+  assert.equal(single.find(item => item.id === 'delete-slide'), undefined, 'the last slide cannot be deleted, so the entry is not offered');
+  // Cut/Copy/Paste stay, greyed, as Office shows them.
+  assert.deepEqual(single.filter(item => !('separator' in item)).map(item => item.id), ['cut', 'copy', 'paste', 'new-slide', 'duplicate-slide']);
   assert.deepEqual(presentationContextMenu({ ...context, disabled: true }).filter(item => !('separator' in item) && !item.disabled), []);
 });
 
