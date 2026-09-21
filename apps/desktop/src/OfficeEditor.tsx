@@ -602,17 +602,17 @@ export default function OfficeEditor({ name, bytes, onInitialLoadError, onChange
       { id: 'styles', label: 'Styles', children: paragraphToolbar('styles') },
       { id: 'editing', label: 'Editing', children: <>
         <RibbonButton icon="replace" label="Find / replace" shortcut="find" aria-expanded={searchOpen} onClick={() => setSearchOpen(value => !value)} />
-        <RibbonButton icon="select" label="Select paragraph text" disabled={blocked || hasDraft || !selection||!canFormatParagraphRange(selection.paragraph) || hiddenRun || !selection.paragraph.runs.some(run => run.text?.length)} onClick={() => { const paragraph = selection!.paragraph; setTextRange({ paragraph_id: paragraph.id, start_utf16: 0, end_utf16: paragraph.runs.reduce((length, run) => length + (run.text ?? '').length, 0) }) }} />
+        <RibbonButton icon="select" label="Select paragraph text" title="Select an editable paragraph and finish typing first." disabled={blocked || hasDraft || !selection||!canFormatParagraphRange(selection.paragraph) || hiddenRun || !selection.paragraph.runs.some(run => run.text?.length)} onClick={() => { const paragraph = selection!.paragraph; setTextRange({ paragraph_id: paragraph.id, start_utf16: 0, end_utf16: paragraph.runs.reduce((length, run) => length + (run.text ?? '').length, 0) }) }} />
       </> },
     ] },
     { id: 'Insert', label: 'Insert', groups: [
-      { id: 'pages', label: 'Pages', children: <RibbonButton icon="pageBreak" label="Page break" disabled={blocked || !canInsertDocumentPageBreak(snapshot.preview.document, selected) || !!textRange?.unsupported || !!(textRange && textRange.start_utf16 !== textRange.end_utf16)} onMouseDown={event => event.preventDefault()} onClick={() => void insertPageBreak()} /> },
+      { id: 'pages', label: 'Pages', children: <RibbonButton icon="pageBreak" label="Page break" title="Place the caret in supported body text without selecting a range." disabled={blocked || !canInsertDocumentPageBreak(snapshot.preview.document, selected) || !!textRange?.unsupported || !!(textRange && textRange.start_utf16 !== textRange.end_utf16)} onMouseDown={event => event.preventDefault()} onClick={() => void insertPageBreak()} /> },
       { id: 'tables', label: 'Tables', children: <InsertTableControl disabled={true} onInsert={(rows, columns) => void insertTable(rows, columns)} /> },
-      { id: 'illustrations', label: 'Illustrations', children: canPickAsset && <RibbonButton icon="image" label="Insert image…" title="Insert a PNG or JPEG below the selected paragraph" disabled={blocked || !canInsertBlock || snapshot.preview.document.source.main_part !== 'word/document.xml'} onClick={() => void insertImage()} /> },
+      { id: 'illustrations', label: 'Illustrations', children: canPickAsset && <RibbonButton icon="image" label="Insert image…" title={blocked ? "Wait for the current operation to finish." : !canInsertBlock ? "Select a body paragraph that allows content insertion." : "Insert a PNG or JPEG below the selected paragraph"} disabled={blocked || !canInsertBlock || snapshot.preview.document.source.main_part !== 'word/document.xml'} onClick={() => void insertImage()} /> },
       { id: 'links', label: 'Links', children: <HyperlinkControl key={selected} url={selection?.run.hyperlink?.url} disabled={blocked || !selection?.run.can_edit_hyperlink || !(draft.length || selection?.run.text?.length) || !!textRange?.unsupported} onChange={url => void changeLink(url)} /> },
       { id: 'text', label: 'Text', children: <>
-        <RibbonButton icon="paragraphInsert" label="Insert paragraph below" disabled={blocked || hasDraft || !canInsertBlock} onClick={() => void changeParagraph('block.insert_after')} />
-        <RibbonButton icon="paragraphDelete" label="Delete paragraph" disabled={blocked || hasDraft || !paragraphOps.includes('block.delete')} onClick={() => void changeParagraph('block.delete')} />
+        <RibbonButton icon="paragraphInsert" label="Insert paragraph below" title="Select a body paragraph and finish typing first." disabled={blocked || hasDraft || !canInsertBlock} onClick={() => void changeParagraph('block.insert_after')} />
+        <RibbonButton icon="paragraphDelete" label="Delete paragraph" title="Select a paragraph that can be deleted and finish typing first." disabled={blocked || hasDraft || !paragraphOps.includes('block.delete')} onClick={() => void changeParagraph('block.delete')} />
         {!target && <span className="ribbon-note">Select a body paragraph to insert content.</span>}
       </> },
     ] },

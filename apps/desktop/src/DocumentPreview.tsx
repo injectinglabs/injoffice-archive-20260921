@@ -305,7 +305,8 @@ function DocumentRun({ fill, caretPoint, replaceImage, deleteImage, image, run, 
     textDecoration: properties?.underline && properties.underline !== 'none' ? 'underline' : undefined,
     fontFamily: properties?.font_family,
     fontSize: properties?.font_size_half_points ? `${properties.font_size_half_points / 2}pt` : undefined,
-    color: readableColor(hexColor(properties?.color), background),
+    color: readableColor(hexColor(properties?.color), properties?.highlight === 'yellow' ? '#FFFF00' : background),
+    backgroundColor: properties?.highlight === 'yellow' ? '#FFFF00' : undefined,
   }
   const text = nativeDocxRunText(run)
   if (run.properties?.hidden) return null

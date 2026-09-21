@@ -160,6 +160,8 @@ export default function Ribbon({ label, tabs, active, onChange, quickAccess, tra
   </div>
 }
 
+export const DisabledReasonContext = createContext<string | undefined>(undefined)
+
 export interface RibbonButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'title'> {
   /** Forwarded to the host button (React 19 passes ref as a prop). */
   ref?: Ref<HTMLButtonElement>
@@ -176,7 +178,8 @@ export interface RibbonButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonE
 
 /** Icon + label command button whose tooltip always carries the shortcut where one exists. */
 export function RibbonButton({ icon, label, shortcut, title, labelHidden, className, children, ...rest }: RibbonButtonProps) {
-  return <button type="button" {...rest} className={['ribbon-button', labelHidden ? 'ribbon-button-icon-only' : '', className ?? ''].join(' ').trim()} title={shortcutTooltip(title ?? label, shortcut)} aria-label={labelHidden ? label : rest['aria-label']} aria-keyshortcuts={shortcut ? shortcutKeys(shortcut) : undefined}>
+  const reason = useContext(DisabledReasonContext)
+  return <button type="button" {...rest} className={['ribbon-button', labelHidden ? 'ribbon-button-icon-only' : '', className ?? ''].join(' ').trim()} title={shortcutTooltip(title ?? (rest.disabled ? reason ?? 'This command needs an editable selection or a completed edit.' : label), shortcut)} aria-label={labelHidden ? label : rest['aria-label']} aria-keyshortcuts={shortcut ? shortcutKeys(shortcut) : undefined}>
     <RibbonIcon name={icon} />
     {!labelHidden && <span className="ribbon-button-label">{label}</span>}
     {children}
@@ -205,7 +208,8 @@ export interface RibbonComboProps {
  * is empty (just the chevron), exactly like Word — never a placeholder word.
  */
 export function RibbonCombo({ label, title, value, options, onChange, disabled, className }: RibbonComboProps) {
-  return <select className={['ribbon-combo', className ?? ''].join(' ').trim()} aria-label={label} title={title ?? label} disabled={disabled} value={value} onChange={event => onChange(event.target.value)}>
+  const reason = useContext(DisabledReasonContext)
+  return <select className={['ribbon-combo', className ?? ''].join(' ').trim()} aria-label={label} title={title ?? (disabled ? reason ?? 'Select editable content first.' : label)} disabled={disabled} value={value} onChange={event => onChange(event.target.value)}>
     {(value === '' || !options.some(option => option.value === value)) && <option value="" />}
     {options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
   </select>
@@ -232,10 +236,11 @@ export interface ColorButtonProps {
  * `<input type="color">` with a caption above it.
  */
 export function ColorButton({ label, icon, value, colors, onChange, disabled, title }: ColorButtonProps) {
+  const reason = useContext(DisabledReasonContext)
   const [open, setOpen] = useState(false)
   const swatches = value && !colors.some(([color]) => color.toUpperCase() === value.toUpperCase()) ? [[value.toUpperCase(), 'Current color'] as RibbonColor, ...colors] : colors
   return <span className="ribbon-color" onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false) }} onKeyDown={event => { if (event.key === 'Escape' && open) { event.stopPropagation(); setOpen(false) } }}>
-    <button type="button" className="ribbon-button ribbon-color-button" aria-label={label} title={title ?? label} aria-haspopup="true" aria-expanded={open} disabled={disabled} onClick={() => setOpen(shown => !shown)}>
+    <button type="button" className="ribbon-button ribbon-color-button" aria-label={label} title={title ?? (disabled ? reason ?? 'Select editable content first.' : label)} aria-haspopup="true" aria-expanded={open} disabled={disabled} onClick={() => setOpen(shown => !shown)}>
       <span className="ribbon-color-glyph"><RibbonIcon name={icon} /><span className="ribbon-color-bar" style={value ? { background: value } : undefined} /></span>
       <span className="ribbon-chevron" aria-hidden="true" />
     </button>

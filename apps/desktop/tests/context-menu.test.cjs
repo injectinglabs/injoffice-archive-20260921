@@ -193,3 +193,17 @@ test('editors attach the menu with a right-click handler and render it from thei
   assert.match(slides, /onContextMenu=\{event => \{ selectObjectAt\(event\); menu\.open\(event\); \}\}/);
   assert.match(slides, /presentationContextMenu\(\{ object: /);
 });
+
+test('worksheet size menu opens Home and the current Format cells disclosure', async () => {
+  const { spreadsheetContextMenu } = await load();
+  const calls = []; const disclosure = { open: false };
+  const field = { focus: () => calls.push('focus'), select: () => calls.push('select') };
+  const editor = { querySelectorAll: () => [{ textContent: 'Home', click: () => calls.push('home') }], querySelector: selector => selector === '[aria-label="Format cells"]' ? { closest: () => disclosure } : field };
+  global.window = { requestAnimationFrame: callback => callback() };
+  try {
+    const menu = spreadsheetContextMenu({ anchor: { source: { closest: () => editor } }, disabled: false, onClear() {} });
+    menu.find(item => item.id === 'row-height').run();
+    assert.equal(disclosure.open, true);
+    assert.deepEqual(calls, ['home', 'focus', 'select']);
+  } finally { delete global.window; }
+});

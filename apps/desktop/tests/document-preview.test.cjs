@@ -37,7 +37,7 @@ function document() {
     _targets: [{ partName: 'word/document.xml', runId: 'r1', paragraphId: 'p1', key: 'run-1' }],
     body: { blocks: [{ paragraph: {
       id: 'p1', can_format_range: true, anchor: { part_name: 'word/document.xml' }, properties: {},
-      runs: [{ id: 'r1', kind: 'text', text: 'Hello', anchor: { part_name: 'word/document.xml' }, properties: {} }],
+      runs: [{ id: 'r1', kind: 'text', text: 'Hello', anchor: { part_name: 'word/document.xml' }, properties: { highlight: 'yellow' } }],
     } }] },
   };
 }
@@ -67,6 +67,7 @@ test('DocumentPreview edits in place and commits without an apply step', async (
   });
   const textbox = view.root.findByProps({ role: 'textbox' });
   assert.equal(textbox.props.contentEditable, 'plaintext-only');
+  assert.equal(textbox.props.style.backgroundColor, '#FFFF00', 'engine highlighting is visible while editing');
   assert.equal(view.root.findAllByProps({ className: 'office-document-note' }).length, 0, 'no caption between the ribbon and the page');
   assert.equal(textbox.props['data-placeholder'], undefined, 'the edited paragraph carries no placeholder');
   await act(async () => textbox.props.onCompositionStart());

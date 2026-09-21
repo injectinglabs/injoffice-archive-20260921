@@ -63,8 +63,10 @@ test('mini toolbar is Office\'s floating card of icon buttons, fixed widths, dri
   assert.equal(view.root.findByProps({ 'aria-label': 'Italic' }).props['aria-pressed'], true);
   assert.equal(view.root.findByProps({ 'aria-label': 'Align left' }).props['aria-pressed'], true);
   // Commands the document transaction does not take are disabled with their reason, never wired to a no-op.
-  assert.equal(view.root.findByProps({ 'aria-label': 'Highlight' }).props.disabled, true);
-  assert.equal(view.root.findByProps({ 'aria-label': 'Highlight' }).props.title, SELECTION_UNSUPPORTED.highlight);
+  assert.equal(view.root.findByProps({ 'aria-label': 'Highlight' }).props.disabled, false);
+  await act(async () => view.root.findByProps({ 'aria-label': 'Highlight' }).props.onClick());
+  assert.deepEqual(patches.at(-1), { highlight: 'yellow' });
+  assert.match(view.root.findByProps({ 'aria-label': 'Highlight' }).props.title, /highlighting/);
   assert.equal(view.root.findByProps({ 'aria-label': 'Bullets' }).props.disabled, true);
   // An editor that passes a bullets handler gets a live button.
   const bulleted = [];

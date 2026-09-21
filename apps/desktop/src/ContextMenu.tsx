@@ -112,7 +112,7 @@ export default function ContextMenu({ anchor, items, label, onClose }: { anchor:
   }
   return <div ref={menu} className="context-menu" role="menu" aria-label={label} tabIndex={-1} style={{ left: position.x, top: position.y }} onKeyDown={keys} onContextMenu={event => event.preventDefault()}>
     {items.map((item, index) => 'separator' in item ? <div key={`separator-${index}`} role="separator" className="context-menu-separator" /> :
-      <button key={item.id} type="button" role={item.checked === undefined ? 'menuitem' : 'menuitemcheckbox'} aria-checked={item.checked} aria-disabled={item.disabled || undefined} data-index={index} title={item.title} tabIndex={-1}
+      <button key={item.id} type="button" role={item.checked === undefined ? 'menuitem' : 'menuitemcheckbox'} aria-checked={item.checked} aria-disabled={item.disabled || undefined} data-index={index} title={item.title ?? (item.disabled ? 'Finish the current edit or wait for the operation to finish.' : undefined)} tabIndex={-1}
         onClick={() => activate(item)} onPointerEnter={event => { if (!item.disabled) event.currentTarget.focus({ preventScroll: true }) }}>
         <span className="context-menu-label">{item.label}</span>{item.shortcut && <kbd className="context-menu-shortcut">{item.shortcut}</kbd>}
       </button>)}
@@ -189,13 +189,19 @@ export interface SpreadsheetMenuContext {
   onClear(): void
 }
 /** Opens a toolbar disclosure (for example "Cell size") and focuses the field inside it. */
-function revealToolbarField(source: HTMLElement | null, summary: string, selector: string) {
+function revealToolbarField(source: HTMLElement | null, _summary: string, selector: string) {
   if (typeof window === 'undefined') return
   const editor = source?.closest('.sheet-editor')
-  const details = Array.from(editor?.querySelectorAll('details') ?? []).find(item => item.querySelector('summary')?.textContent?.trim() === summary)
-  if (details) details.open = true
-  window.requestAnimationFrame(() => { const field = details?.querySelector<HTMLElement>(selector); field?.focus(); (field as HTMLInputElement | null)?.select?.() })
+  const home = Array.from(editor?.querySelectorAll<HTMLButtonElement>('[role="tab"]') ?? []).find(tab => tab.textContent === 'Home')
+  home?.click()
+  window.requestAnimationFrame(() => {
+    const format = editor?.querySelector<HTMLElement>('[aria-label="Format cells"]')
+    const disclosure = format?.closest('details')
+    if (disclosure) disclosure.open = true
+    window.requestAnimationFrame(() => { const field = editor?.querySelector<HTMLInputElement>(selector); field?.focus(); field?.select() })
+  })
 }
+
 /**
  * Copies the worksheet selection with the grid's own onCopy handler (copySelection TSV): the handler fills a probe
  * ClipboardEvent, and the native copy command then writes that payload, because the host denies navigator.clipboard.
@@ -222,8 +228,7 @@ export function copyThroughGrid(grid: HTMLElement | null): boolean {
 export function spreadsheetContextMenu(context: SpreadsheetMenuContext): ContextMenuItem[] {
   const { disabled } = context
   const copy = () => copyThroughGrid(context.anchor.source)
-  // Row and column insert/delete are not in the native transaction at all, so the menu leaves them
-  // out instead of offering four entries that can never run.
+  // The editor appends row and column operations with its workbook-specific safety checks.
   return menuItems([
     { id: 'cut', label: 'Cut', shortcut: SHORTCUTS.cut, disabled, run: () => { copy(); context.onClear() } },
     { id: 'copy', label: 'Copy', shortcut: SHORTCUTS.copy, disabled: !context.anchor.source, run: copy },

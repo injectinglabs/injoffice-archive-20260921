@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react';
-import { AlignmentToggles, ColorButton, RIBBON_ALIGNMENTS, RibbonButton, RibbonCombo, RibbonRows, type RibbonColor } from './Ribbon'
+import { DisabledReasonContext, AlignmentToggles, ColorButton, RIBBON_ALIGNMENTS, RibbonButton, RibbonCombo, RibbonRows, type RibbonColor } from './Ribbon'
 
 export interface FormattingValues {
   font?: string; size?: number; bold?: boolean; italic?: boolean; underline?: boolean;
-  color?: string; alignment?: string; characterEditable?: boolean; fill?: string; numberFormat?: string;
+  highlight?: string; color?: string; alignment?: string; characterEditable?: boolean; fill?: string; numberFormat?: string;
 }
 export type FormattingPatch = Partial<FormattingValues>;
 /** `font` and `paragraph` render one Office ribbon group each; `all` is the classic single toolbar. */
@@ -41,6 +41,7 @@ export default function FormattingToolbar({ kind, values, disabled, onChange, sc
 }) {
   const inactive = disabled || !values;
   const characterInactive = inactive || values?.characterEditable === false;
+  const reason = !values ? 'Select editable text to format.' : disabled ? 'Finish the current edit or wait for the operation to finish.' : values.characterEditable === false ? 'This text structure cannot be formatted safely.' : undefined;
   const fonts = [...new Set([values?.font || 'Arial', 'Arial', 'Calibri', 'Cambria', 'Georgia', 'Times New Roman', 'Verdana', 'DejaVu Sans'])];
   const sizes = [...new Set([values?.size || 11, ...FONT_SIZES])].sort((a, b) => a - b);
   const family = <RibbonCombo className="ribbon-combo-font" label="Font family" disabled={characterInactive} value={values?.font ?? ''} options={fonts.map(font => ({ value: font, label: font }))} onChange={font => onChange({ font })} />;
@@ -54,12 +55,12 @@ export default function FormattingToolbar({ kind, values, disabled, onChange, sc
   </>;
   const color = <ColorButton label="Text color" icon="fontColor" disabled={characterInactive} value={values?.color?.toUpperCase()} colors={TEXT_COLORS} onChange={color => onChange({ color })} />;
   const alignment = <AlignmentToggles className="formatting-alignment" kind={kind} horizontal={values?.alignment} disabled={inactive} onHorizontal={alignment => onChange({ alignment })} />;
-  if (section === 'font') return <div className="formatting-toolbar formatting-toolbar-font" aria-label="Font formatting" title={values?.characterEditable === false ? "Text formatting is not supported in this text structure" : undefined}><RibbonRows><div className="formatting-group">{family}{size}</div><div className="formatting-group">{emphasis}{children}{color}</div></RibbonRows></div>;
-  if (section === 'paragraph') return <div className="formatting-toolbar formatting-toolbar-paragraph" aria-label="Paragraph alignment"><div className="formatting-group">{alignment}</div>{children}</div>;
-  return <div className="formatting-toolbar" aria-label="Formatting">
+  if (section === 'font') return <DisabledReasonContext value={reason}><div className="formatting-toolbar formatting-toolbar-font" aria-label="Font formatting" title={values?.characterEditable === false ? "Text formatting is not supported in this text structure" : undefined}><RibbonRows><div className="formatting-group">{family}{size}</div><div className="formatting-group">{emphasis}{children}{color}</div></RibbonRows></div></DisabledReasonContext>;
+  if (section === 'paragraph') return <DisabledReasonContext value={reason}><div className="formatting-toolbar formatting-toolbar-paragraph" aria-label="Paragraph alignment"><div className="formatting-group">{alignment}</div>{children}</div></DisabledReasonContext>;
+  return <DisabledReasonContext value={reason}><div className="formatting-toolbar" aria-label="Formatting">
     <div className="formatting-group">{family}{size}{emphasis}{color}</div>
     <div className="formatting-group">{alignment}</div>
     {children}
     <span className="formatting-scope">{formattingScope(kind, values, scopeLabel)}</span>
-  </div>;
+  </div></DisabledReasonContext>;
 }

@@ -427,9 +427,9 @@ export default function App() {
       {!showHome && document && <header className="app-titlebar">
         {/* Office's title bar: Quick Access (Save, Undo, Redo) · document name and state · Search · view tools. File, New, Open and Save as… live in the ribbon's File tab. */}
         <div className="titlebar-quick-access" role="toolbar" aria-label="Quick access">
-          <RibbonButton className="titlebar-button" icon="save" label="Save" shortcut="save" labelHidden disabled={busy || (!document.dirty && !draftDirty)} onClick={() => void runAction('save')} />
-          <RibbonButton className="titlebar-button" icon="undo" label="Undo" shortcut="undo" labelHidden disabled={!canUndo} onClick={() => runHistory('undo')} />
-          <RibbonButton className="titlebar-button" icon="redo" label="Redo" shortcut="redo" labelHidden disabled={!canRedo} onClick={() => runHistory('redo')} />
+          <RibbonButton className="titlebar-button" icon="save" label="Save" title={busy ? "Wait for the current operation to finish." : !document.dirty && !draftDirty ? "There are no changes to save." : undefined} shortcut="save" labelHidden disabled={busy || (!document.dirty && !draftDirty)} onClick={() => void runAction('save')} />
+          <RibbonButton className="titlebar-button" icon="undo" label="Undo" title={!canUndo ? busy ? "Wait for the current operation to finish." : "There is nothing to undo." : undefined} shortcut="undo" labelHidden disabled={!canUndo} onClick={() => runHistory('undo')} />
+          <RibbonButton className="titlebar-button" icon="redo" label="Redo" title={!canRedo ? busy ? "Wait for the current operation to finish." : "There is nothing to redo." : undefined} shortcut="redo" labelHidden disabled={!canRedo} onClick={() => runHistory('redo')} />
         </div>
         <div className="titlebar-centre">
           <div className="title-document">

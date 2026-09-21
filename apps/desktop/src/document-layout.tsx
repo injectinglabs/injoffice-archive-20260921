@@ -99,7 +99,7 @@ function LayoutField({ label, unit, value, step, min, max, disabled, onChange }:
   }
   return <label className="document-layout-field">
     <span>{label}</span>
-    <input type="number" aria-label={`${label} in ${unit}`} title={`${label} in ${unit}`} placeholder="–" value={draft} disabled={disabled} min={min} max={max} step={step}
+    <input type="number" aria-label={`${label} in ${unit}`} title={disabled ? "Select an editable paragraph and finish the current operation first." : `${label} in ${unit}`} placeholder="–" value={draft} disabled={disabled} min={min} max={max} step={step}
       aria-invalid={!valid || undefined}
       onChange={event => setDraft(event.target.value)}
       onBlur={commit}
@@ -139,7 +139,7 @@ export function DocumentParagraphLayout({ properties, disabled, onChange }: { pr
       <LayoutField label="Spacing before" unit="points" step={6} min={0} max={1584} disabled={inactive} value={toPoints(properties?.spacing_before_twips)} onChange={value => onChange({ spacing_before_twips: fromPoints(value) })} />
       <LayoutField label="Spacing after" unit="points" step={6} min={0} max={1584} disabled={inactive} value={toPoints(properties?.spacing_after_twips)} onChange={value => onChange({ spacing_after_twips: fromPoints(value) })} />
     </div>
-    <RibbonButton className="document-layout-more" icon="more" label="Paragraph settings" labelHidden title="Line spacing, first line, hanging and outline level" disabled={inactive} aria-expanded={more} aria-haspopup="dialog" onClick={() => setMore(value => !value)} />
+    <RibbonButton className="document-layout-more" icon="more" label="Paragraph settings" labelHidden title={inactive ? "Select an editable paragraph first." : "Line spacing, first line, hanging and outline level"} disabled={inactive} aria-expanded={more} aria-haspopup="dialog" onClick={() => setMore(value => !value)} />
     {more && <div className="document-layout-panel" role="group" aria-label="Paragraph settings">
       <LayoutField label="First line" unit="inches" step={0.1} min={0} max={22} disabled={inactive} value={toInches(properties?.first_line_twips)} onChange={value => onChange({ first_line_twips: fromInches(value), hanging_twips: null })} />
       <LayoutField label="Hanging" unit="inches" step={0.1} min={0} max={22} disabled={inactive} value={toInches(properties?.hanging_twips)} onChange={value => onChange({ hanging_twips: fromInches(value), first_line_twips: null })} />

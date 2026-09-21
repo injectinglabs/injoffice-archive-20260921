@@ -32,7 +32,7 @@ export function formattingValues(preview: FormattingPreview, key: string): Forma
     const properties = runAppearance(preview.document, selected.paragraph, selected.run);
     const ownerPath = selected.run.anchor.path.slice(0, selected.run.anchor.path.lastIndexOf('/'));
     const siblings = selected.paragraph.runs.filter(run => run.anchor.path.slice(0, run.anchor.path.lastIndexOf('/')) === ownerPath);
-    return { font: properties.font_family, size: properties.font_size_half_points ? properties.font_size_half_points / 2 : undefined, bold: properties.bold, italic: properties.italic, underline: properties.underline === undefined ? undefined : properties.underline !== 'none', color: properties.color && /^[A-Fa-f0-9]{6}$/.test(properties.color) ? `#${properties.color.toUpperCase()}` : undefined, alignment: paragraphAppearance(preview.document, selected.paragraph).paragraph.alignment, characterEditable: siblings.length === 1 && selected.run.kind === 'text' && !selected.run.hyperlink };
+    return { highlight: properties.highlight, font: properties.font_family, size: properties.font_size_half_points ? properties.font_size_half_points / 2 : undefined, bold: properties.bold, italic: properties.italic, underline: properties.underline === undefined ? undefined : properties.underline !== 'none', color: properties.color && /^[A-Fa-f0-9]{6}$/.test(properties.color) ? `#${properties.color.toUpperCase()}` : undefined, alignment: paragraphAppearance(preview.document, selected.paragraph).paragraph.alignment, characterEditable: siblings.length === 1 && selected.run.kind === 'text' && !selected.run.hyperlink };
   }
   if (preview.kind === 'xlsx') {
     const cell = editableTargets(preview.workbook).find(value => targetKey(value) === key);
@@ -53,9 +53,9 @@ export function documentRangeFormattingValues(document:NativeDocxDocumentV1,key:
  if(!selected||!base||range.paragraph_id!==selected.paragraph.id)return base
  let offset=0
  const runs=selected.paragraph.runs.filter(run=>{const start=offset;offset+=(run.id===selected.run.id&&draft!==undefined?draft:run.text??'').length;return start<range.end_utf16&&offset>range.start_utf16})
- const values=runs.map(run=>{const properties=runAppearance(document,selected.paragraph,run);return {font:properties.font_family,size:properties.font_size_half_points===undefined?undefined:properties.font_size_half_points/2,bold:properties.bold??false,italic:properties.italic??false,underline:properties.underline!==undefined&&properties.underline!=='none',color:properties.color&&/^[a-f0-9]{6}$/i.test(properties.color)?`#${properties.color.toUpperCase()}`:undefined}})
+ const values=runs.map(run=>{const properties=runAppearance(document,selected.paragraph,run);return {highlight:properties.highlight,font:properties.font_family,size:properties.font_size_half_points===undefined?undefined:properties.font_size_half_points/2,bold:properties.bold??false,italic:properties.italic??false,underline:properties.underline!==undefined&&properties.underline!=='none',color:properties.color&&/^[a-f0-9]{6}$/i.test(properties.color)?`#${properties.color.toUpperCase()}`:undefined}})
  const result:FormattingValues={...base,characterEditable:canFormatParagraphRange(selected.paragraph)&&!!values.length&&!range.unsupported&&!selected.paragraph.runs.some(run=>runAppearance(document,selected.paragraph,run).hidden)}
- for(const field of ['font','size','bold','italic','underline','color'] as const){const value=values[0]?.[field];Object.assign(result,{[field]:values.every(item=>item[field]===value)?value:undefined})}
+ for(const field of ['font','size','bold','italic','underline','color','highlight'] as const){const value=values[0]?.[field];Object.assign(result,{[field]:values.every(item=>item[field]===value)?value:undefined})}
  return result
 }
 export function workbookFormatting(workbook: NativeWorkbookV2, key: string, patch: FormattingPatch, id: string): WorkbookMutationBatchV1 {
@@ -92,6 +92,7 @@ export function documentFormatting(document: NativeDocxDocumentV1, key: string, 
   if (patch.size !== undefined) properties.font_size_half_points = Math.round(patch.size * 2);
   if (patch.bold !== undefined) properties.bold = patch.bold;
   if (patch.italic !== undefined) properties.italic = patch.italic;
+  if (patch.highlight !== undefined) properties.highlight = patch.highlight;
   if (patch.underline !== undefined) properties.underline = patch.underline ? 'single' : 'none';
   if (patch.color !== undefined) properties.color = patch.color.replace(/^#/, '').toUpperCase();
   const target = isParagraph || paragraphRange ? selected.paragraph : selected.run;

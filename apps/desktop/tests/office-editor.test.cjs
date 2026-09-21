@@ -413,9 +413,9 @@ test('OfficeEditor arranges its controls as a Word ribbon with labelled groups, 
       assert.ok(button.props.title, 'every command button has a tooltip');
     }
     const titles = Object.fromEntries(commandButtons.map(button => [button.props['aria-label'] ?? text(button), button.props.title]));
-    assert.equal(titles.Bold, `Bold (${shortcutLabel('bold')})`);
-    assert.equal(titles.Italic, `Italic (${shortcutLabel('italic')})`);
-    assert.equal(titles.Underline, `Underline (${shortcutLabel('underline')})`);
+    assert.equal(titles.Bold, `Select editable text to format. (${shortcutLabel('bold')})`);
+    assert.equal(titles.Italic, `Select editable text to format. (${shortcutLabel('italic')})`);
+    assert.equal(titles.Underline, `Select editable text to format. (${shortcutLabel('underline')})`);
     assert.equal(titles['Find / replace'], `Find / replace (${shortcutLabel('find')})`);
     assert.equal(view.root.findAllByProps({ className: 'office-toolbar' }).length, 0, 'the Apply/Cancel row is gone; edits commit themselves');
     const notes = view.root.findAllByProps({ className: 'ribbon-note' }).map(text);

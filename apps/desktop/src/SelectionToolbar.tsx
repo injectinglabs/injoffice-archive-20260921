@@ -9,8 +9,7 @@ const GAP = 8, MARGIN = 8
 
 /** Commands Office's mini toolbar carries that the document transaction does not take yet; shown disabled with the reason, never wired to a no-op. */
 export const SELECTION_UNSUPPORTED = {
-  highlight: 'Highlighting is not wired to the document transaction yet',
-  bullets: 'Bullets are applied from the Paragraph group; the mini toolbar does not carry them yet',
+  bullets: 'Bullet list editing is not supported in this document.',
 } as const
 
 /** The selection's first line box when it is a non-empty text selection inside `within`; otherwise undefined. */
@@ -96,7 +95,7 @@ export default function SelectionToolbar({ values, disabled, onChange, within = 
     <RibbonButton icon="bold" label="Bold" shortcut="bold" labelHidden aria-pressed={values?.bold ?? 'mixed'} disabled={characterInactive} onClick={() => onChange({ bold: !values?.bold })} />
     <RibbonButton icon="italic" label="Italic" shortcut="italic" labelHidden aria-pressed={values?.italic ?? 'mixed'} disabled={characterInactive} onClick={() => onChange({ italic: !values?.italic })} />
     <RibbonButton icon="underline" label="Underline" shortcut="underline" labelHidden aria-pressed={values?.underline ?? 'mixed'} disabled={characterInactive} onClick={() => onChange({ underline: !values?.underline })} />
-    <RibbonButton icon="highlight" label="Highlight" labelHidden title={SELECTION_UNSUPPORTED.highlight} disabled aria-pressed={false} />
+    <RibbonButton icon="highlight" label="Highlight" labelHidden title={characterInactive ? "Select text that supports character formatting." : "Toggle yellow highlighting"} disabled={characterInactive} aria-pressed={values?.highlight === 'yellow'} onClick={() => onChange({ highlight: values?.highlight === 'yellow' ? 'none' : 'yellow' })} />
     <ColorButton label="Text color" icon="fontColor" disabled={characterInactive} value={values?.color?.toUpperCase()} colors={TEXT_COLORS} onChange={color => onChange({ color })} />
     <span className="selection-toolbar-separator" aria-hidden="true" />
     <RibbonButton icon="list" label="Bullets" labelHidden title={onBullets ? 'Bullets' : SELECTION_UNSUPPORTED.bullets} disabled={inactive || !onBullets} aria-pressed={bullets ?? false} onClick={() => onBullets?.()} />
