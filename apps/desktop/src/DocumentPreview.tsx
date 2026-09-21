@@ -29,6 +29,8 @@ interface DocumentPreviewProps {
   commit(): void
   /** Transient, self-clearing message shown beside the caret. */
   notice: string
+  /** Where the reader is in the flowing preview, for the status row. */
+  onPageMetrics?(value: { page: number; pages: number }): void
   onCompositionChange(value: boolean): void
 }
 
@@ -64,6 +66,7 @@ function bodyParagraphs(story: NativeDocxStoryV1) {
 export default function DocumentPreview(props: DocumentPreviewProps) {
   const { document, selected, choose, busy, hasDraft, zoom, navigation } = props
   const previewId=useId(),root=useRef<HTMLDivElement>(null)
+  const canvas=useRef<HTMLDivElement>(null),paper=useRef<HTMLElement>(null)
   const paragraphId=(value:NativeDocxParagraphV1)=>`${previewId}-${baseParagraphId(value)}`
   const findParagraph=(id:string)=>Array.from(root.current?.querySelectorAll<HTMLElement>('[data-docx-paragraph]')??[]).find(node=>node.id===id)
   const targets = new Map(editableDocxRuns(document).map(target => [runIdentity(target.partName, target.runId), target]))
@@ -121,6 +124,26 @@ export default function DocumentPreview(props: DocumentPreviewProps) {
     ...document.notes.map((value, index) => ({ value, label: `Note ${index + 1}` })),
     ...document.comment_stories.map((value, index) => ({ value, label: `Comment ${index + 1}` })),
   ]
+  // The preview flows; the file keeps its own page layout. Pages are measured off the paper so the
+  // status row can say where the reader is, and the status row says where the number comes from.
+  const pageHeightPt=page?page.height_twips/20:792
+  const metrics=useRef(props.onPageMetrics);metrics.current=props.onPageMetrics
+  useEffect(()=>{
+    const canvasNode=canvas.current,paperNode=paper.current
+    if(!canvasNode||!paperNode||!metrics.current)return
+    const update=()=>{
+      const height=paperNode.getBoundingClientRect().height,pageHeight=pageHeightPt*(96/72)*zoom
+      if(!(pageHeight>0)||!(height>0))return
+      const pages=Math.max(1,Math.ceil(height/pageHeight-.02))
+      const scrolled=Math.max(0,canvasNode.getBoundingClientRect().top-paperNode.getBoundingClientRect().top)
+      metrics.current?.({page:Math.min(pages,Math.floor(scrolled/pageHeight)+1),pages})
+    }
+    update()
+    canvasNode.addEventListener('scroll',update,{passive:true})
+    const observer=typeof ResizeObserver==='undefined'?undefined:new ResizeObserver(update)
+    observer?.observe(paperNode)
+    return()=>{canvasNode.removeEventListener('scroll',update);observer?.disconnect()}
+  },[document,zoom,pageHeightPt])
   return <div ref={root} className="office-document-layout">
     {navigation && <nav className="office-navigation" aria-label="Document headings">
       <h2>Navigation</h2><div className="office-navigation-tab">Headings</div>
@@ -132,11 +155,10 @@ export default function DocumentPreview(props: DocumentPreviewProps) {
         element?.focus({ preventScroll: true })
       }}>{nativeDocxParagraphText(heading) || 'Untitled heading'}</button></li>)}</ol> : <p>Headings in your document appear here.</p>}
     </nav>}
-    <div className="office-document-canvas">
-      <p className="office-document-note">Flowing document preview. Original page layout is preserved in the file.</p>
+    <div ref={canvas} className="office-document-canvas">
       {props.imageNotice&&<p className="office-document-note">{props.imageNotice}</p>}
       <div className="office-document-zoom" style={{ zoom }}>
-        <article style={paperStyle} className="office-paper" aria-label="Document content">{story(document.body)}</article>
+        <article ref={paper} style={paperStyle} className="office-paper" aria-label="Document content">{story(document.body)}</article>
         {secondaryStories.map(({ value, label }) => <section className="office-story" key={label} aria-label={label}><h2>{label}</h2><div className="office-story-content">{story(value)}</div></section>)}
       </div>
     </div>
@@ -256,8 +278,11 @@ function DocumentRun({ replaceImage, deleteImage, image, run, background, active
   return <><span ref={element} className="office-inline-input" data-docx-run={run.id} data-hyperlink={run.hyperlink?true:undefined} title={run.hyperlink?.url} contentEditable={disabled ? false : 'plaintext-only'} suppressContentEditableWarning role="textbox" aria-label="Edit document text" aria-multiline="false" style={style} spellCheck onInput={event => updateDraft(event.currentTarget.textContent ?? '')}
     onBlur={event => {
       // Focus moving to another control (a run, the ribbon) is committed by that control's own
-      // path; a click on nothing in particular has no other owner, so commit it here.
+      // path; a click on nothing in particular has no other owner, so commit it here. Switching
+      // away from the window is not leaving the paragraph: Word keeps the caret, and the idle
+      // commit still writes the text.
       if (composing.current || event.relatedTarget) return
+      if (window.document.hasFocus && !window.document.hasFocus()) return
       commit()
     }}
     onCompositionStart={() => { composing.current = true; onCompositionChange(true) }}
