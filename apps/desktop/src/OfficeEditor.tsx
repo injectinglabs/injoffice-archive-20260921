@@ -4,8 +4,8 @@ import { createDocxWasmClient } from '@injoffice/docx-wasm'
 import type { NativeDocxDocumentV1 } from '../../../packages/docs/src/nativeContract'
 import { buildDocxRunMutation, editableDocxRuns, verifyDocxRoundTrip } from '../../playground/src/docxRoundTrip'
 import DocumentPreview from './DocumentPreview'
-import {loadDocumentImages,type DocumentImageCache} from './document-media'
-import { replaceParagraphLines, insertDocumentImage, deleteDocumentImage, replaceDocumentImage, replaceEditableDocumentText, mergeWithPreviousParagraph, insertDocumentTable, changeDocumentTable, changeDocumentTableGrid, type TableGridOperation } from './document-authoring'
+import {loadSourceDocumentImages,type DocumentImageCache} from './document-media'
+import { replaceParagraphLines, insertDocumentImage, insertDocumentPageBreak, canInsertDocumentPageBreak, deleteDocumentImage, replaceDocumentImage, replaceEditableDocumentText, mergeWithPreviousParagraph, insertDocumentTable, changeDocumentTable, changeDocumentTableGrid, type TableGridOperation } from './document-authoring'
 import {canFormatParagraphRange, canFormatRun, paragraphStyleName, runAppearance} from './document-style'
 import {paragraphTextOffset, type DocumentTextRange} from './document-range'
 import {createHiddenApplyScheduler} from './hidden-apply'
@@ -57,6 +57,7 @@ interface LocalEngine {
   page(snapshot:Snapshot,patch:PagePatch):Promise<Snapshot>
   replaceImage(snapshot:Snapshot,id:string,bytes:Uint8Array,name:string):Promise<Snapshot>
   deleteImage(snapshot:Snapshot,id:string):Promise<{snapshot:Snapshot;key:string;text:string}>
+  pageBreak(snapshot:Snapshot,key:string,offset:number):Promise<{snapshot:Snapshot;key:string;text:string}>
   image(snapshot:Snapshot,key:string,bytes:Uint8Array,name:string):Promise<{snapshot:Snapshot;key:string;text:string}>
   read(bytes: Uint8Array): Promise<Snapshot>
   edit(snapshot: Snapshot, key: string, value: string): Promise<Snapshot>
@@ -103,7 +104,7 @@ function createEngine(extension: string): LocalEngine {
     const mediaFor = new WeakMap<Snapshot, PreviewMedia>()
     const read = async (bytes: Uint8Array): Promise<Snapshot> => {
       const document = await client.extract(bytes)
-      const media=await loadDocumentImages(client,bytes,document,imageCache)
+      const media=await loadSourceDocumentImages(bytes,document,imageCache)
       const value: Snapshot = { bytes, preview: { kind: 'docx', document }, targets: editableDocxRuns(document).map(target => ({ key: target.key, label: target.label, value: target.text })) }
       mediaFor.set(value, { images: media.images, notice: media.notice })
       return value
@@ -124,6 +125,9 @@ function createEngine(extension: string): LocalEngine {
       return read(result.bytes)
     }, async deleteImage(snapshot,id){
       const result=await deleteDocumentImage(client,snapshot.bytes,snapshot.preview.document,id,operationId)
+      return {snapshot:await read(result.bytes),key:result.key,text:result.text}
+    }, async pageBreak(snapshot,key,offset){
+      const result=await insertDocumentPageBreak(client,snapshot.bytes,snapshot.preview.document,key,offset,operationId)
       return {snapshot:await read(result.bytes),key:result.key,text:result.text}
     }, async image(snapshot,key,bytes,name){
       const result=await insertDocumentImage(client,snapshot.bytes,snapshot.preview.document,key,bytes,name,operationId)
@@ -471,6 +475,17 @@ export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDr
     }catch(reason){if(mounted.current)setError(errorMessage(reason))}
     finally{if(mounted.current)setBusy(false)}
   }
+  async function insertPageBreak() {
+    if (!snapshot || !engine.current || !target || busy || composing || textRange?.unsupported || (textRange && textRange.start_utf16 !== textRange.end_utf16)) return
+    const offset = captureDraftCaret(draft)
+    setBusy(true); callbacks.current.onBusyChange?.(true); setError('')
+    try {
+      const source = draftPending.current ? await engine.current.edit(snapshot, selected, draft) : snapshot
+      const result = await engine.current.pageBreak(source, selected, offset)
+      if (mounted.current) { accept(result.snapshot); setSelected(result.key); setDraft(result.text); setTextRange(undefined); setCaretOffset(0) }
+    } catch (reason) { if (mounted.current) setError(errorMessage(reason)) }
+    finally { if (mounted.current) setBusy(false) }
+  }
   async function insertImage() {
     const pick=typeof window!=='undefined'?window.injDesktop?.pickAsset:undefined
     if(!snapshot||!engine.current||!target||busy||composing||!pick)return
@@ -590,8 +605,9 @@ export default function OfficeEditor({ name, bytes, onChange, onBusyChange, onDr
       </> },
     ] },
     { id: 'Insert', label: 'Insert', groups: [
+      { id: 'pages', label: 'Pages', children: <RibbonButton icon="pageBreak" label="Page break" disabled={blocked || !canInsertDocumentPageBreak(snapshot.preview.document, selected) || !!textRange?.unsupported || !!(textRange && textRange.start_utf16 !== textRange.end_utf16)} onMouseDown={event => event.preventDefault()} onClick={() => void insertPageBreak()} /> },
       { id: 'tables', label: 'Tables', children: <InsertTableControl disabled={true} onInsert={(rows, columns) => void insertTable(rows, columns)} /> },
-      { id: 'illustrations', label: 'Illustrations', children: canPickAsset && <RibbonButton icon="image" label="Insert image…" title="Image insertion is not supported by the native DOCX engine yet" disabled={true} onClick={() => void insertImage()} /> },
+      { id: 'illustrations', label: 'Illustrations', children: canPickAsset && <RibbonButton icon="image" label="Insert image…" title="Insert a PNG or JPEG below the selected paragraph" disabled={blocked || !canInsertBlock || snapshot.preview.document.source.main_part !== 'word/document.xml'} onClick={() => void insertImage()} /> },
       { id: 'links', label: 'Links', children: <HyperlinkControl key={selected} url={selection?.run.hyperlink?.url} disabled={blocked || !selection?.run.can_edit_hyperlink || !(draft.length || selection?.run.text?.length) || !!textRange?.unsupported} onChange={url => void changeLink(url)} /> },
       { id: 'text', label: 'Text', children: <>
         <RibbonButton icon="paragraphInsert" label="Insert paragraph below" disabled={blocked || hasDraft || !canInsertBlock} onClick={() => void changeParagraph('block.insert_after')} />
