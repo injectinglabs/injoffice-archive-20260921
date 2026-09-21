@@ -28,7 +28,8 @@
             "edit_policy": {
               "allowed_operations": [
                 "text.replace",
-                "properties.patch"
+                "properties.patch",
+                "block.insert_after"
               ],
               "mode": "read-write"
             },
@@ -64,7 +65,8 @@
             "edit_policy": {
               "allowed_operations": [
                 "text.replace",
-                "properties.patch"
+                "properties.patch",
+                "block.insert_after"
               ],
               "mode": "read-write"
             },
@@ -100,7 +102,8 @@
             "edit_policy": {
               "allowed_operations": [
                 "text.replace",
-                "properties.patch"
+                "properties.patch",
+                "block.insert_after"
               ],
               "mode": "read-write"
             },
@@ -136,7 +139,8 @@
             "edit_policy": {
               "allowed_operations": [
                 "text.replace",
-                "properties.patch"
+                "properties.patch",
+                "block.insert_after"
               ],
               "mode": "read-write"
             },
@@ -172,7 +176,9 @@
             "edit_policy": {
               "allowed_operations": [
                 "text.replace",
-                "properties.patch"
+                "properties.patch",
+                "block.insert_after",
+                "paragraph.split"
               ],
               "mode": "read-write"
             },
