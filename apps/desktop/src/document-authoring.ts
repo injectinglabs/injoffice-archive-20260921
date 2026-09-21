@@ -19,7 +19,8 @@ function simpleParagraph(document: NativeDocxDocumentV1, key: string) {
 /** All intermediate mutations remain private: either the complete edit returns or the caller keeps its prior bytes/draft. */
 export async function replaceParagraphLines(client: Client, source: Uint8Array, document: NativeDocxDocumentV1, key: string, text: string, id: () => string) {
   const selected=docxSelection(document,key),index=document.body.blocks.findIndex(block=>block.paragraph?.id===selected?.paragraph.id)
-  if(!selected||index<0||!selected.paragraph.edit_policy.allowed_operations.includes('paragraph.split'))throw new Error('Paragraph breaks are not supported in this text segment yet.')
+  if(!selected||index<0)throw new Error('Enter can split only body paragraphs. This text is in a table or another document story.')
+  if(!selected.paragraph.edit_policy.allowed_operations.includes('paragraph.split'))throw new Error('The DOCX engine cannot split this paragraph because it contains an image, field, break, or other protected markup. Use Insert paragraph below.')
   const lines=text.replace(/\r\n?/g,'\n').split('\n')
   if(lines.length<2||lines.length>100||text.length>256*1024||text.includes('\t'))throw new Error('Paste up to 100 plain-text paragraphs at a time, without tabs.')
   let bytes=source,model=document

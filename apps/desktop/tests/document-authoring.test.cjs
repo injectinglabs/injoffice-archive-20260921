@@ -119,3 +119,17 @@ test('page-break insertion targets the caret and selects the re-extracted suffix
   await assert.rejects(insertDocumentPageBreak(wasm, Buffer.from('source'), model, 'p1', 6, () => 'id'), /supported body text/);
   assert.equal(wasm.applied.length, 1);
 });
+
+test('paragraph splitting uses the advertised native operation and returns the editable suffix', async () => {
+  const { replaceParagraphLines } = await loadAuthoring();
+  const model = document([paragraph('p1', 'BeforeAfter')]);
+  const next = document([paragraph('p1', 'Before'), paragraph('p2', 'After')]);
+  const wasm = client(() => next);
+  const result = await replaceParagraphLines(wasm, Buffer.from('source'), model, 'p1', 'Before\nAfter', () => 'enter');
+  assert.equal(result.key, 'p2');
+  assert.equal(result.text, 'After');
+  assert.deepEqual(wasm.applied[0].payload.mutations, [{ target_kind: 'paragraph', target_id: 'p1', expected_xml_sha256: 'sha-p1', operation: 'paragraph.split', split: { run_id: 'p1-r0', offset_utf16: 6 } }]);
+  model.body.blocks[0].paragraph.edit_policy.allowed_operations = ['block.insert_after'];
+  await assert.rejects(replaceParagraphLines(wasm, Buffer.from('source'), model, 'p1', 'Before\nAfter', () => 'enter'), /DOCX engine cannot split.*Insert paragraph below/);
+  assert.equal(wasm.applied.length, 1, 'a refused split must not alter source bytes');
+});
