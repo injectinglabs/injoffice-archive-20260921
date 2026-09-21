@@ -48,8 +48,10 @@ test('presentation text toolbar drives run and alignment callbacks and keeps uns
   assert.equal(view.root.findByProps({ 'aria-label': 'Italic' }).props['aria-pressed'], true);
   await act(async () => bold.props.onClick());
   await act(async () => view.root.findByProps({ 'aria-label': 'Font size' }).props.onChange({ target: { value: '36' } }));
-  await act(async () => view.root.findByProps({ 'aria-label': 'Text color' }).props.onChange({ target: { value: '#2459AD' } }));
-  await act(async () => view.root.findByProps({ 'aria-label': 'Text alignment' }).props.onChange({ target: { value: 'center' } }));
+  // Colour is an icon button with a palette, not a select: open it and pick the swatch.
+  await act(async () => view.root.findByProps({ 'aria-label': 'Text color' }).props.onClick());
+  await act(async () => view.root.findByProps({ 'aria-label': 'Blue' }).props.onClick());
+  await act(async () => view.root.findByProps({ 'aria-label': 'Center' }).props.onClick());
   assert.deepEqual(runs, [{ bold: true }, { fontSizeHundredthPt: 3600 }, { color: '2459AD' }]);
   assert.deepEqual(aligns, ['center']);
   for (const [label, reason] of [['Underline', PRESENTATION_TEXT_UNSUPPORTED.underline], ['Bullets', PRESENTATION_TEXT_UNSUPPORTED.bullets]]) {
@@ -58,7 +60,10 @@ test('presentation text toolbar drives run and alignment callbacks and keeps uns
     assert.match(reason, /not supported by the native PPTX transaction/);
     assert.equal(control.props.title, reason);
   }
-  assert.equal(view.root.findByProps({ 'aria-label': 'Text alignment' }).props.children.flat().filter(Boolean).every(option => ['left', 'center', 'right', undefined].includes(option?.props?.value)), true);
+  // PowerPoint's alignment toggles only: the justify and distribute buttons Word has are not offered.
+  const alignmentLabels = view.root.findByProps({ className: 'formatting-alignment' }).findAllByType('button').map(button => button.props['aria-label']);
+  assert.deepEqual(alignmentLabels, ['Align left', 'Center', 'Align right']);
+  assert.deepEqual(view.root.findAllByProps({ className: 'formatting-alignment' })[0].findAllByType('button').map(button => button.props['aria-pressed']), [true, false, false], 'the alignment in effect is the pressed toggle');
 
   await act(async () => { view.update(React.createElement(PresentationTextToolbar, { disabled: false, onRunChange: () => {}, onAlignChange: () => {} })); });
   assert.equal(view.root.findByProps({ 'aria-label': 'Bold' }).props.disabled, true);

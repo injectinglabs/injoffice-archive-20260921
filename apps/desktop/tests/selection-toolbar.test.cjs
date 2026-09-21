@@ -42,11 +42,11 @@ test('mini toolbar renders the ribbon FormattingToolbar above the selection and 
   assert.equal(toolbar.props.style.visibility, 'hidden');
   const inner = view.root.findByProps({ 'aria-label': 'Formatting' });
   assert.equal(inner.props.className, 'formatting-toolbar');
-  for (const label of ['Font family', 'Font size', 'Bold', 'Italic', 'Underline', 'Text color', 'Text alignment']) assert.equal(view.root.findAllByProps({ 'aria-label': label }).length, 1, label);
+  for (const label of ['Font family', 'Font size', 'Bold', 'Italic', 'Underline', 'Text color', 'Align left', 'Center', 'Align right']) assert.equal(view.root.findAllByProps({ 'aria-label': label }).length, 1, label);
   await act(async () => view.root.findByProps({ 'aria-label': 'Bold' }).props.onClick());
   await act(async () => view.root.findByProps({ 'aria-label': 'Italic' }).props.onClick());
   await act(async () => view.root.findByProps({ 'aria-label': 'Font size' }).props.onChange({ target: { value: '14' } }));
-  await act(async () => view.root.findByProps({ 'aria-label': 'Text alignment' }).props.onChange({ target: { value: 'center' } }));
+  await act(async () => view.root.findByProps({ 'aria-label': 'Center' }).props.onClick());
   assert.deepEqual(patches, [{ bold: true }, { italic: false }, { size: 14 }, { alignment: 'center' }]);
   assert.equal(view.root.findByProps({ 'aria-label': 'Italic' }).props['aria-pressed'], true);
   // Busy editors disable every control, exactly like the ribbon.
