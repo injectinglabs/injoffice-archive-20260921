@@ -3,7 +3,7 @@ import logo from '../../../logo.png';
 import './updates-dialog.css';
 
 const labels: Record<DesktopUpdateState['status'], string> = {
-  disabled: 'Updates unavailable', idle: 'Keep InjOffice up to date', checking: 'Checking for updates…',
+  disabled: 'Updates aren’t available in this build', idle: 'Keep InjOffice up to date', checking: 'Checking for updates…',
   available: 'A new version is available', downloading: 'Downloading your update…',
   downloaded: 'Ready to restart', installing: 'Preparing to restart…', 'not-available': 'You’re up to date', error: 'Update interrupted',
 };
@@ -35,6 +35,8 @@ export default function UpdatesDialog({ onClose }: { onClose(): void }) {
   const bridge = window.injDesktop;
   useEffect(() => {
     dialog.current?.showModal();
+    // The dialog itself takes the initial focus: autofocusing the × painted a focus ring on open.
+    dialog.current?.focus({ preventScroll: true });
     mounted.current = true;
     const cycle = ++generation.current;
     const unsubscribe = bridge?.onUpdateState(value => { eventVersion.current++; setState(value); setError(''); });
@@ -62,8 +64,8 @@ export default function UpdatesDialog({ onClose }: { onClose(): void }) {
   const status = state?.status;
   const busy = pending || status === 'checking' || status === 'downloading' || status === 'installing';
   const progress = Math.min(100, Math.max(0, state?.percent ?? 0));
-  return <dialog ref={dialog} className="updates-dialog" aria-labelledby="updates-title" onCancel={event => { event.preventDefault(); onClose(); }}>
-    <header className="updates-heading"><img src={logo} alt="" /><div><h2 id="updates-title">App updates</h2><p>InjOffice{state?.appVersion ? ` · Version ${state.appVersion}` : ''}</p></div><button autoFocus className="updates-close" aria-label="Close updates" onClick={onClose}>×</button></header>
+  return <dialog ref={dialog} className="updates-dialog" tabIndex={-1} aria-labelledby="updates-title" onCancel={event => { event.preventDefault(); onClose(); }}>
+    <header className="updates-heading"><img src={logo} alt="" /><div><h2 id="updates-title">App updates</h2><p>InjOffice{state?.appVersion ? ` · Version ${state.appVersion}` : ''}</p></div><button className="updates-close" aria-label="Close updates" onClick={onClose}>×</button></header>
     <div className="updates-summary" role="status" aria-live="polite"><h3>{state ? labels[state.status] : 'Loading update information…'}</h3>
       {state?.version && ['available', 'downloading', 'downloaded', 'installing'].includes(state.status) && <p>Version {state.version}</p>}
       {state?.message && <p>{state.message}</p>}
