@@ -25,10 +25,8 @@ func TestNativeParagraphMarkFormattingIsRenderOnly(t *testing.T) {
 			t.Fatalf("qualified mark refused: %+v", unsupported)
 		}
 	}
-	paragraph := doc.Body.Blocks[0].Paragraph
-	if paragraph.EditPolicy.Mode == "read-write" {
-		t.Fatal("mark qualification broadened editing authority")
-	}
+	assertNativeTextPreservationPolicy(t, data, doc, true)
+	assertNativePropertyPatchRefused(t, data, doc)
 	resolved, err := ResolveNativeDocumentLayoutV1(data)
 	if err != nil {
 		t.Fatal(err)
@@ -56,7 +54,8 @@ func TestNativeParagraphMarkUnknownSourcesRemainRefused(t *testing.T) {
 		`<w:rPr><x:b xmlns:x="urn:foreign"/></w:rPr>`,
 	} {
 		t.Run(properties, func(t *testing.T) {
-			doc, err := ExtractNativeDocumentV1(paragraphMarkPackage(t, properties))
+			data := paragraphMarkPackage(t, properties)
+			doc, err := ExtractNativeDocumentV1(data)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -69,9 +68,11 @@ func TestNativeParagraphMarkUnknownSourcesRemainRefused(t *testing.T) {
 			if !found {
 				t.Fatal("unsafe paragraph mark accepted")
 			}
-			if doc.Body.Blocks[0].Paragraph.EditPolicy.Mode == "read-write" {
-				t.Fatal("unsafe paragraph became writable")
-			}
+			// Duplicate paragraph singletons and invalid modeled values still
+			// fail closed. Opaque mark decoration is safe to carry through text.
+			blocked := properties == `<w:rPr/><w:rPr/>` || properties == `<w:rPr><w:sz w:val="0"/></w:rPr>` || properties == `<w:rPr><w:b w:val="perhaps"/></w:rPr>`
+			assertNativeTextPreservationPolicy(t, data, doc, !blocked)
+			assertNativePropertyPatchRefused(t, data, doc)
 		})
 	}
 }

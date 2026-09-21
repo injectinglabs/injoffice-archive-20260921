@@ -1146,8 +1146,9 @@ func TestExtractNativeDocumentAcceptsOnlyExactResolvedParagraphGeometryInBothDia
 			if hasUnsupportedCode(doc, "PARTIAL_PARAGRAPH_PROPERTIES") || hasUnsupportedCode(doc, "UNMODELED_BREAK") || hasUnsupportedCode(doc, "UNMODELED_CONTROL") {
 				t.Fatalf("exact pagination prerequisites were self-refused: %#v", doc.Unsupported)
 			}
-			if policy := doc.Body.Blocks[0].Paragraph.EditPolicy; policy.Mode != "read-only" || policy.Refusal == nil {
-				t.Fatalf("exact resolver-owned geometry must not expand extractor mutation authority: %#v", policy)
+			assertNativeTextPreservationPolicy(t, data, doc, true)
+			if nativePolicyAllows(doc.Body.Blocks[0].Paragraph.EditPolicy, "properties.patch") {
+				t.Fatal("resolver-owned geometry must not grant property rewrite authority")
 			}
 			resolved, err := ResolveNativeDocumentLayoutV1(data)
 			if err != nil {

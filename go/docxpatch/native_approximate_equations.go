@@ -460,9 +460,10 @@ func (context *nativeApproximateEquationContext) run(n *nativeXMLNode, depth int
 func (context *nativeApproximateEquationContext) registerRun(n, wordProperties *nativeXMLNode, text, style string, normal bool) int {
 	var properties *NativeRunPropertiesV1
 	if wordProperties != nil {
-		var unsafe bool
-		properties, unsafe = context.extractor.extractRunProperties(context.main, context.paragraph.ID, wordProperties)
-		if unsafe {
+		var unsafe, preserveOnly bool
+		properties, unsafe, preserveOnly = context.extractor.extractRunPropertiesState(context.main, context.paragraph.ID, wordProperties)
+		// Rendering requires modeled properties even when text splicing is safe.
+		if unsafe || preserveOnly {
 			context.refuse("unsupported run properties in equation")
 			return -1
 		}

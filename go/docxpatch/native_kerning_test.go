@@ -39,8 +39,9 @@ func TestNativeKerningCascade(t *testing.T) {
 			t.Fatal(err)
 		}
 		paragraph := doc.Body.Blocks[0].Paragraph
-		if paragraph.EditPolicy.Mode != "read-only" {
-			t.Fatal("kerning grants editing authority")
+		assertNativeTextPreservationPolicy(t, data, doc, true)
+		if nativePolicyAllows(paragraph.EditPolicy, "properties.patch") {
+			t.Fatal("mark kerning grants property rewrite authority")
 		}
 		if _, err := ApplyNativeTextMutationsV1(data, doc.Source.PackageSHA256, []NativeDOCXTextMutationV1{{TargetKind: "paragraph", TargetID: paragraph.ID, ExpectedXMLSHA256: paragraph.Anchor.XMLSHA256, Text: "replacement"}}); err == nil {
 			t.Fatal("replacement discarded kerning metadata")

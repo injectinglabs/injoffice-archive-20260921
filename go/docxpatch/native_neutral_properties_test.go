@@ -73,10 +73,7 @@ func TestNativeNeutralPropertiesPreserveMutationBoundary(t *testing.T) {
 			if hasResolutionDiagnostic(resolved, code) != malformed {
 				t.Fatalf("%s malformed=%v diagnostics=%#v", name, malformed, resolved.Diagnostics)
 			}
-			paragraph := doc.Body.Blocks[0].Paragraph
-			if paragraph.EditPolicy.Mode != "read-only" || len(paragraph.EditPolicy.AllowedOperations) != 0 {
-				t.Fatalf("preserved source became mutable: %#v", paragraph.EditPolicy)
-			}
+			assertNativeTextPreservationPolicy(t, data, doc, !malformed)
 			if !bytes.Equal(data, before) {
 				t.Fatal("source bytes changed")
 			}

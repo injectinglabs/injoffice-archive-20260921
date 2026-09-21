@@ -247,6 +247,11 @@ func TestApproximateEquationsInlineAndRefusals(t *testing.T) {
 			if out == nil || len(out.Items) != 1 {
 				t.Fatalf("expected one omitted item: %+v", out)
 			}
+			// Equation content remains structural, read-only markup. Allowing
+			// preserved body decoration must not widen math rendering/editing.
+			if doc.Body.Blocks[0].Paragraph.EditPolicy.Mode != "read-only" {
+				t.Fatal("omitted equation granted text editing authority")
+			}
 			item := out.Items[0]
 			if item.Status != "omitted" || item.Lines != nil || !strings.Contains(item.Reason, c.reason) || len(item.DiagnosticIDs) == 0 || item.ParagraphID != doc.Body.Blocks[0].Paragraph.ID {
 				t.Fatalf("unexpected omission: %#v", item)

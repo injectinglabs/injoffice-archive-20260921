@@ -40,9 +40,8 @@ func TestParagraphMarkComplexFontSlotStaysScriptQualified(t *testing.T) {
 			if hasResolutionDiagnostic(layout, "SCRIPT_FONT_PRESERVED") != test.scriptBlocked {
 				t.Fatalf("script qualification: %#v", layout.Diagnostics)
 			}
-			if doc.Body.Blocks[0].Paragraph.EditPolicy.Mode != "read-only" {
-				t.Fatal("paragraph mark source became mutable")
-			}
+			assertNativeTextPreservationPolicy(t, data, doc, true)
+			assertNativePropertyPatchRefused(t, data, doc)
 			encoded, err := EncodeNativeDocumentV1(doc)
 			if err != nil {
 				t.Fatal(err)

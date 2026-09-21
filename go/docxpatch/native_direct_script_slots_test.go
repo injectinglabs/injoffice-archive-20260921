@@ -61,11 +61,16 @@ func TestNativeDirectScriptSlotsRemainContextQualified(t *testing.T) {
 				if tc.safe && strings.Contains(string(encoded), `"code":"PARTIAL_RUN_PROPERTIES"`) {
 					t.Fatalf("inactive source slot still refused: %s", encoded)
 				}
-				if strings.Contains(string(encoded), `"code":"PARTIAL_PARAGRAPH_PROPERTIES"`) == tc.safe {
-					t.Fatalf("paragraph mark confused preservation with invalidity: %s", encoded)
+				if got := hasUnsupportedCode(doc, "PARTIAL_PARAGRAPH_PROPERTIES"); got {
+					t.Fatalf("opaque mark confused preservation with invalidity: %s", encoded)
 				}
-				if doc.Body.Blocks[0].Paragraph.EditPolicy.Mode != "read-only" || !bytes.Equal(before, data) {
-					t.Fatal("source authority changed")
+				// Invalid body size slots remain blocking. Language metadata and
+				// unresolved paint context stay intact through a text splice.
+				blocked := tc.name == "bad-size" || tc.name == "duplicate-size" || tc.name == "size-child"
+				assertNativeTextPreservationPolicy(t, data, doc, !blocked)
+				assertNativePropertyPatchRefused(t, data, doc)
+				if !bytes.Equal(before, data) {
+					t.Fatal("source bytes changed")
 				}
 				layout, err := ResolveNativeDocumentLayoutV1(data)
 				if err != nil {

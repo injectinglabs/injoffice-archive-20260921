@@ -277,10 +277,15 @@ func assertDOCXCorpusFixtureSemantics(t *testing.T, fixtureID string, doc *docxp
 		if !foundLink {
 			t.Fatal("ordinary external hyperlink metadata is missing")
 		}
-		for _, code := range []string{"FIELD_SEMANTICS", "PARTIAL_RUN_PROPERTIES", "PICTURE_NONVISUAL_PRESERVED", "UNMODELED_BODY_BLOCK", "WRAPPED_RUN_MARKUP"} {
+		for _, code := range []string{"FIELD_SEMANTICS", "UNMODELED_RUN_PROPERTY", "PICTURE_NONVISUAL_PRESERVED", "UNMODELED_BODY_BLOCK", "WRAPPED_RUN_MARKUP"} {
 			if !hasDOCXCorpusUnsupported(doc, code) {
 				t.Fatalf("accepted preserve/refuse fixture is missing %s", code)
 			}
+		}
+		// Shadow decoration is preserved, while fields/revisions still make
+		// this mixed-content paragraph structurally unsafe for text editing.
+		if hasDOCXCorpusUnsupported(doc, "PARTIAL_RUN_PROPERTIES") || doc.Body.Blocks[0].Paragraph.EditPolicy.Mode != "read-only" {
+			t.Fatal("decoration and structural mutation authority were conflated")
 		}
 		if !hasDOCXCorpusPassthrough(doc, "customXml/opaque.bin") {
 			t.Fatal("opaque CC0 payload is not preserve-verbatim passthrough")

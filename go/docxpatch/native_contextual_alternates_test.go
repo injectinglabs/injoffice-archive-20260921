@@ -76,7 +76,8 @@ func TestNativeContextualAlternatesDirectRunProperties(t *testing.T) {
 		t.Run(tc.markup, func(t *testing.T) {
 			parts := resolvedStylesTestParts(`<w:styles xmlns:w="` + wordMLTransitional + `"/>`)
 			parts["word/document.xml"] = `<w:document xmlns:w="` + wordMLTransitional + `"` + nativeContextualAlternatesTestNSDecl + `><w:body><w:p><w:r><w:rPr><w:rFonts w:ascii="Arial"/>` + tc.markup + `</w:rPr><w:t>Alternates</w:t></w:r></w:p><w:sectPr/></w:body></w:document>`
-			doc, err := ExtractNativeDocumentV1(buildNativeDOCX(t, nativeEntries(parts)))
+			data := buildNativeDOCX(t, nativeEntries(parts))
+			doc, err := ExtractNativeDocumentV1(data)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -89,9 +90,11 @@ func TestNativeContextualAlternatesDirectRunProperties(t *testing.T) {
 			if got := hasUnsupportedCode(doc, "FOREIGN_RUN_PROPERTY"); got != (tc.code == "FOREIGN_RUN_PROPERTY") {
 				t.Fatalf("FOREIGN_RUN_PROPERTY=%v, want %v: %#v", got, tc.code == "FOREIGN_RUN_PROPERTY", doc.Unsupported)
 			}
-			if got := hasUnsupportedCode(doc, "PARTIAL_RUN_PROPERTIES"); got == tc.accepted {
-				t.Fatalf("PARTIAL_RUN_PROPERTIES=%v, want %v: %#v", got, !tc.accepted, doc.Unsupported)
+			// Paint refusal is independent of a byte-preserving text edit.
+			if hasUnsupportedCode(doc, "PARTIAL_RUN_PROPERTIES") {
+				t.Fatalf("paint-only alternates blocked text: %#v", doc.Unsupported)
 			}
+			assertNativeTextPreservationPolicy(t, data, doc, true)
 		})
 	}
 }
